@@ -71,3 +71,80 @@ test("stripe mapping", () => {
   const p = stripeSubscriptionPurchase(s);
   assert.equal(p.isTrial, true); assert.equal(p.priceMicros, 9_990_000); assert.equal(p.currency, "EUR"); assert.equal(p.status, "active");
 });
+
+const { summarizeWindow, buildCohorts } = require("../lib/metrics");
+const { rankAlerts, parseChart, parseReviews } = require("../lib/appstore");
+const { describe: describeEvent, sanitizeIntegrations } = require("../lib/integrations");
+const { toAlpha2 } = require("../lib/countries");
+
+test("window summary: revenue split, refunds, countries, MRR movement", () => {
+  const t0 = Date.parse("2026-09-01");
+  const txs = [
+    { appUserId: "a", store: "app_store", productId: "m", kind: "purchase", amountMicrosProject: 10e6, country: "FR", at: t0 },
+    { appUserId: "a", store: "app_store", productId: "m", kind: "renewal", amountMicrosProject: 10e6, country: "FR", at: t0 + 30 * DAY },
+    { appUserId: "b", store: "stripe", productId: "y", kind: "purchase", amountMicrosProject: 60e6, country: "US", at: t0 },
+    { appUserId: "b", store: "stripe", productId: "y", kind: "refund", amountMicrosProject: -60e6, country: "US", at: t0 + DAY },
+    { appUserId: "c", store: "stripe", productId: "y", kind: "purchase", amountMicrosProject: 5e6, isSandbox: true, at: t0 },
+  ];
+  const evs = [
+    { type: "INITIAL_PURCHASE", appUserId: "a", productId: "m", store: "app_store", priceMicros: 10e6, currency: "EUR", periodMonths: 1, at: t0 },
+    { type: "EXPIRATION", appUserId: "b", productId: "y", store: "stripe", priceMicros: 60e6, currency: "EUR", periodMonths: 12, at: t0 },
+    { type: "TRIAL_STARTED", appUserId: "d", productId: "m", store: "app_store", isTrial: true, at: t0 },
+  ];
+  const w = summarizeWindow(txs, evs, "EUR");
+  assert.equal(w.revenueMicros, 80e6); assert.equal(w.refundsMicros, 60e6); assert.equal(w.netRevenueMicros, 20e6);
+  assert.equal(w.newRevenueMicros, 70e6); assert.equal(w.renewalRevenueMicros, 10e6);
+  assert.equal(w.payingCustomers, 2); assert.equal(w.revenueByCountry.FR, 20e6); assert.equal(w.revenueByCountry.US, 0);
+  assert.equal(w.mrrMovement.newMicros, 10e6); assert.equal(w.mrrMovement.churnedMicros, 5e6);
+  assert.deepEqual(w.trialsByProduct.m, { started: 1, converted: 0 });
+});
+
+test("cohorts: retention by month offset", () => {
+  const m = k => Date.parse(`2026-0${k}-10`);
+  const c = buildCohorts([
+    { appUserId: "a", amountMicrosProject: 1e6, at: m(1) }, { appUserId: "a", amountMicrosProject: 1e6, at: m(2) },
+    { appUserId: "b", amountMicrosProject: 1e6, at: m(1) }, { appUserId: "c", amountMicrosProject: 1e6, at: m(2) },
+  ], 3);
+  assert.equal(c[0].month, "2026-01"); assert.equal(c[0].size, 2);
+  assert.deepEqual(c[0].retention, [1, 0.5, 0]); assert.equal(c[1].size, 1);
+  const annual = buildCohorts([{ appUserId: "y", amountMicrosProject: 50e6, periodMonths: 12, at: m(1) }], 3);
+  assert.deepEqual(annual[0].retention, [1, 1, 1]);
+});
+
+test("ranking alerts", () => {
+  const prev = r => (r === undefined ? undefined : { rank: r });
+  assert.deepEqual(rankAlerts(prev(undefined), 40, "1", "FR", "free", "all", false).map(a => a.type), ["NEW_COUNTRY"]);
+  assert.deepEqual(rankAlerts(prev(null), 40, "1", "FR", "free", "all", true).map(a => a.type), ["TOP_100"]);
+  assert.deepEqual(rankAlerts(prev(14), 3, "1", "FR", "free", "all", true).map(a => a.type), ["TOP_10", "JUMP"]);
+  assert.deepEqual(rankAlerts(prev(2), 1, "1", "FR", "free", "all", true).map(a => a.type), ["TOP_1"]);
+  assert.deepEqual(rankAlerts(prev(5), 30, "1", "FR", "free", "all", true).map(a => a.type), ["DROP"]);
+  assert.deepEqual(rankAlerts(prev(5), null, "1", "FR", "free", "all", true).map(a => a.type), ["LEFT_CHART"]);
+  assert.deepEqual(rankAlerts(prev(5), 6, "1", "FR", "free", "all", true), []);
+});
+
+test("feed parsing + countries + integrations", () => {
+  const feed = { feed: { entry: [{ id: { attributes: { "im:id": "11" } } }, { id: { attributes: { "im:id": "22" } } }] } };
+  assert.equal(parseChart(feed).get("22"), 2);
+  const r = parseReviews({ feed: { entry: { id: { label: "9" }, "im:rating": { label: "5" }, title: { label: "Top" }, content: { label: "Super" }, author: { name: { label: "x" } }, "im:version": { label: "1.0" }, updated: { label: "2026-10-01T10:00:00-07:00" } } } }, "FR");
+  assert.equal(r[0].rating, 5); assert.equal(r[0].country, "FR");
+  assert.equal(toAlpha2("FRA"), "FR"); assert.equal(toAlpha2("us"), "US"); assert.equal(toAlpha2("ZZZ"), null);
+  assert.match(describeEvent({ name: "V2" }, { type: "TOP_10", appName: "V2", rank: 4, cc: "FR", chart: "free", scope: "all" }), /Top 10.*#4 FR/);
+  assert.throws(() => sanitizeIntegrations({ slackWebhookUrl: "https://evil.com/x" }));
+  assert.equal(sanitizeIntegrations({ slackWebhookUrl: "https://hooks.slack.com/services/a" }).slackWebhookUrl, "https://hooks.slack.com/services/a");
+});
+
+test("country rotation covers every storefront within 6 runs", () => {
+  const { countriesForRun, PRIORITY_COUNTRIES } = require("../lib/appstore");
+  const { ALL_COUNTRIES } = require("../lib/countries");
+  const seen = new Set();
+  for (let i = 0; i < 6; i++) countriesForRun(i).forEach(c => seen.add(c));
+  assert.equal(seen.size, ALL_COUNTRIES.length);
+  for (const c of PRIORITY_COUNTRIES) assert.ok(countriesForRun(3).includes(c));
+  assert.ok(countriesForRun(0).length < 60);
+});
+
+test("v2 marketing feed parsing", () => {
+  const { parseChartV2 } = require("../lib/appstore");
+  const m = parseChartV2({ feed: { results: [{ id: "5" }, { id: "7" }] } });
+  assert.equal(m.get("7"), 2); assert.equal(parseChartV2({}).size, 0);
+});

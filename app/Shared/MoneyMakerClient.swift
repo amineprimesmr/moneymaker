@@ -67,6 +67,57 @@ struct Overview: Codable, Hashable {
     }
 }
 
+struct RankingAlert: Codable, Identifiable, Hashable {
+    let id: String
+    let type: String
+    let appName: String?
+    let appIcon: String?
+    let cc: String
+    let chart: String
+    let scope: String?
+    let rank: Int?
+    let prevRank: Int?
+    let own: Bool?
+    let projectName: String?
+    let at: Double
+
+    var title: String {
+        ["NEW_COUNTRY": "Nouveau pays", "TOP_100": "Retour dans le top 100", "TOP_10": "Top 10", "TOP_1": "Numéro 1",
+         "JUMP": "Forte hausse", "DROP": "Forte baisse", "LEFT_CHART": "Sortie du classement"][type] ?? type
+    }
+    var symbol: String {
+        switch type {
+        case "TOP_1": return "crown.fill"
+        case "TOP_10": return "trophy.fill"
+        case "NEW_COUNTRY": return "globe.europe.africa.fill"
+        case "JUMP": return "arrow.up.right"
+        case "DROP": return "arrow.down.right"
+        default: return "chart.line.uptrend.xyaxis"
+        }
+    }
+    var chartLabel: String { (["free": "Gratuites", "paid": "Payantes", "grossing": "Revenus"][chart] ?? chart) + (scope == "genre" ? " · catégorie" : "") }
+}
+
+struct TrackedAppSummary: Codable, Identifiable, Hashable {
+    struct Top: Codable, Hashable { let cc: String; let chart: String; let scope: String; let rank: Int; let prevRank: Int? }
+    let appId: String
+    let name: String?
+    let icon: String?
+    let own: Bool?
+    let rating: Double?
+    let ratingCount: Int?
+    let countriesRanked: Int?
+    let bestRank: Int?
+    let topRankings: [Top]?
+    var id: String { appId }
+}
+
+/// Emoji flag from an ISO alpha-2 code.
+func flagEmoji(_ cc: String) -> String {
+    guard cc.count == 2 else { return "🌐" }
+    return String(String.UnicodeScalarView(cc.uppercased().unicodeScalars.compactMap { UnicodeScalar(127397 + $0.value) }))
+}
+
 struct EventItem: Codable, Identifiable, Hashable {
     let id: String
     let type: String
@@ -118,6 +169,23 @@ struct MoneyMakerClient {
         struct R: Decodable { let events: [EventItem] }
         let r: R = try await get("projects/\(projectId)/events?limit=50")
         return r.events
+    }
+
+    func alerts() async throws -> [RankingAlert] {
+        struct R: Decodable { let alerts: [RankingAlert] }
+        let r: R = try await get("alerts")
+        if let data = try? JSONEncoder().encode(Array(r.alerts.prefix(10))) { MM.write("alerts", data) }
+        return r.alerts
+    }
+
+    func trackedApps(projectId: String) async throws -> [TrackedAppSummary] {
+        struct R: Decodable { let apps: [TrackedAppSummary] }
+        let r: R = try await get("projects/\(projectId)/appstore")
+        return r.apps
+    }
+
+    static var cachedAlerts: [RankingAlert] {
+        MM.read("alerts").flatMap { try? JSONDecoder().decode([RankingAlert].self, from: $0) } ?? []
     }
 
     static var cachedOverview: Overview? {

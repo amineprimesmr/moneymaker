@@ -3,6 +3,7 @@ import {
   JWSRenewalInfoDecodedPayload, ResponseBodyV2DecodedPayload,
 } from "@apple/app-store-server-library";
 import { APPLE_ROOT_CERTIFICATES } from "./appleRootCertificates";
+import { toAlpha2 } from "./countries";
 import { Purchase, PurchaseStatus, PurchaseType, HttpError } from "./engine";
 import { Project, getCredentials, lookupIndex, upsertPurchase, mergeCustomers } from "./store";
 
@@ -76,6 +77,7 @@ export function applePurchase(
     periodMonths: type === "subscription" ? periodFromDates(t.purchaseDate, t.expiresDate) : 0,
     billingIssue: status === "grace" || status === "billing_retry",
     updatedAt: t.signedDate ?? now,
+    country: toAlpha2(t.storefront),
   };
 }
 

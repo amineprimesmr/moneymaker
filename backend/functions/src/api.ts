@@ -10,7 +10,13 @@ import {
 import { ingestAppleTransaction, ingestAppleNotification } from "./apple";
 import { ingestGooglePurchase, ingestGoogleNotification } from "./google";
 import { ingestStripeWebhook, createCheckout, createPortal } from "./stripe";
-import { projectMetrics } from "./metrics";
+import { projectMetrics, projectCohorts } from "./metrics";
+import { connectStripe, connectAppStore, connectGooglePlay, markConnected } from "./connect";
+import { sanitizeIntegrations } from "./integrations";
+import { searchApps, syncTrackers, translateReview, TrackedApp } from "./appstore";
+
+/** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
+export const PUBLIC_BASE = process.env.MONEYMAKER_PUBLIC_BASE ?? "https://moneymaker-io.web.app";
 
 type Caller =
   | { kind: "public"; projectId: string }
@@ -219,10 +225,10 @@ route("GET", "/v1/overview", async req => {
 route("GET", "/v1/projects/:pid", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid);
   const creds = await getCredentials(project.id);
-  const base = `https://${req.get("x-forwarded-host") ?? req.get("host")}`;
+  const base = PUBLIC_BASE;
   return {
     ...project,
-    credentials: { appsflyer: Boolean(creds.appsflyer), apple: Boolean(creds.apple), google: Boolean(creds.google), stripeKey: Boolean(creds.stripe?.secretKey), stripeWebhook: Boolean(creds.stripe?.webhookSecret) },
+    credentials: { integrations: Object.keys(creds.integrations ?? {}), appStoreConnect: Boolean(creds.appStoreConnect), appsflyer: Boolean(creds.appsflyer), apple: Boolean(creds.apple), google: Boolean(creds.google), stripeKey: Boolean(creds.stripe?.secretKey), stripeWebhook: Boolean(creds.stripe?.webhookSecret) },
     endpoints: {
       appleNotifications: `${base}/v1/webhooks/apple/${project.id}`,
       googleRtdn: `${base}/v1/webhooks/google/${project.id}?token=${creds.googleRtdnToken}`,
@@ -254,6 +260,10 @@ route("PUT", "/v1/projects/:pid/credentials", async (req, _res, [pid]) => {
     const sa = typeof b.google.serviceAccount === "string" ? JSON.parse(b.google.serviceAccount) : b.google.serviceAccount;
     if (!sa?.client_email || !sa?.private_key) throw new HttpError(400, "invalid_service_account");
     update.google = { serviceAccount: { client_email: sa.client_email, private_key: sa.private_key } };
+  }
+  if (b.integrations) {
+    try { update.integrations = sanitizeIntegrations(b.integrations, (await getCredentials(project.id)).integrations); }
+    catch (e) { throw new HttpError(400, (e as Error).message); }
   }
   if (b.appsflyer) {
     if (typeof b.appsflyer.devKey !== "string" || b.appsflyer.devKey.length < 10) throw new HttpError(400, "invalid_appsflyer_dev_key");
@@ -338,6 +348,140 @@ route("POST", "/v1/projects/:pid/webhooks/test", async (req, _res, [pid]) => {
     type: "TEST", appUserId: "test_user", productId: "test_product", store: "promotional", at: Date.now(), isSandbox: true, delivered: false,
   });
   return { eventId: ref.id };
+});
+
+// ── Connections (one step per store) ──────────────────────────────────────
+route("POST", "/v1/projects/:pid/connect/stripe", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const r = await connectStripe(project, PUBLIC_BASE, String(req.body?.secretKey ?? ""));
+  await markConnected(project.id, "stripe");
+  return r;
+});
+
+route("POST", "/v1/projects/:pid/connect/appstore", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const r = await connectAppStore(project, PUBLIC_BASE, req.body);
+  await markConnected(project.id, "app_store");
+  await db.collection("scanRequests").add({ appIds: [r.app.id], at: Date.now() });
+  return r;
+});
+
+route("POST", "/v1/projects/:pid/connect/google", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const r = await connectGooglePlay(project, req.body);
+  await markConnected(project.id, "play_store");
+  return { ...r, rtdn: { pushEndpoint: PUBLIC_BASE + r.rtdn.pushEndpoint } };
+});
+
+// ── Advanced analytics ─────────────────────────────────────────────────────
+route("GET", "/v1/projects/:pid/cohorts", async (req, _res, [pid]) =>
+  projectCohorts(await projectFor(await authenticate(req), pid), Math.min(24, Math.max(3, Number(req.query.months ?? 12)))));
+
+const csv = (rows: Record<string, unknown>[], cols: string[]) =>
+  [cols.join(","), ...rows.map(r => cols.map(c => {
+    const v = r[c] ?? "";
+    const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }).join(","))].join("\n");
+
+route("GET", "/v1/projects/:pid/export/:kind", async (req, res, [pid, kind]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const specs: Record<string, [string, string, string[]]> = {
+    customers: ["customers", "lastSeenAt", ["appUserId", "activeEntitlements", "isPaying", "totalSpentMicros", "country", "firstSeenAt", "lastSeenAt"]],
+    transactions: ["transactions", "at", ["at", "appUserId", "store", "productId", "kind", "amountMicros", "currency", "amountMicrosProject", "country", "isSandbox"]],
+    events: ["events", "at", ["at", "type", "appUserId", "store", "productId", "priceMicros", "currency", "country", "isTrial", "isSandbox"]],
+  };
+  const spec = specs[kind.replace(/\.csv$/, "")];
+  if (!spec) throw new HttpError(404, "unknown_export");
+  const snap = await db.collection(`projects/${project.id}/${spec[0]}`).orderBy(spec[1], "desc").limit(50000).get();
+  res.set("Content-Type", "text/csv; charset=utf-8");
+  res.set("Content-Disposition", `attachment; filename="${project.name}-${spec[0]}.csv"`);
+  res.status(200).send(csv(snap.docs.map(d => d.data()), spec[2]));
+});
+
+// ── App Store intelligence ────────────────────────────────────────────────
+route("GET", "/v1/appstore/search", async req => {
+  await authenticate(req);
+  return { results: await searchApps(String(req.query.term ?? ""), String(req.query.country ?? "us")) };
+});
+
+route("PUT", "/v1/projects/:pid/appstore", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const apps: TrackedApp[] = (Array.isArray(req.body?.apps) ? req.body.apps : []).slice(0, 25).map((a: any) => {
+    if (!/^\d{5,12}$/.test(String(a?.appId))) throw new HttpError(400, "invalid_app_id");
+    return { appId: String(a.appId), own: a.own !== false };
+  });
+  const previous = project.config.appStore?.apps ?? [];
+  await db.doc(`projects/${project.id}`).update({ "config.appStore": { apps } });
+  await syncTrackers(project.id, apps, previous);
+  const added = apps.filter(a => !previous.some(p => p.appId === a.appId)).map(a => a.appId);
+  if (added.length) await db.collection("scanRequests").add({ appIds: added, at: Date.now() });
+  return { apps, scanning: added };
+});
+
+route("POST", "/v1/projects/:pid/appstore/refresh", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const appIds = (project.config.appStore?.apps ?? []).map(a => a.appId);
+  if (!appIds.length) throw new HttpError(400, "no_tracked_apps");
+  await db.collection("scanRequests").add({ appIds, at: Date.now() });
+  return { scanning: appIds };
+});
+
+route("GET", "/v1/projects/:pid/appstore", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const tracked = project.config.appStore?.apps ?? [];
+  const apps = await Promise.all(tracked.map(async t => {
+    const [app, ranks] = await Promise.all([db.doc(`apps/${t.appId}`).get(), db.collection(`apps/${t.appId}/ranks`).where("rank", "!=", null).get()]);
+    const live = ranks.docs.map(d => d.data());
+    const top = live.sort((a, b) => a.rank - b.rank).slice(0, 8).map(r => ({ cc: r.cc, chart: r.chart, scope: r.scope, rank: r.rank, prevRank: r.prevRank }));
+    return { ...t, ...app.data(), trackers: undefined, liveRankings: live.length, topRankings: top };
+  }));
+  return { apps };
+});
+
+route("GET", "/v1/projects/:pid/appstore/:appId/ranks", async (req, _res, [pid, appId]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  if (!(project.config.appStore?.apps ?? []).some(a => a.appId === appId)) throw new HttpError(404, "app_not_tracked");
+  const snap = await db.collection(`apps/${appId}/ranks`).get();
+  return { ranks: snap.docs.map(d => ({ id: d.id, ...d.data() })) };
+});
+
+route("GET", "/v1/projects/:pid/appstore/:appId/ratings", async (req, _res, [pid, appId]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  if (!(project.config.appStore?.apps ?? []).some(a => a.appId === appId)) throw new HttpError(404, "app_not_tracked");
+  const snap = await db.collection(`apps/${appId}/ratings`).where("count", ">", 0).get();
+  return { ratings: snap.docs.map(d => d.data()).sort((a, b) => b.count - a.count) };
+});
+
+route("GET", "/v1/projects/:pid/appstore/:appId/reviews", async (req, _res, [pid, appId]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  if (!(project.config.appStore?.apps ?? []).some(a => a.appId === appId)) throw new HttpError(404, "app_not_tracked");
+  let q = db.collection(`apps/${appId}/reviews`).orderBy("at", "desc").limit(Math.min(200, Number(req.query.limit ?? 50)));
+  if (req.query.country) q = q.where("country", "==", String(req.query.country).toUpperCase());
+  if (req.query.rating) q = q.where("rating", "==", Number(req.query.rating));
+  const snap = await q.get();
+  return { reviews: snap.docs.map(d => d.data()) };
+});
+
+route("POST", "/v1/projects/:pid/appstore/:appId/reviews/:rid/translate", async (req, _res, [pid, appId, rid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  if (!(project.config.appStore?.apps ?? []).some(a => a.appId === appId)) throw new HttpError(404, "app_not_tracked");
+  return translateReview(appId, cleanId(rid), String(req.body?.target ?? req.query.target ?? "fr"));
+});
+
+route("GET", "/v1/projects/:pid/alerts", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const snap = await db.collection(`projects/${project.id}/alerts`).orderBy("at", "desc").limit(Math.min(300, Number(req.query.limit ?? 100))).get();
+  return { alerts: snap.docs.map(d => ({ id: d.id, ...d.data() })) };
+});
+
+route("GET", "/v1/alerts", async req => {
+  const uid = requireUser(await authenticate(req));
+  const projects = await db.collection("projects").where("members", "array-contains", uid).get();
+  const all = (await Promise.all(projects.docs.map(async p =>
+    (await db.collection(`projects/${p.id}/alerts`).orderBy("at", "desc").limit(50).get()).docs.map(d => ({ id: d.id, projectId: p.id, projectName: p.get("name"), ...d.data() })),
+  ))).flat().sort((a: any, b: any) => b.at - a.at).slice(0, 100);
+  return { alerts: all };
 });
 
 // ── Dispatcher ─────────────────────────────────────────────────────────────

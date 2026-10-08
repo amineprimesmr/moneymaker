@@ -19,6 +19,7 @@ export interface ProjectConfig {
   google?: { packageName?: string };
   stripe?: { enabled?: boolean; prices?: Record<string, { productId: string; periodMonths: number }> };
   integrations?: { appsflyer?: { appId: string; androidAppId?: string } };
+  appStore?: { apps: { appId: string; own?: boolean }[] };
 }
 
 export interface Project {
@@ -34,6 +35,8 @@ export interface Credentials {
   google?: { serviceAccount: { client_email: string; private_key: string } };
   stripe?: { secretKey?: string; webhookSecret?: string };
   appsflyer?: { devKey: string };
+  appStoreConnect?: { issuerId: string; keyId: string; privateKey: string };
+  integrations?: import("./integrations").IntegrationSecrets;
   googleRtdnToken: string;
   webhookSigningSecret: string;
 }
@@ -152,7 +155,7 @@ export async function upsertPurchase(
       tx.set(eventRef, {
         type, appUserId, productId: purchase.productId, store: purchase.store, purchaseId: purchase.id,
         priceMicros: purchase.priceMicros, currency: purchase.currency, isSandbox: purchase.isSandbox,
-        isTrial: purchase.isTrial, expiresAt: purchase.expiresAt, at: now, delivered: false,
+        isTrial: purchase.isTrial, expiresAt: purchase.expiresAt, country: purchase.country ?? null, periodMonths: purchase.periodMonths, at: now, delivered: false,
       });
       const isRevenue = REVENUE_EVENTS.includes(type) && !purchase.isTrial && purchase.priceMicros > 0;
       if (isRevenue || type === "REFUND") {
@@ -162,7 +165,7 @@ export async function upsertPurchase(
           appUserId, store: purchase.store, productId: purchase.productId, purchaseId: purchase.id,
           kind: type === "REFUND" ? "refund" : type === "RENEWAL" ? "renewal" : "purchase",
           amountMicros: sign * purchase.priceMicros, currency: purchase.currency, amountMicrosProject: amountProject,
-          isSandbox: purchase.isSandbox, at: type === "REFUND" ? now : purchase.latestPurchaseAt,
+          isSandbox: purchase.isSandbox, country: purchase.country ?? null, periodMonths: purchase.periodMonths, at: type === "REFUND" ? now : purchase.latestPurchaseAt,
         });
         if (!purchase.isSandbox) spent += amountProject;
       }
@@ -174,6 +177,7 @@ export async function upsertPurchase(
       lastSeenAt: customerSnap.get("lastSeenAt") ?? now,
       firstSeenAt: customerSnap.get("firstSeenAt") ?? now,
       updatedAt: now,
+      ...(purchase.country ? { country: purchase.country } : {}),
       ...(spent ? { totalSpentMicros: FieldValue.increment(spent) } : {}),
     }, { merge: true });
     for (const key of indexKeys) tx.set(indexRef(pid, key), { appUserId });

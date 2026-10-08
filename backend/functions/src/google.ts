@@ -1,5 +1,6 @@
 import { JWT } from "google-auth-library";
 import { Purchase, PurchaseStatus, HttpError, isoPeriodToMonths } from "./engine";
+import { toAlpha2 } from "./countries";
 import { Project, getCredentials, lookupIndex, upsertPurchase, sha256, db, mergeCustomers } from "./store";
 
 const API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications";
@@ -60,6 +61,7 @@ export function googleSubscriptionPurchase(token: string, sub: any, hints: Googl
     periodMonths: isoPeriodToMonths(hints.period) || 1,
     billingIssue: status === "grace" || status === "billing_retry",
     updatedAt: now,
+    country: toAlpha2(sub.regionCode),
   };
 }
 
@@ -71,7 +73,7 @@ export function googleProductPurchase(token: string, productId: string, p: any, 
     status: p.purchaseState === 1 ? "refunded" : "active",
     purchasedAt, latestPurchaseAt: purchasedAt, expiresAt: null, willRenew: false, isTrial: false,
     isSandbox: p.purchaseType === 0, priceMicros: hints.priceMicros ?? 0, currency: hints.currency ?? "USD",
-    periodMonths: 0, billingIssue: false, updatedAt: Date.now(),
+    periodMonths: 0, billingIssue: false, updatedAt: Date.now(), country: toAlpha2(p.regionCode),
   };
 }
 

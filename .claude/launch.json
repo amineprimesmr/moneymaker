@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "moneymaker-emulators",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/amine/Developer/moneymaker && export JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home' PATH=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin:$PATH\" && npm --prefix backend/functions run build && firebase emulators:start --project demo-moneymaker --only functions,firestore,auth,hosting"],
+      "port": 5100
+    }
+  ]
+}

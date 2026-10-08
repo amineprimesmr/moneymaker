@@ -113,7 +113,96 @@ struct MoneyMakerWidget: Widget {
     }
 }
 
+// MARK: - App Store rankings widget
+
+struct RankEntry: TimelineEntry {
+    let date: Date
+    let alerts: [RankingAlert]
+}
+
+struct RankProvider: TimelineProvider {
+    static let sample = [RankingAlert(id: "1", type: "TOP_1", appName: "Mon app", appIcon: nil, cc: "FR", chart: "free", scope: "genre", rank: 1, prevRank: 3, own: true, projectName: nil, at: Date().timeIntervalSince1970 * 1000),
+                         RankingAlert(id: "2", type: "NEW_COUNTRY", appName: "Mon app", appIcon: nil, cc: "JP", chart: "free", scope: "genre", rank: 18, prevRank: nil, own: true, projectName: nil, at: Date().timeIntervalSince1970 * 1000)]
+    func placeholder(in context: Context) -> RankEntry { RankEntry(date: .now, alerts: Self.sample) }
+    func getSnapshot(in context: Context, completion: @escaping (RankEntry) -> Void) {
+        let cached = MoneyMakerClient.cachedAlerts
+        completion(RankEntry(date: .now, alerts: cached.isEmpty ? Self.sample : cached))
+    }
+    func getTimeline(in context: Context, completion: @escaping (Timeline<RankEntry>) -> Void) {
+        Task {
+            let fresh = try? await MoneyMakerClient.stored.alerts()
+            completion(Timeline(entries: [RankEntry(date: .now, alerts: fresh ?? MoneyMakerClient.cachedAlerts)], policy: .after(.now.addingTimeInterval(30 * 60))))
+        }
+    }
+}
+
+struct RankWidgetBody: View {
+    @Environment(\.widgetFamily) var family
+    let entry: RankEntry
+    var body: some View {
+        let alerts = entry.alerts.filter { $0.type != "LEFT_CHART" }
+        if alerts.isEmpty {
+            VStack(spacing: 6) {
+                Image(systemName: "trophy.fill").font(.title2).foregroundStyle(green)
+                Text("Aucune alerte de classement").font(.caption).multilineTextAlignment(.center)
+            }
+        } else if family == .accessoryRectangular || family == .accessoryInline {
+            let a = alerts[0]
+            if family == .accessoryInline { Text("\(a.rank.map { "#\($0)" } ?? "") \(a.cc) · \(a.appName ?? "")") }
+            else {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(a.title).font(.caption2.weight(.semibold))
+                    Text("\(a.rank.map { "#\($0)" } ?? "—") \(flagEmoji(a.cc))").font(.headline.bold())
+                    Text(a.appName ?? "").font(.caption2).lineLimit(1)
+                }
+            }
+        } else if family == .systemSmall {
+            let a = alerts[0]
+            VStack(alignment: .leading, spacing: 4) {
+                Label(a.title, systemImage: a.symbol).font(.caption.weight(.semibold)).foregroundStyle(green).lineLimit(1)
+                Spacer(minLength: 0)
+                Text(a.rank.map { "#\($0)" } ?? "—").font(.system(size: 40, weight: .heavy, design: .rounded))
+                Text("\(flagEmoji(a.cc)) \(a.chartLabel)").font(.caption).lineLimit(1)
+                Text(a.appName ?? "").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Classements App Store", systemImage: "trophy.fill").font(.caption.weight(.semibold)).foregroundStyle(green)
+                ForEach(alerts.prefix(family == .systemLarge ? 7 : 3)) { a in
+                    HStack {
+                        Text(flagEmoji(a.cc))
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("\(a.title) · \(a.appName ?? "")").font(.caption.weight(.semibold)).lineLimit(1)
+                            Text(a.chartLabel).font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(a.rank.map { "#\($0)" } ?? "—").font(.headline.monospacedDigit()).foregroundStyle(a.type == "DROP" ? .red : green)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+}
+
+struct MoneyMakerRankingsWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "MoneyMakerRankings", provider: RankProvider()) { entry in
+            RankWidgetBody(entry: entry)
+                .containerBackground(for: .widget) { Color(red: 0.03, green: 0.04, blue: 0.05) }
+                .environment(\.colorScheme, .dark)
+        }
+        .configurationDisplayName("Classements App Store")
+        .description("Tes dernières victoires dans les classements, pays par pays.")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryInline, .accessoryRectangular])
+    }
+}
+
 @main
 struct MoneyMakerWidgetBundle: WidgetBundle {
-    var body: some Widget { MoneyMakerWidget() }
+    var body: some Widget {
+        MoneyMakerWidget()
+        MoneyMakerRankingsWidget()
+    }
 }

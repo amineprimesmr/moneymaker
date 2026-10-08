@@ -6,6 +6,25 @@ Alternative auto-hébergée à RevenueCat : un seul backend pour les abonnements
 - API : `https://moneymaker-io.web.app/v1`
 - Doc pour agents : https://moneymaker-io.web.app/llms.txt (même contenu lisible sur `/docs`)
 
+## MoneyMaker vs RevenueCat
+
+| | RevenueCat | MoneyMaker |
+|---|---|---|
+| App Store (StoreKit 2), Google Play, Stripe | ✅ | ✅ |
+| Entitlements, offerings / paywall à distance, restore, identités anonymes → connectées | ✅ | ✅ |
+| Notifications serveur Apple, RTDN Google, webhooks Stripe | ✅ | ✅ |
+| Connexion Stripe en un clic (webhook auto + import historique) | ✅ | ✅ |
+| App Store Connect : import produits + URL de notifications auto | ✅ | ✅ |
+| MRR, ARR, churn, essais, conversion, LTV, ARPPU, remboursements, cohortes | ✅ | ✅ |
+| Mouvements du MRR, comparaison période précédente, export CSV | ✅ | ✅ |
+| Webhooks signés, AppsFlyer, Slack, Discord, Mixpanel, Amplitude, Segment, PostHog | ✅ | ✅ |
+| **Carte du monde des ventes et des abonnés** | ❌ | ✅ |
+| **Classements App Store dans 177 pays (gratuit / payant / revenus, général + catégorie)** | ❌ | ✅ |
+| **Suivi des concurrents, alertes de classement, cartes à partager** | ❌ | ✅ |
+| **Notes par pays et avis de tous les pays, traduits** | ❌ | ✅ |
+| **Vue multi-business, app iPhone + widgets (MRR, classements)** | partiel | ✅ |
+| Commission | 1 % au-delà de 2,5 k$ | 0 % |
+
 ## Structure
 
 | Dossier | Contenu |
@@ -13,6 +32,10 @@ Alternative auto-hébergée à RevenueCat : un seul backend pour les abonnements
 | `backend/functions` | Cloud Functions (europe-west1) : `api` (routeur HTTP), `deliverEvent` (webhooks sortants signés, réessais), `dailySnapshot` (historique MRR) |
 | `backend/functions/src/engine.ts` | Cœur pur : statuts, accès (entitlements), événements, MRR/churn — testé unitairement |
 | `backend/functions/src/{apple,google,stripe}.ts` | Vérification JWS Apple + App Store Server API, Play Developer API + RTDN, webhooks Stripe |
+| `backend/functions/src/connect.ts` | Connexions en un clic : Stripe (webhook auto + import), App Store Connect, Google Play |
+| `backend/functions/src/appstore.ts` | Classements 177 pays, alertes, notes, avis, traduction (flux publics Apple, avec repli et anti-blocage) |
+| `backend/functions/src/integrations.ts` | Slack, Discord, Mixpanel, Amplitude, Segment, PostHog (+ `appsflyer.ts`) |
+| `backend/functions/src/metrics.ts` | Analytique : MRR, mouvements, pays, LTV, ARPPU, cohortes |
 | `dashboard/public` | Dashboard web (Firebase Hosting, sans build), `llms.txt`, `/docs` |
 | `sdk/ios` | Swift Package `MoneyMaker` (StoreKit 2, paywall SwiftUI, `.requiresEntitlement`) |
 | `sdk/android` | Bibliothèque Kotlin `io.moneymaker:moneymaker` (Play Billing 7) |

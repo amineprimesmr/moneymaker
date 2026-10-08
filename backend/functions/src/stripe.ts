@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import { Purchase, PurchaseStatus, HttpError } from "./engine";
 import { Project, getCredentials, lookupIndex, upsertPurchase, db } from "./store";
+import { toAlpha2 } from "./countries";
 
 const SUB_STATUS: Record<string, PurchaseStatus> = {
   active: "active", trialing: "active", past_due: "billing_retry", unpaid: "billing_retry",
@@ -39,6 +40,7 @@ export function stripeSubscriptionPurchase(s: Stripe.Subscription, now = Date.no
     periodMonths: months,
     billingIssue: status === "billing_retry",
     updatedAt: now,
+    country: toAlpha2((s.customer as any)?.address?.country ?? s.metadata?.country),
   };
 }
 
@@ -47,15 +49,21 @@ function appUserIdFrom(...sources: (Stripe.Metadata | null | undefined)[]) {
   return null;
 }
 
-async function storeSubscription(project: Project, sub: Stripe.Subscription, stripe?: Stripe) {
+export async function storeSubscription(project: Project, sub: Stripe.Subscription, stripe?: Stripe, opts: { silent?: boolean } = {}) {
   let appUserId = appUserIdFrom(sub.metadata) ?? await lookupIndex(project.id, `stripe:${sub.id}`, `stripe_cus:${sub.customer}`);
-  if (!appUserId && stripe && typeof sub.customer === "string") {
-    const c = await stripe.customers.retrieve(sub.customer);
-    if (!("deleted" in c && c.deleted)) appUserId = appUserIdFrom((c as Stripe.Customer).metadata);
+  let country: string | null = null;
+  if (stripe && typeof sub.customer === "string") {
+    const c = await stripe.customers.retrieve(sub.customer).catch(() => null);
+    if (c && !("deleted" in c && c.deleted)) {
+      const customer = c as Stripe.Customer;
+      appUserId ??= appUserIdFrom(customer.metadata);
+      country = toAlpha2(customer.address?.country ?? customer.shipping?.address?.country);
+    }
   }
   appUserId ??= `$stripe:${sub.customer}`;
   const purchase = stripeSubscriptionPurchase(sub);
-  return upsertPurchase(project, appUserId, purchase, [`stripe:${sub.id}`, `stripe_cus:${sub.customer}`]);
+  if (country) purchase.country = country;
+  return upsertPurchase(project, appUserId, purchase, [`stripe:${sub.id}`, `stripe_cus:${sub.customer}`], opts);
 }
 
 export async function ingestStripeWebhook(project: Project, rawBody: Buffer, signature: string | undefined) {
@@ -100,6 +108,7 @@ export async function ingestStripeWebhook(project: Project, rawBody: Buffer, sig
           purchasedAt: s.created * 1000, latestPurchaseAt: s.created * 1000, expiresAt: null, willRenew: false,
           isTrial: false, isSandbox: !s.livemode, priceMicros: (s.amount_total ?? 0) * 10000,
           currency: (s.currency ?? "eur").toUpperCase(), periodMonths: 0, billingIssue: false, updatedAt: Date.now(),
+          country: toAlpha2(s.customer_details?.address?.country),
         }, [`stripe:${s.payment_intent ?? s.id}`, ...(s.customer ? [`stripe_cus:${s.customer}`] : [])]);
       } else if (s.subscription && stripe) {
         const sub = await stripe.subscriptions.retrieve(String(s.subscription));

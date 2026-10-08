@@ -41,8 +41,24 @@ You need from the user: a PUBLIC key (`mm_pub_…`, safe to ship in apps) and th
 - `PUT /v1/projects/{id}/credentials` `{ "apple": { "issuerId", "keyId", "privateKey": "-----BEGIN PRIVATE KEY-----…" }, "google": { "serviceAccount": {…json…} }, "stripe": { "secretKey": "rk_live_…", "webhookSecret": "whsec_…" } }`
 - `GET /v1/projects/{id}` → `endpoints.appleNotifications` (paste in App Store Connect → App Information → App Store Server Notifications V2, production and sandbox), `endpoints.googleRtdn` (Pub/Sub push subscription URL), `endpoints.stripeWebhook`.
 
+## One-step store connections (secret key, PAT or dashboard session)
+- Stripe: `POST /v1/projects/{id}/connect/stripe` `{ "secretKey": "sk_live_…" | "rk_live_…" }` → validates the key, creates the Stripe webhook endpoint automatically, imports every subscription and 12 months of paid invoices. Response: `{ account, livemode, importedSubscriptions, importedInvoices }`.
+- App Store Connect: `POST /v1/projects/{id}/connect/appstore` `{ "issuerId", "keyId", "privateKey": "-----BEGIN PRIVATE KEY-----…", "appAppleId": "6400000000", "setNotificationUrl": true? }` (App Store Connect API key, App Manager role) → reads the app, imports subscription/IAP product ids into the first entitlement, starts ranking tracking, and points App Store Server Notifications V2 (production + sandbox) at MoneyMaker when the URL is empty or `setNotificationUrl: true`.
+- Google Play: `POST /v1/projects/{id}/connect/google` `{ "packageName", "serviceAccount": {…} }` → verifies Play access, imports subscription ids, returns the Pub/Sub push endpoint for RTDN.
+
+## Integrations
+`PUT /v1/projects/{id}/credentials` `{ "integrations": { "slackWebhookUrl", "discordWebhookUrl", "mixpanelToken", "amplitudeApiKey", "segmentWriteKey", "posthog": { "apiKey", "host"? } }, "appsflyer": { "devKey" } }` (null removes one). AppsFlyer app ids: `PATCH` config `{ "integrations": { "appsflyer": { "appId": "id123", "androidAppId": "com.app" } } }`; the app must set attributes `$appsflyerId` (+ `$idfa`, `$idfv` when allowed). Events are sent as `mm_<event_type>` (Mixpanel/Amplitude/Segment/PostHog) and `rc_*_event` (AppsFlyer, RevenueCat-compatible names).
+
+## App Store intelligence (rankings, alerts, ratings, reviews)
+- Search: `GET /v1/appstore/search?term=whoop&country=fr`.
+- Track apps (own or competitors, max 25): `PUT /v1/projects/{id}/appstore` `{ "apps": [{ "appId": "933944389", "own": false }] }`. First scan starts immediately (25 biggest markets), then hourly; every storefront (177) is refreshed at least every 6 h. Charts: top free / paid / grossing, overall and in the app's category.
+- `GET /v1/projects/{id}/appstore` (summary: countriesRanked, bestRank, rating, topRankings) · `GET …/appstore/{appId}/ranks` (rank, prevRank, bestRank, history per country/chart) · `GET …/appstore/{appId}/ratings` (per country) · `GET …/appstore/{appId}/reviews?country=FR&rating=1` · `POST …/appstore/{appId}/reviews/{reviewId}/translate { "target": "fr" }`.
+- Alerts: `GET /v1/projects/{id}/alerts`, all businesses `GET /v1/alerts` (PAT). Types: NEW_COUNTRY, TOP_100, TOP_10, TOP_1, JUMP (+10), DROP (−15), LEFT_CHART. Delivered to Slack/Discord and to your webhooks as `RANKING_<TYPE>`.
+
 ## Reference
-- Metrics: `GET /v1/projects/{id}/metrics?days=30` (MRR, ARR, active subs, trials, churn, conversion, revenue by day). All businesses: `GET /v1/overview` (PAT).
+- Metrics: `GET /v1/projects/{id}/metrics?days=30` — MRR, ARR, MRR movement (new/churned/net), active subs/trials/customers, revenue (gross, refunds, net, new vs renewal) by day/country/store/product, active subscribers by country, ARPPU, ARPU, LTV, refund rate, monthly churn, trial conversion (overall and per product), previous-period comparison, daily history. All businesses: `GET /v1/overview` (PAT).
+- Cohorts: `GET /v1/projects/{id}/cohorts?months=12` — monthly cohorts by first payment: subscription retention (annual payments cover 12 months) and cumulative revenue per customer.
+- CSV export: `GET /v1/projects/{id}/export/customers|transactions|events` (secret key or session).
 - Customers: `GET /v1/projects/{id}/customers`, `GET /v1/projects/{id}/customers/{appUserId}`, grant: `POST …/customers/{appUserId}/grant { entitlement, days? }` (omit days = lifetime, 0 = revoke).
 - Events: `GET /v1/projects/{id}/events`. Transactions: `GET /v1/projects/{id}/transactions`.
 - Errors: JSON `{ error, message }` with HTTP 400/401/403/404/5xx.

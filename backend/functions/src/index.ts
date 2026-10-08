@@ -7,6 +7,8 @@ import { handle } from "./api";
 import { db, getProject, getCredentials } from "./store";
 import { snapshotProject } from "./metrics";
 import { sendToAppsFlyer } from "./appsflyer";
+import { fanOut } from "./integrations";
+import { scanRankings, scanRatings, scanReviews, countriesForRun, PRIORITY_COUNTRIES } from "./appstore";
 
 setGlobalOptions({ region: "europe-west1", maxInstances: 20 });
 
@@ -26,10 +28,14 @@ export const deliverEvent = onDocumentCreated({ document: "projects/{pid}/events
     const status = await sendToAppsFlyer(project, creds, data).catch(e => `error: ${(e as Error).message}`);
     await event.data!.ref.update({ appsflyer: status });
   }
+  if (!data.integrations) {
+    const status = await fanOut(project, creds, { id: event.params.eid, ...data }, "event");
+    await event.data!.ref.update({ integrations: status });
+  }
   const hooks = project.config.webhooks.filter(h => !h.events?.length || h.events.includes(data.type));
   if (!hooks.length) { await event.data!.ref.update({ delivered: true }); return; }
   const { webhookSigningSecret } = creds;
-  const body = JSON.stringify({ id: event.params.eid, projectId: project.id, ...data, delivered: undefined, appsflyer: undefined });
+  const body = JSON.stringify({ id: event.params.eid, projectId: project.id, ...data, delivered: undefined, appsflyer: undefined, integrations: undefined });
   const t = Math.floor(Date.now() / 1000);
   const signature = createHmac("sha256", webhookSigningSecret).update(`${t}.${body}`).digest("hex");
   const failures: string[] = [];
@@ -51,4 +57,44 @@ export const dailySnapshot = onSchedule({ schedule: "5 0 * * *", timeZone: "UTC"
   for (const doc of projects.docs) {
     try { await snapshotProject(await getProject(doc.id)); } catch (e) { console.error("snapshot", doc.id, e); }
   }
+});
+
+/** Ranking alerts → Slack/Discord + the project's own webhooks (type RANKING_*). */
+export const deliverAlert = onDocumentCreated({ document: "projects/{pid}/alerts/{aid}", retry: false }, async event => {
+  const data = event.data?.data();
+  if (!data || data.delivered) return;
+  const project = await getProject(event.params.pid);
+  const creds = await getCredentials(project.id);
+  const integrations = await fanOut(project, creds, data, "alert");
+  const body = JSON.stringify({ id: event.params.aid, projectId: project.id, ...data, type: `RANKING_${data.type}`, delivered: undefined });
+  const t = Math.floor(Date.now() / 1000);
+  const signature = createHmac("sha256", creds.webhookSigningSecret).update(`${t}.${body}`).digest("hex");
+  await Promise.all(project.config.webhooks.filter(h => !h.events?.length || h.events.includes(`RANKING_${data.type}`)).map(h =>
+    fetch(h.url, { method: "POST", body, redirect: "error", signal: AbortSignal.timeout(10000),
+      headers: { "Content-Type": "application/json", "MoneyMaker-Signature": `t=${t},v1=${signature}` } }).catch(() => null)));
+  await event.data!.ref.update({ delivered: true, integrations });
+});
+
+const heavy = { timeoutSeconds: 540, memory: "1GiB" as const };
+
+export const rankingsScan = onSchedule({ schedule: "every 60 minutes", ...heavy }, async () => {
+  const run = Math.floor(Date.now() / 3600000);
+  console.log("rankings", await scanRankings(undefined, countriesForRun(run)));
+});
+
+export const ratingsAndReviewsScan = onSchedule({ schedule: "every 6 hours", ...heavy }, async () => {
+  const apps = (await db.collection("apps").get()).docs.filter(d => (d.get("trackers") ?? []).length);
+  for (const a of apps) {
+    try { await scanRatings(a.id); await scanReviews(a.id); } catch (e) { console.error("ratings/reviews", a.id, e); }
+  }
+});
+
+/** On-demand scan right after an app is tracked or a refresh is requested. */
+export const scanOnRequest = onDocumentCreated({ document: "scanRequests/{rid}", ...heavy }, async event => {
+  const appIds: string[] = event.data?.get("appIds") ?? [];
+  if (!appIds.length) return;
+  // Fast first look on the biggest markets; the hourly rotation fills in every other storefront.
+  const rankings = await scanRankings(appIds, PRIORITY_COUNTRIES);
+  for (const id of appIds) { await scanRatings(id).catch(() => null); await scanReviews(id).catch(() => null); }
+  await event.data!.ref.update({ doneAt: Date.now(), rankings });
 });

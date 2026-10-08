@@ -23,6 +23,7 @@ extension Color {
 final class Store: ObservableObject {
     @Published var token: String? = MoneyMakerClient.stored.token
     @Published var overview: Overview? = MoneyMakerClient.cachedOverview
+    @Published var alerts: [RankingAlert] = MoneyMakerClient.cachedAlerts
     @Published var days = 30
     @Published var error: String?
     @Published var loading = false
@@ -43,6 +44,7 @@ final class Store: ObservableObject {
         loading = true; defer { loading = false }
         do { overview = try await client.overview(days: days); error = nil }
         catch { self.error = error.localizedDescription }
+        if let a = try? await client.alerts() { alerts = a }
     }
 }
 
@@ -130,6 +132,11 @@ struct OverviewView: View {
                         }
                         .padding(18).background(Color.mmCard, in: RoundedRectangle(cornerRadius: 20))
 
+                        if !store.alerts.isEmpty {
+                            Text("Alertes App Store").font(.title3.bold()).padding(.top, 4)
+                            ForEach(store.alerts.prefix(6)) { AlertRow(a: $0) }
+                        }
+
                         Text("Business").font(.title3.bold()).padding(.top, 4)
                         ForEach(o.projects) { p in
                             NavigationLink(value: p) { ProjectRow(p: p) }.buttonStyle(.plain)
@@ -190,10 +197,64 @@ struct ProjectRow: View {
     }
 }
 
+struct AlertRow: View {
+    let a: RankingAlert
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: a.symbol).font(.headline).foregroundStyle(a.type == "DROP" ? .red : Color.mmGreen).frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(a.title) · \(a.appName ?? "")").font(.subheadline.weight(.semibold)).lineLimit(1)
+                Text("\(flagEmoji(a.cc)) \(a.cc) · \(a.chartLabel)\(a.own == false ? " · concurrent" : "")").font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(a.rank.map { "#\($0)" } ?? "—").font(.headline.monospacedDigit())
+                Text(Date(timeIntervalSince1970: a.at / 1000).formatted(.relative(presentation: .numeric))).font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(12).background(Color.mmCard, in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+struct TrackedAppCard: View {
+    let app: TrackedAppSummary
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                AsyncImage(url: app.icon.flatMap(URL.init(string:))) { $0.resizable() } placeholder: { Color.mmCard }
+                    .frame(width: 44, height: 44).clipShape(RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(app.name ?? app.appId).font(.headline).lineLimit(1)
+                    Text(app.rating.map { "★ \($0.formatted(.number.precision(.fractionLength(2)))) · \((app.ratingCount ?? 0).formatted()) notes" } ?? "Pas encore de notes")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(app.bestRank.map { "#\($0)" } ?? "—").font(.title3.bold().monospacedDigit()).foregroundStyle(Color.mmGreen)
+                    Text("\(app.countriesRanked ?? 0) pays").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            if let top = app.topRankings, !top.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(top, id: \.self) { r in
+                            Text("\(flagEmoji(r.cc)) #\(r.rank)\(r.scope == "genre" ? " cat." : "")")
+                                .font(.caption.weight(.semibold)).padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Color.mmGreen.opacity(0.15), in: Capsule()).foregroundStyle(Color.mmGreen)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(14).background(Color.mmCard, in: RoundedRectangle(cornerRadius: 16))
+    }
+}
+
 struct ProjectView: View {
     @EnvironmentObject var store: Store
     let p: ProjectSummary
     @State private var events: [EventItem] = []
+    @State private var apps: [TrackedAppSummary] = []
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -208,6 +269,10 @@ struct ProjectView: View {
                 if p.billingIssues > 0 {
                     Label("\(p.billingIssues) problème(s) de paiement en cours", systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange).font(.subheadline)
+                }
+                if !apps.isEmpty {
+                    Text("App Store").font(.title3.bold()).padding(.top, 6)
+                    ForEach(apps) { TrackedAppCard(app: $0) }
                 }
                 Text("Activité").font(.title3.bold()).padding(.top, 6)
                 ForEach(events) { e in
@@ -234,7 +299,12 @@ struct ProjectView: View {
         .task { await load() }
     }
 
-    func load() async { events = (try? await store.client.events(projectId: p.projectId)) ?? events }
+    func load() async {
+        async let e = try? store.client.events(projectId: p.projectId)
+        async let a = try? store.client.trackedApps(projectId: p.projectId)
+        events = await e ?? events
+        apps = await a ?? apps
+    }
     func label(_ t: String) -> String {
         ["INITIAL_PURCHASE": "Nouvel abonné", "RENEWAL": "Renouvellement", "TRIAL_STARTED": "Essai démarré", "TRIAL_CONVERTED": "Essai converti",
          "CANCELLATION": "Annulation", "UNCANCELLATION": "Réactivation", "EXPIRATION": "Expiration", "BILLING_ISSUE": "Problème de paiement",

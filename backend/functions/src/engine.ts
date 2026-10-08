@@ -21,6 +21,7 @@ export interface Purchase {
   periodMonths: number;       // 1, 12, 0.25 (weekly)… 0 for non-subscriptions
   billingIssue: boolean;
   updatedAt: number;
+  country?: string | null;   // ISO alpha-2 of the storefront / billing address
 }
 
 export type EventType =
