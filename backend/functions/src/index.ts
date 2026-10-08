@@ -10,6 +10,8 @@ import { sendToAppsFlyer } from "./appsflyer";
 import { toRevenueCatEvent } from "./rccompat";
 import { computeEntitlements } from "./engine";
 import { fanOut } from "./integrations";
+import { pushEvent, pushRanking, sendDailySummaries } from "./push";
+
 import { importRevenueCat } from "./revenuecat";
 import { FieldValue } from "firebase-admin/firestore";
 import { scanRankings, scanRatings, scanReviews, countriesForRun, PRIORITY_COUNTRIES } from "./appstore";
@@ -26,6 +28,11 @@ export const deliverEvent = onDocumentCreated({ document: "projects/{pid}/events
   const createdAt = Number(data.at ?? Date.now());
   if (Date.now() - createdAt > 24 * 3600000) return; // stop retrying after a day
   const project = await getProject(event.params.pid);
+  // iOS push first: it is what the founder feels instantly. Isolated so it never blocks webhooks.
+  if (!data.pushed) {
+    const push = await pushEvent(project, { id: event.params.eid, ...data }).catch(e => ({ error: (e as Error).message }));
+    await event.data!.ref.update({ pushed: push });
+  }
   const creds = await getCredentials(project.id);
   if (!data.appsflyer) {
     // Attribution is best-effort and isolated: an AppsFlyer outage must not block the customer's own webhooks.
@@ -39,7 +46,7 @@ export const deliverEvent = onDocumentCreated({ document: "projects/{pid}/events
   const hooks = project.config.webhooks.filter(h => !h.events?.length || h.events.includes(data.type));
   if (!hooks.length) { await event.data!.ref.update({ delivered: true }); return; }
   const { webhookSigningSecret } = creds;
-  const body = JSON.stringify({ id: event.params.eid, projectId: project.id, ...data, delivered: undefined, appsflyer: undefined, integrations: undefined });
+  const body = JSON.stringify({ id: event.params.eid, projectId: project.id, ...data, delivered: undefined, appsflyer: undefined, integrations: undefined, pushed: undefined });
   const t = Math.floor(Date.now() / 1000);
   const auth = ((creds as any).webhookAuthorization ?? {}) as Record<string, string>;
   const entitlementIds = Object.entries(project.config.entitlements).filter(([, ids]) => ids.includes("*") || ids.includes(data.productId)).map(([id]) => id);
@@ -76,6 +83,7 @@ export const deliverAlert = onDocumentCreated({ document: "projects/{pid}/alerts
   const data = event.data?.data();
   if (!data || data.delivered) return;
   const project = await getProject(event.params.pid);
+  await pushRanking(project, data).catch(e => console.error("push ranking", e));
   const creds = await getCredentials(project.id);
   const integrations = await fanOut(project, creds, data, "alert");
   const body = JSON.stringify({ id: event.params.aid, projectId: project.id, ...data, type: `RANKING_${data.type}`, delivered: undefined });
@@ -85,6 +93,11 @@ export const deliverAlert = onDocumentCreated({ document: "projects/{pid}/alerts
     fetch(h.url, { method: "POST", body, redirect: "error", signal: AbortSignal.timeout(10000),
       headers: { "Content-Type": "application/json", "MoneyMaker-Signature": `t=${t},v1=${signature}` } }).catch(() => null)));
   await event.data!.ref.update({ delivered: true, integrations });
+});
+
+/** 21:00 local recap — runs hourly, each device fires in its own timezone. */
+export const dailySummaryPush = onSchedule({ schedule: "0 * * * *", timeZone: "UTC" }, async () => {
+  console.log("daily summaries", await sendDailySummaries());
 });
 
 const heavy = { timeoutSeconds: 540, memory: "1GiB" as const };

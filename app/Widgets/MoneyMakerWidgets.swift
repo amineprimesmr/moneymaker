@@ -1,32 +1,88 @@
 import WidgetKit
 import SwiftUI
 import Charts
+import AppIntents
 
-struct Entry: TimelineEntry {
-    let date: Date
-    let overview: Overview?
-    let signedIn: Bool
-}
+// MARK: - MRR (configurable : business + objectif)
 
-struct Provider: TimelineProvider {
-    func placeholder(in context: Context) -> Entry { Entry(date: .now, overview: .placeholder, signedIn: true) }
+/// Tranche affichée : tous les business ou un seul.
+struct MRRSlice: Hashable {
+    let name: String
+    let currency: String
+    let mrrMicros: Int
+    let revenueMicros: Int
+    let subscribers: Int
+    let trials: Int
+    let byDay: [String: Int]
+    let projects: [ProjectSummary]
 
-    func getSnapshot(in context: Context, completion: @escaping (Entry) -> Void) {
-        completion(Entry(date: .now, overview: MoneyMakerClient.cachedOverview ?? .placeholder, signedIn: true))
-    }
-
-    func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
-        Task {
-            let client = MoneyMakerClient.stored
-            let fresh = try? await client.overview(days: 30)
-            let entry = Entry(date: .now, overview: fresh ?? MoneyMakerClient.cachedOverview, signedIn: client.token != nil)
-            completion(Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(15 * 60))))
+    init?(_ o: Overview?, projectId: String?) {
+        guard let o else { return nil }
+        if let id = projectId, id != "*", let p = o.projects.first(where: { $0.projectId == id }) {
+            name = p.name; currency = p.currency; mrrMicros = p.mrrMicros; revenueMicros = p.netRevenueMicros
+            subscribers = p.activeSubscriptions; trials = p.activeTrials; byDay = p.revenueByDay; projects = []
+        } else {
+            name = "Tous les business"; currency = o.currency; mrrMicros = o.mrrMicros; revenueMicros = o.revenueMicros
+            subscribers = o.activeSubscriptions; trials = o.activeTrials; byDay = o.revenueByDay; projects = o.projects
         }
     }
 }
 
-private let green = Color(red: 0, green: 0.82, blue: 0.52)
-private let blue = Color(red: 0, green: 0.58, blue: 0.91)
+struct Entry: TimelineEntry {
+    let date: Date
+    let slice: MRRSlice?
+    let goal: Int?
+    let signedIn: Bool
+}
+
+struct Provider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> Entry { Entry(date: .now, slice: MRRSlice(.placeholder, projectId: nil), goal: 6000, signedIn: true) }
+
+    func snapshot(for configuration: MRRWidgetIntent, in context: Context) async -> Entry {
+        let o = context.isPreview ? .placeholder : (MoneyMakerClient.cachedOverview ?? .placeholder)
+        return Entry(date: .now, slice: MRRSlice(o, projectId: configuration.project?.id), goal: configuration.goal ?? MMShared.mrrGoal, signedIn: true)
+    }
+
+    func timeline(for configuration: MRRWidgetIntent, in context: Context) async -> Timeline<Entry> {
+        let client = MoneyMakerClient.stored
+        let fresh = try? await client.overview(days: 30)
+        let entry = Entry(date: .now, slice: MRRSlice(fresh ?? MoneyMakerClient.cachedOverview, projectId: configuration.project?.id),
+                          goal: configuration.goal ?? MMShared.mrrGoal, signedIn: client.token != nil)
+        return Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(15 * 60)))
+    }
+}
+
+private let green = MMColor.accent
+
+/// Fond des widgets : le puits charbon de l'app, sans étoiles (pas d'animation en widget).
+struct WidgetBackdrop: View {
+    var body: some View {
+        ZStack {
+            MMColor.edge
+            RadialGradient(colors: [MMColor.well, MMColor.edge], center: .topLeading, startRadius: 0, endRadius: 260)
+            RadialGradient(colors: [MMColor.accent.opacity(0.10), .clear], center: .bottomTrailing, startRadius: 0, endRadius: 200)
+        }
+    }
+}
+
+/// Barre d'objectif fine et lumineuse.
+struct GoalBar: View {
+    let progress: Double
+    let label: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.08))
+                    Capsule().fill(MMColor.chartGradient).frame(width: max(4, g.size.width * min(1, progress)))
+                        .shadow(color: MMColor.accent.opacity(0.6), radius: 4)
+                }
+            }
+            .frame(height: 4)
+            Text(label).font(MMFont.system(10)).foregroundStyle(MMColor.ink3).lineLimit(1)
+        }
+    }
+}
 
 struct WidgetBody: View {
     @Environment(\.widgetFamily) var family
@@ -34,82 +90,94 @@ struct WidgetBody: View {
 
     var body: some View {
         if !entry.signedIn {
-            VStack(spacing: 6) {
-                Image(systemName: "dollarsign.circle.fill").font(.title).foregroundStyle(green)
-                Text("Ouvre MoneyMaker pour te connecter").font(.caption).multilineTextAlignment(.center)
-            }
-        } else if let o = entry.overview {
+            SignedOutView()
+        } else if let o = entry.slice {
+            let pts = dailySeries(o.byDay, days: family == .systemLarge ? 30 : 14)
+            let goalMicros = entry.goal.map { $0 * 1_000_000 }
+            let progress = goalMicros.map { Double(o.mrrMicros) / Double(max($0, 1)) }
             switch family {
             case .accessoryInline:
                 Text("MRR \(o.mrrMicros.money(o.currency, compact: true))")
             case .accessoryCircular:
-                VStack(spacing: 0) {
-                    Image(systemName: "dollarsign").font(.caption.bold())
-                    Text(o.mrrMicros.money(o.currency, compact: true)).font(.system(size: 11, weight: .bold)).minimumScaleFactor(0.5)
+                Gauge(value: min(1, progress ?? 1)) {
+                    Image(systemName: "dollarsign")
+                } currentValueLabel: {
+                    Text(o.mrrMicros.money(o.currency, compact: true)).minimumScaleFactor(0.5)
                 }
+                .gaugeStyle(.accessoryCircularCapacity)
             case .accessoryRectangular:
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("MRR").font(.caption2.weight(.semibold))
+                    Text("MRR").font(.caption2.weight(.semibold)).widgetAccentable()
                     Text(o.mrrMicros.money(o.currency, compact: true)).font(.headline.bold())
-                    Text("\(o.activeSubscriptions) abonnés · \(o.activeTrials) essais").font(.caption2)
+                    if let progress { ProgressView(value: min(1, progress)).tint(.white) }
+                    else { Text("\(o.subscribers) abonnés · \(o.trials) essais").font(.caption2) }
                 }
             case .systemSmall:
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("MRR", systemImage: "dollarsign.circle.fill").font(.caption.weight(.semibold)).foregroundStyle(green)
-                    Spacer(minLength: 0)
-                    Text(o.mrrMicros.money(o.currency, compact: true)).font(.system(size: 30, weight: .bold, design: .rounded))
+                VStack(alignment: .leading, spacing: 6) {
+                    MMLabel(text: "MRR")
+                    Text(o.mrrMicros.money(o.currency, compact: true)).font(MMFont.number(30)).tracking(-0.8)
                         .minimumScaleFactor(0.5).lineLimit(1)
-                    Text("\(o.activeSubscriptions) abonnés").font(.caption).foregroundStyle(.secondary)
-                    Text("30 j : \(o.revenueMicros.money(o.currency, compact: true))").font(.caption2).foregroundStyle(.secondary)
+                    MMGlowChart(points: pts, lineWidth: 1.8)
+                    if let progress, let g = goalMicros {
+                        GoalBar(progress: progress, label: "\(Int(progress * 100)) % de \(g.money(o.currency, compact: true))")
+                    } else {
+                        Text("\(o.subscribers) abonnés").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             default:
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("MRR").font(.caption.weight(.semibold)).foregroundStyle(green)
-                            Text(o.mrrMicros.money(o.currency, compact: true)).font(.system(size: 30, weight: .bold, design: .rounded)).minimumScaleFactor(0.6)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            MMLabel(text: o.projects.isEmpty ? "MRR · \(o.name)" : "MRR")
+                            Text(o.mrrMicros.money(o.currency, compact: true)).font(MMFont.number(32)).tracking(-0.9).minimumScaleFactor(0.6)
                         }
                         Spacer()
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text("30 j").font(.caption2).foregroundStyle(.secondary)
-                            Text(o.revenueMicros.money(o.currency, compact: true)).font(.headline.monospacedDigit())
-                            Text("\(o.activeSubscriptions) abonnés · \(o.activeTrials) essais").font(.caption2).foregroundStyle(.secondary)
+                        VStack(alignment: .trailing, spacing: 4) {
+                            MMDelta(value: halfOverHalf(pts))
+                            Text("30 j · \(o.revenueMicros.money(o.currency, compact: true))").font(MMFont.system(11)).foregroundStyle(MMColor.ink2)
+                            Text("\(o.subscribers) abonnés").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
                         }
                     }
-                    Chart(o.dailyRevenue(days: family == .systemLarge ? 30 : 14), id: \.date) { p in
-                        BarMark(x: .value("Jour", p.date, unit: .day), y: .value("€", Double(p.micros) / 1e6)).foregroundStyle(blue).cornerRadius(2)
+                    MMGlowChart(points: pts)
+                    if let progress, let g = goalMicros {
+                        GoalBar(progress: progress, label: "Objectif \(g.money(o.currency, compact: true)) · \(Int(progress * 100)) %")
                     }
-                    .chartXAxis(.hidden).chartYAxis(.hidden)
                     if family == .systemLarge {
-                        ForEach(o.projects.prefix(5)) { p in
-                            HStack {
-                                Text(p.name).font(.subheadline.weight(.semibold)).lineLimit(1)
-                                Spacer()
-                                Text("\(p.activeSubscriptions)").font(.caption).foregroundStyle(.secondary)
-                                Text(p.mrrMicros.money(p.currency, compact: true)).font(.subheadline.monospacedDigit()).foregroundStyle(green)
+                        VStack(spacing: 0) {
+                            ForEach(Array(o.projects.prefix(5).enumerated()), id: \.element.id) { i, p in
+                                if i > 0 { Rectangle().fill(MMColor.hairline).frame(height: 1) }
+                                HStack {
+                                    Text(p.name).font(MMFont.system(13, .medium)).lineLimit(1)
+                                    Spacer()
+                                    Text("\(p.activeSubscriptions)").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
+                                    Text(p.mrrMicros.money(p.currency, compact: true)).font(MMFont.number(13, .regular))
+                                        .frame(minWidth: 56, alignment: .trailing)
+                                }
+                                .padding(.vertical, 7)
                             }
                         }
                     }
                 }
             }
         } else {
-            Text("—")
+            Text("—").foregroundStyle(MMColor.ink3)
         }
     }
 }
 
 struct MoneyMakerWidget: Widget {
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "MoneyMakerOverview", provider: Provider()) { entry in
+    static let families: [WidgetFamily] = [.systemSmall, .systemMedium, .systemLarge, .accessoryInline, .accessoryCircular, .accessoryRectangular]
+    var body: some WidgetConfiguration { Self.configuration(kind: WidgetPushGate.kind("MoneyMakerOverview"), families: WidgetPushGate.legacy(Self.families)) }
+    static func configuration(kind: String, families: [WidgetFamily]) -> some WidgetConfiguration {
+        AppIntentConfiguration(kind: kind, intent: MRRWidgetIntent.self, provider: Provider()) { entry in
             WidgetBody(entry: entry)
-                .containerBackground(for: .widget) { Color(red: 0.03, green: 0.04, blue: 0.05) }
+                .containerBackground(for: .widget) { WidgetBackdrop() }
                 .environment(\.colorScheme, .dark)
                 .widgetURL(URL(string: "moneymaker://overview"))
         }
-        .configurationDisplayName("MoneyMaker")
-        .description("MRR, revenus et abonnés de tous tes business.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryInline, .accessoryCircular, .accessoryRectangular])
+        .configurationDisplayName("MRR")
+        .description("MRR, revenus et abonnés — tous tes business ou un seul, avec ton objectif.")
+        .supportedFamilies(families)
     }
 }
 
@@ -143,8 +211,8 @@ struct RankWidgetBody: View {
         let alerts = entry.alerts.filter { $0.type != "LEFT_CHART" }
         if alerts.isEmpty {
             VStack(spacing: 6) {
-                Image(systemName: "trophy.fill").font(.title2).foregroundStyle(green)
-                Text("Aucune alerte de classement").font(.caption).multilineTextAlignment(.center)
+                Image(systemName: "trophy").font(.system(size: 20, weight: .light)).foregroundStyle(green)
+                Text("Aucune alerte de classement").font(MMFont.system(12)).foregroundStyle(MMColor.ink2).multilineTextAlignment(.center)
             }
         } else if family == .accessoryRectangular || family == .accessoryInline {
             let a = alerts[0]
@@ -159,26 +227,33 @@ struct RankWidgetBody: View {
         } else if family == .systemSmall {
             let a = alerts[0]
             VStack(alignment: .leading, spacing: 4) {
-                Label(a.title, systemImage: a.symbol).font(.caption.weight(.semibold)).foregroundStyle(green).lineLimit(1)
+                HStack {
+                    Image(systemName: a.symbol).font(.system(size: 11, weight: .semibold)).foregroundStyle(a.type == "DROP" ? MMColor.red : green)
+                        .frame(width: 24, height: 24).background((a.type == "DROP" ? MMColor.red : green).opacity(0.14), in: Circle())
+                    Spacer()
+                    Text(flagEmoji(a.cc)).font(.system(size: 18))
+                }
                 Spacer(minLength: 0)
-                Text(a.rank.map { "#\($0)" } ?? "—").font(.system(size: 40, weight: .heavy, design: .rounded))
-                Text("\(flagEmoji(a.cc)) \(a.chartLabel)").font(.caption).lineLimit(1)
-                Text(a.appName ?? "").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                Text(a.rank.map { "#\($0)" } ?? "—").font(MMFont.number(42)).tracking(-1.2)
+                Text(a.title).font(MMFont.system(12, .medium)).lineLimit(1)
+                Text("\(a.appName ?? "") · \(a.chartLabel)").font(MMFont.system(10)).foregroundStyle(MMColor.ink3).lineLimit(1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Classements App Store", systemImage: "trophy.fill").font(.caption.weight(.semibold)).foregroundStyle(green)
-                ForEach(alerts.prefix(family == .systemLarge ? 7 : 3)) { a in
-                    HStack {
-                        Text(flagEmoji(a.cc))
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text("\(a.title) · \(a.appName ?? "")").font(.caption.weight(.semibold)).lineLimit(1)
-                            Text(a.chartLabel).font(.caption2).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 0) {
+                MMLabel(text: "Classements App Store").padding(.bottom, 8)
+                ForEach(Array(alerts.prefix(family == .systemLarge ? 7 : 3).enumerated()), id: \.element.id) { i, a in
+                    if i > 0 { Rectangle().fill(MMColor.hairline).frame(height: 1) }
+                    HStack(spacing: 10) {
+                        Text(flagEmoji(a.cc)).font(.system(size: 16))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("\(a.title) · \(a.appName ?? "")").font(MMFont.system(12, .medium)).lineLimit(1)
+                            Text(a.chartLabel).font(MMFont.system(10)).foregroundStyle(MMColor.ink3)
                         }
                         Spacer()
-                        Text(a.rank.map { "#\($0)" } ?? "—").font(.headline.monospacedDigit()).foregroundStyle(a.type == "DROP" ? .red : green)
+                        Text(a.rank.map { "#\($0)" } ?? "—").font(MMFont.number(18, .regular))
+                            .foregroundStyle(a.type == "DROP" ? MMColor.red : MMColor.ink)
                     }
+                    .padding(.vertical, 6)
                 }
                 Spacer(minLength: 0)
             }
@@ -190,7 +265,7 @@ struct MoneyMakerRankingsWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "MoneyMakerRankings", provider: RankProvider()) { entry in
             RankWidgetBody(entry: entry)
-                .containerBackground(for: .widget) { Color(red: 0.03, green: 0.04, blue: 0.05) }
+                .containerBackground(for: .widget) { WidgetBackdrop() }
                 .environment(\.colorScheme, .dark)
         }
         .configurationDisplayName("Classements App Store")
@@ -202,7 +277,16 @@ struct MoneyMakerRankingsWidget: Widget {
 @main
 struct MoneyMakerWidgetBundle: WidgetBundle {
     var body: some Widget {
+        if #available(iOS 26.0, *) {
+            MoneyMakerTodayWidgetPush()
+            MoneyMakerWidgetPush()
+            MoneyMakerFeedWidgetPush()
+        }
+        MoneyMakerTodayWidget()
         MoneyMakerWidget()
+        MoneyMakerFeedWidget()
         MoneyMakerRankingsWidget()
+        RevenueLiveActivity()
+        if #available(iOS 18.0, *) { MoneyMakerTodayControl() }
     }
 }

@@ -3,20 +3,21 @@ import Charts
 
 @main
 struct MoneyMakerApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     var body: some Scene {
         WindowGroup {
             RootView()
+                .onOpenURL { Router.shared.open($0) }
                 // fixed-scheme: the whole product (dashboard, widgets) is dark-only.
                 .preferredColorScheme(.dark)
-                .tint(.mmGreen)
+                .tint(MMColor.accent)
         }
     }
 }
 
 extension Color {
-    static let mmGreen = Color(red: 0, green: 0.82, blue: 0.52)
-    static let mmBlue = Color(red: 0, green: 0.58, blue: 0.91)
-    static let mmCard = Color.white.opacity(0.06)
+    static let mmGreen = MMColor.accent
+    static let mmBlue = MMColor.blue
 }
 
 @MainActor
@@ -27,6 +28,10 @@ final class Store: ObservableObject {
     @Published var days = 30
     @Published var error: String?
     @Published var loading = false
+    @Published var today: Today? = MMShared.cachedToday
+    @Published var feed: [FeedEvent] = MMShared.cachedFeed
+    /// Pulsation déclenchée à chaque nouvel événement reçu en direct.
+    @Published var liveTick = 0
 
     var client: MoneyMakerClient { MoneyMakerClient(token: token) }
 
@@ -38,295 +43,49 @@ final class Store: ObservableObject {
         if error == nil { MoneyMakerClient.save(token: t) } else { token = nil }
     }
 
-    func signOut() { MoneyMakerClient.save(token: nil); token = nil; overview = nil }
+    func signOut() {
+        let old = token
+        Task { await LiveActivityManager.shared.stop(); await PushManager.shared.forgetDevice(token: old) }
+        MoneyMakerClient.save(token: nil); token = nil; overview = nil; today = nil; feed = []
+    }
 
     func refresh() async {
         loading = true; defer { loading = false }
-        do { overview = try await client.overview(days: days); error = nil }
-        catch { self.error = error.localizedDescription }
-        if let a = try? await client.alerts() { alerts = a }
+        let c = client
+        async let o = Result.capture { try await c.overview(days: days) }
+        async let a = try? c.alerts()
+        async let t = try? c.today()
+        async let f = try? c.feed()
+        switch await o {
+        case .success(let v): overview = v; error = nil
+        case .failure(let e): self.error = e.localizedDescription
+        }
+        if let v = await a { alerts = v }
+        await applyLive(today: t, feed: f)
+    }
+
+    /// Rafraîchissement léger (jour + flux) après un push ou un retour au premier plan.
+    func refreshLive() async {
+        let c = client
+        async let t = try? c.today()
+        async let f = try? c.feed()
+        let before = feed.first?.id
+        await applyLive(today: t, feed: f)
+        if let id = feed.first?.id, id != before { liveTick += 1 }
+    }
+
+    private func applyLive(today t: Today?, feed f: [FeedEvent]?) async {
+        withAnimation(.snappy) {
+            if let t { today = t }
+            if let f { feed = f }
+        }
+        if let t { await LiveActivityManager.shared.refresh(with: t) }
     }
 }
 
-struct RootView: View {
-    @StateObject private var store = Store()
-    var body: some View {
-        Group {
-            if store.token == nil { SignInView() } else { OverviewView() }
-        }
-        .environmentObject(store)
-    }
-}
 
-struct SignInView: View {
-    @EnvironmentObject var store: Store
-    @State private var token = ""
-    var body: some View {
-        VStack(spacing: 22) {
-            Spacer()
-            Image(systemName: "dollarsign")
-                .font(.system(size: 44, weight: .black)).foregroundStyle(.black)
-                .frame(width: 88, height: 88).background(Color.mmGreen, in: RoundedRectangle(cornerRadius: 22))
-            VStack(spacing: 6) {
-                Text("MoneyMaker").font(.largeTitle.bold())
-                Text("Tous tes revenus d'abonnement, en direct.").foregroundStyle(.secondary)
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                SecureField("mm_pat_…", text: $token)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .padding(14).background(Color.mmCard, in: RoundedRectangle(cornerRadius: 14))
-                Text("Crée un jeton sur moneymaker-io.web.app → Compte & accès.").font(.footnote).foregroundStyle(.secondary)
-            }
-            Button {
-                Task { await store.signIn(token) }
-            } label: {
-                HStack { if store.loading { ProgressView().tint(.black) }; Text("Connexion").bold() }
-                    .frame(maxWidth: .infinity).padding(.vertical, 15)
-                    .background(Color.mmGreen, in: RoundedRectangle(cornerRadius: 14)).foregroundStyle(.black)
-            }
-            .disabled(token.isEmpty || store.loading)
-            if let e = store.error { Text(e).font(.footnote).foregroundStyle(.red) }
-            Link("Ouvrir le dashboard", destination: URL(string: "https://moneymaker-io.web.app")!).font(.footnote)
-            Spacer()
-        }
-        .padding(24)
-    }
-}
-
-struct OverviewView: View {
-    @EnvironmentObject var store: Store
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                if let o = store.overview {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Picker("Période", selection: $store.days) {
-                            Text("7 j").tag(7); Text("30 j").tag(30); Text("90 j").tag(90); Text("1 an").tag(365)
-                        }
-                        .pickerStyle(.segmented)
-                        .onChange(of: store.days) { _, _ in Task { await store.refresh() } }
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("MRR").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                            Text(o.mrrMicros.money(o.currency)).font(.system(size: 44, weight: .bold, design: .rounded)).foregroundStyle(Color.mmGreen)
-                                .contentTransition(.numericText())
-                            Text("ARR \((o.mrrMicros * 12).money(o.currency, compact: true))").font(.footnote).foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading).padding(18).background(Color.mmCard, in: RoundedRectangle(cornerRadius: 20))
-
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            Tile(title: "Revenu \(o.periodDays) j", value: o.revenueMicros.money(o.currency, compact: true))
-                            Tile(title: "Abonnés", value: o.activeSubscriptions.formatted())
-                            Tile(title: "Essais", value: o.activeTrials.formatted())
-                            Tile(title: "Nouveaux clients", value: o.newCustomers.formatted())
-                        }
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Revenu par jour").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                            Chart(o.dailyRevenue(days: min(o.periodDays, 90)), id: \.date) { p in
-                                BarMark(x: .value("Jour", p.date, unit: .day), y: .value("Revenu", Double(p.micros) / 1e6))
-                                    .foregroundStyle(Color.mmBlue).cornerRadius(2)
-                            }
-                            .chartYAxis { AxisMarks(position: .trailing) }
-                            .frame(height: 170)
-                        }
-                        .padding(18).background(Color.mmCard, in: RoundedRectangle(cornerRadius: 20))
-
-                        if !store.alerts.isEmpty {
-                            Text("Alertes App Store").font(.title3.bold()).padding(.top, 4)
-                            ForEach(store.alerts.prefix(6)) { AlertRow(a: $0) }
-                        }
-
-                        Text("Business").font(.title3.bold()).padding(.top, 4)
-                        ForEach(o.projects) { p in
-                            NavigationLink(value: p) { ProjectRow(p: p) }.buttonStyle(.plain)
-                        }
-                        if o.projects.isEmpty {
-                            Text("Aucun business. Crée-en un sur le dashboard.").foregroundStyle(.secondary)
-                        }
-                        Text("Mis à jour \(Date(timeIntervalSince1970: o.generatedAt / 1000).formatted(.relative(presentation: .named)))")
-                            .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
-                    }
-                    .padding(16)
-                } else {
-                    ProgressView().padding(.top, 120)
-                }
-                if let e = store.error { Text(e).font(.footnote).foregroundStyle(.red).padding() }
-            }
-            .refreshable { await store.refresh() }
-            .navigationTitle("MoneyMaker")
-            .navigationDestination(for: ProjectSummary.self) { ProjectView(p: $0) }
-            .toolbar {
-                Menu {
-                    Link("Ouvrir le dashboard", destination: URL(string: "https://moneymaker-io.web.app")!)
-                    Button("Déconnexion", role: .destructive) { store.signOut() }
-                } label: { Image(systemName: "ellipsis.circle") }
-            }
-            .task { await store.refresh() }
-        }
-    }
-}
-
-struct Tile: View {
-    let title: String, value: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            Text(value).font(.title2.bold().monospacedDigit()).lineLimit(1).minimumScaleFactor(0.6)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading).padding(14).background(Color.mmCard, in: RoundedRectangle(cornerRadius: 16))
-    }
-}
-
-struct ProjectRow: View {
-    let p: ProjectSummary
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(p.name).font(.headline)
-                Text("\(p.activeSubscriptions) abonnés · \(p.activeTrials) essais").font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 3) {
-                Text(p.mrrMicros.money(p.currency)).font(.headline.monospacedDigit()).foregroundStyle(Color.mmGreen)
-                Text("MRR").font(.caption2).foregroundStyle(.secondary)
-            }
-            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-        }
-        .padding(14).background(Color.mmCard, in: RoundedRectangle(cornerRadius: 16))
-    }
-}
-
-struct AlertRow: View {
-    let a: RankingAlert
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: a.symbol).font(.headline).foregroundStyle(a.type == "DROP" ? .red : Color.mmGreen).frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(a.title) · \(a.appName ?? "")").font(.subheadline.weight(.semibold)).lineLimit(1)
-                Text("\(flagEmoji(a.cc)) \(a.cc) · \(a.chartLabel)\(a.own == false ? " · concurrent" : "")").font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(a.rank.map { "#\($0)" } ?? "—").font(.headline.monospacedDigit())
-                Text(Date(timeIntervalSince1970: a.at / 1000).formatted(.relative(presentation: .numeric))).font(.caption2).foregroundStyle(.secondary)
-            }
-        }
-        .padding(12).background(Color.mmCard, in: RoundedRectangle(cornerRadius: 14))
-    }
-}
-
-struct TrackedAppCard: View {
-    let app: TrackedAppSummary
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                AsyncImage(url: app.icon.flatMap(URL.init(string:))) { $0.resizable() } placeholder: { Color.mmCard }
-                    .frame(width: 44, height: 44).clipShape(RoundedRectangle(cornerRadius: 10))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(app.name ?? app.appId).font(.headline).lineLimit(1)
-                    Text(app.rating.map { "★ \($0.formatted(.number.precision(.fractionLength(2)))) · \((app.ratingCount ?? 0).formatted()) notes" } ?? "Pas encore de notes")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(app.bestRank.map { "#\($0)" } ?? "—").font(.title3.bold().monospacedDigit()).foregroundStyle(Color.mmGreen)
-                    Text("\(app.countriesRanked ?? 0) pays").font(.caption2).foregroundStyle(.secondary)
-                }
-            }
-            if let top = app.topRankings, !top.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(top, id: \.self) { r in
-                            Text("\(flagEmoji(r.cc)) #\(r.rank)\(r.scope == "genre" ? " cat." : "")")
-                                .font(.caption.weight(.semibold)).padding(.horizontal, 8).padding(.vertical, 4)
-                                .background(Color.mmGreen.opacity(0.15), in: Capsule()).foregroundStyle(Color.mmGreen)
-                        }
-                    }
-                }
-            }
-        }
-        .padding(14).background(Color.mmCard, in: RoundedRectangle(cornerRadius: 16))
-    }
-}
-
-struct ProjectView: View {
-    @EnvironmentObject var store: Store
-    let p: ProjectSummary
-    @State private var events: [EventItem] = []
-    @State private var apps: [TrackedAppSummary] = []
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    Tile(title: "MRR", value: p.mrrMicros.money(p.currency))
-                    Tile(title: "Revenu", value: p.netRevenueMicros.money(p.currency, compact: true))
-                    Tile(title: "Abonnés", value: "\(p.activeSubscriptions)")
-                    Tile(title: "Essais", value: "\(p.activeTrials)")
-                    Tile(title: "Conversion essai", value: p.trialConversionRate.map { $0.formatted(.percent.precision(.fractionLength(1))) } ?? "—")
-                    Tile(title: "Churn", value: p.churnRate.map { $0.formatted(.percent.precision(.fractionLength(1))) } ?? "—")
-                }
-                if p.billingIssues > 0 {
-                    Label("\(p.billingIssues) problème(s) de paiement en cours", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange).font(.subheadline)
-                }
-                if !apps.isEmpty {
-                    Text("App Store").font(.title3.bold()).padding(.top, 6)
-                    ForEach(apps) { TrackedAppCard(app: $0) }
-                }
-                Text("Activité").font(.title3.bold()).padding(.top, 6)
-                ForEach(events) { e in
-                    HStack(alignment: .top) {
-                        Image(systemName: icon(e.type)).foregroundStyle(color(e.type)).frame(width: 24)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(label(e.type)).font(.subheadline.weight(.semibold))
-                            Text([e.productId, e.appUserId].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 2) {
-                            if let m = e.priceMicros, m > 0, let c = e.currency { Text(m.money(c)).font(.caption.monospacedDigit()) }
-                            Text(Date(timeIntervalSince1970: e.at / 1000).formatted(.relative(presentation: .numeric))).font(.caption2).foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(12).background(Color.mmCard, in: RoundedRectangle(cornerRadius: 14))
-                }
-                if events.isEmpty { Text("Aucun événement pour l'instant.").foregroundStyle(.secondary) }
-            }
-            .padding(16)
-        }
-        .navigationTitle(p.name)
-        .refreshable { await load() }
-        .task { await load() }
-    }
-
-    func load() async {
-        async let e = try? store.client.events(projectId: p.projectId)
-        async let a = try? store.client.trackedApps(projectId: p.projectId)
-        events = await e ?? events
-        apps = await a ?? apps
-    }
-    func label(_ t: String) -> String {
-        ["INITIAL_PURCHASE": "Nouvel abonné", "RENEWAL": "Renouvellement", "TRIAL_STARTED": "Essai démarré", "TRIAL_CONVERTED": "Essai converti",
-         "CANCELLATION": "Annulation", "UNCANCELLATION": "Réactivation", "EXPIRATION": "Expiration", "BILLING_ISSUE": "Problème de paiement",
-         "BILLING_RECOVERED": "Paiement récupéré", "REFUND": "Remboursement", "PRODUCT_CHANGE": "Changement d'offre",
-         "NON_RENEWING_PURCHASE": "Achat", "GRANT": "Accès offert", "REVOKED": "Révoqué", "PAUSED": "En pause", "TEST": "Test"][t] ?? t
-    }
-    func icon(_ t: String) -> String {
-        switch t {
-        case "INITIAL_PURCHASE", "TRIAL_CONVERTED", "NON_RENEWING_PURCHASE": return "arrow.up.circle.fill"
-        case "RENEWAL", "BILLING_RECOVERED", "UNCANCELLATION": return "arrow.clockwise.circle.fill"
-        case "TRIAL_STARTED": return "sparkles"
-        case "REFUND", "REVOKED": return "arrow.uturn.backward.circle.fill"
-        case "BILLING_ISSUE": return "exclamationmark.triangle.fill"
-        default: return "circle.fill"
-        }
-    }
-    func color(_ t: String) -> Color {
-        switch t {
-        case "INITIAL_PURCHASE", "TRIAL_CONVERTED", "RENEWAL", "NON_RENEWING_PURCHASE", "BILLING_RECOVERED": return .mmGreen
-        case "TRIAL_STARTED", "UNCANCELLATION", "GRANT": return .mmBlue
-        case "BILLING_ISSUE", "CANCELLATION": return .orange
-        default: return .red
-        }
+extension Result where Failure == Error {
+    static func capture(_ body: () async throws -> Success) async -> Result {
+        do { return .success(try await body()) } catch { return .failure(error) }
     }
 }

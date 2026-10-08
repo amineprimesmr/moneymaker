@@ -27,7 +27,16 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: MoneyMakerApp/MoneyMaker.entitlements
-        PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Dev 20261008
+        PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Dev 20261009
+    info:
+      path: MoneyMakerApp/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: io.moneymaker.app
+            CFBundleURLSchemes: [moneymaker]
+        NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: true
+        UIBackgroundModes: [remote-notification]
     dependencies:
       - target: MoneyMakerWidgets
   MoneyMakerWidgets:
@@ -41,7 +50,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: MoneyMaker
         CODE_SIGN_ENTITLEMENTS: Widgets/Widgets.entitlements
-        PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Widgets Dev 20261008
+        PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Widgets Dev 20261009
     info:
       path: Widgets/Info.plist
       properties:

@@ -7,12 +7,22 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0095B39F4DF4E19D7F6A24E0 /* LiveServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F8C9B2ECD231050E024974A /* LiveServices.swift */; };
 		19BDD03E12EDAD86DDEBBDE9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1097FC8E56F8174FC341976B /* Assets.xcassets */; };
 		2F13A1B4CC19D980D0A815C3 /* MoneyMakerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4C830002B2BC4B3D96025D8 /* MoneyMakerApp.swift */; };
 		3D6DAEE438D7AD2116843369 /* MoneyMakerWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5A389B5ED64940A8BC40C6A3 /* MoneyMakerWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		425C064EB8D2A265790D5C41 /* MMLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */; };
+		5136F7DBC24F48EC3D6CA704 /* cash.caf in Resources */ = {isa = PBXBuildFile; fileRef = 1C16D5B2A5EFA0E3324011BA /* cash.caf */; };
+		5CEDC2CFC73F062E994B9B48 /* MMLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */; };
 		6C437D9CEE116445C4FB19A9 /* MoneyMakerWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7462A45DA2C0BCD45AD96986 /* MoneyMakerWidgets.swift */; };
+		7A09B8560251703819AC48BC /* LiveScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82382FF73CC673CD177B62B /* LiveScreens.swift */; };
 		8EFD41694F6ACF6B5C362766 /* MoneyMakerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */; };
 		9FB0842E3D9190DD976971E0 /* MoneyMakerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */; };
+		ADADB3EF429F2E44BA31DDA1 /* MMEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8864A5BC74A1FB07813601 /* MMEffects.swift */; };
+		AEBAE27FA6C291041BA9B259 /* MMTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B41F707AED2D8405F6A5A /* MMTheme.swift */; };
+		C15F68906BCC0285C1E981AD /* Screens.swift in Sources */ = {isa = PBXBuildFile; fileRef = F88B72061DA7660BF3CEB1FD /* Screens.swift */; };
+		F8CBAA134547ECEA85DA0F72 /* LiveWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1097A42E4D78F9B3FE75803 /* LiveWidgets.swift */; };
+		FF6CF15644F82D3C4793F7B6 /* MMTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B41F707AED2D8405F6A5A /* MMTheme.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -41,14 +51,23 @@
 
 /* Begin PBXFileReference section */
 		1097FC8E56F8174FC341976B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1C16D5B2A5EFA0E3324011BA /* cash.caf */ = {isa = PBXFileReference; path = cash.caf; sourceTree = "<group>"; };
 		21F9030100E848B1A39A4B16 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		45EBE436171160AF8EA3DF70 /* MoneyMaker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MoneyMaker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A389B5ED64940A8BC40C6A3 /* MoneyMakerWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MoneyMakerWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7462A45DA2C0BCD45AD96986 /* MoneyMakerWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyMakerWidgets.swift; sourceTree = "<group>"; };
+		7F8C9B2ECD231050E024974A /* LiveServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveServices.swift; sourceTree = "<group>"; };
 		8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyMakerClient.swift; sourceTree = "<group>"; };
+		A33B41F707AED2D8405F6A5A /* MMTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMTheme.swift; sourceTree = "<group>"; };
+		A82382FF73CC673CD177B62B /* LiveScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveScreens.swift; sourceTree = "<group>"; };
 		C73C4CE142E8383DF54EED22 /* MoneyMaker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MoneyMaker.entitlements; sourceTree = "<group>"; };
+		DF8864A5BC74A1FB07813601 /* MMEffects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMEffects.swift; sourceTree = "<group>"; };
 		E69CC078545BF8CD48C90C01 /* Widgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Widgets.entitlements; sourceTree = "<group>"; };
+		F1097A42E4D78F9B3FE75803 /* LiveWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveWidgets.swift; sourceTree = "<group>"; };
+		F31884D50702504A2657805C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F4C830002B2BC4B3D96025D8 /* MoneyMakerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyMakerApp.swift; sourceTree = "<group>"; };
+		F88B72061DA7660BF3CEB1FD /* Screens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Screens.swift; sourceTree = "<group>"; };
+		FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMLive.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -56,6 +75,7 @@
 			isa = PBXGroup;
 			children = (
 				21F9030100E848B1A39A4B16 /* Info.plist */,
+				F1097A42E4D78F9B3FE75803 /* LiveWidgets.swift */,
 				7462A45DA2C0BCD45AD96986 /* MoneyMakerWidgets.swift */,
 				E69CC078545BF8CD48C90C01 /* Widgets.entitlements */,
 			);
@@ -85,8 +105,13 @@
 			isa = PBXGroup;
 			children = (
 				1097FC8E56F8174FC341976B /* Assets.xcassets */,
+				F31884D50702504A2657805C /* Info.plist */,
 				C73C4CE142E8383DF54EED22 /* MoneyMaker.entitlements */,
 				F4C830002B2BC4B3D96025D8 /* MoneyMakerApp.swift */,
+				F88B72061DA7660BF3CEB1FD /* Screens.swift */,
+				D80749C58DA4B8FAB7CE44D2 /* Design */,
+				D49CB7361FCEEE546FC310AC /* Live */,
+				F364C5977DB4CF1A060A6CC3 /* Resources */,
 			);
 			path = MoneyMakerApp;
 			sourceTree = "<group>";
@@ -94,9 +119,36 @@
 		9F995471F5DECAA4B24AC8F3 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */,
+				A33B41F707AED2D8405F6A5A /* MMTheme.swift */,
 				8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */,
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		D49CB7361FCEEE546FC310AC /* Live */ = {
+			isa = PBXGroup;
+			children = (
+				A82382FF73CC673CD177B62B /* LiveScreens.swift */,
+				7F8C9B2ECD231050E024974A /* LiveServices.swift */,
+			);
+			path = Live;
+			sourceTree = "<group>";
+		};
+		D80749C58DA4B8FAB7CE44D2 /* Design */ = {
+			isa = PBXGroup;
+			children = (
+				DF8864A5BC74A1FB07813601 /* MMEffects.swift */,
+			);
+			path = Design;
+			sourceTree = "<group>";
+		};
+		F364C5977DB4CF1A060A6CC3 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				1C16D5B2A5EFA0E3324011BA /* cash.caf */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -184,6 +236,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				19BDD03E12EDAD86DDEBBDE9 /* Assets.xcassets in Resources */,
+				5136F7DBC24F48EC3D6CA704 /* cash.caf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -194,8 +247,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7A09B8560251703819AC48BC /* LiveScreens.swift in Sources */,
+				0095B39F4DF4E19D7F6A24E0 /* LiveServices.swift in Sources */,
+				ADADB3EF429F2E44BA31DDA1 /* MMEffects.swift in Sources */,
+				425C064EB8D2A265790D5C41 /* MMLive.swift in Sources */,
+				FF6CF15644F82D3C4793F7B6 /* MMTheme.swift in Sources */,
 				2F13A1B4CC19D980D0A815C3 /* MoneyMakerApp.swift in Sources */,
 				8EFD41694F6ACF6B5C362766 /* MoneyMakerClient.swift in Sources */,
+				C15F68906BCC0285C1E981AD /* Screens.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -203,6 +262,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F8CBAA134547ECEA85DA0F72 /* LiveWidgets.swift in Sources */,
+				5CEDC2CFC73F062E994B9B48 /* MMLive.swift in Sources */,
+				AEBAE27FA6C291041BA9B259 /* MMTheme.swift in Sources */,
 				9FB0842E3D9190DD976971E0 /* MoneyMakerClient.swift in Sources */,
 				6C437D9CEE116445C4FB19A9 /* MoneyMakerWidgets.swift in Sources */,
 			);
@@ -294,7 +356,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.moneymaker.app.widgets;
 				PRODUCT_NAME = MoneyMakerWidgets;
-				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Widgets Dev 20261008";
+				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Widgets Dev 20261009";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -307,6 +369,7 @@
 				CODE_SIGN_ENTITLEMENTS = MoneyMakerApp/MoneyMaker.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MoneyMakerApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MoneyMaker;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -317,7 +380,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.moneymaker.app;
 				PRODUCT_NAME = MoneyMaker;
-				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Dev 20261008";
+				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Dev 20261009";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -337,7 +400,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.moneymaker.app.widgets;
 				PRODUCT_NAME = MoneyMakerWidgets;
-				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Widgets Dev 20261008";
+				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Widgets Dev 20261009";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -350,6 +413,7 @@
 				CODE_SIGN_ENTITLEMENTS = MoneyMakerApp/MoneyMaker.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MoneyMakerApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MoneyMaker;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -360,7 +424,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.moneymaker.app;
 				PRODUCT_NAME = MoneyMaker;
-				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Dev 20261008";
+				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Dev 20261009";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

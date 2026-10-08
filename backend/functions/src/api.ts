@@ -636,6 +636,58 @@ route("GET", "/v1/alerts", async req => {
   return { alerts: all };
 });
 
+// ── iOS devices, today, live feed ──────────────────────────────────────────
+route("PUT", "/v1/devices/:id", async (req, _res, [id]) => {
+  const uid = requireUser(await authenticate(req));
+  const { sanitizeDevice } = await import("./push");
+  const ref = db.doc(`users/${uid}/devices/${cleanId(id, 80)}`);
+  const current = (await ref.get()).data();
+  let device;
+  try { device = sanitizeDevice(id, req.body ?? {}, current as any); } catch (e) { throw new HttpError(400, (e as Error).message); }
+  await ref.set(device);
+  return { device: { ...device, apnsToken: undefined, widgetPushToken: undefined, liveActivity: undefined } };
+});
+
+route("DELETE", "/v1/devices/:id", async (req, _res, [id]) => {
+  const uid = requireUser(await authenticate(req));
+  await db.doc(`users/${uid}/devices/${cleanId(id, 80)}`).delete();
+  return { ok: true };
+});
+
+route("POST", "/v1/devices/:id/test", async (req, _res, [id]) => {
+  const uid = requireUser(await authenticate(req));
+  const { apnsSend, apnsConfigured } = await import("./push");
+  const d = (await db.doc(`users/${uid}/devices/${cleanId(id, 80)}`).get()).data();
+  if (!d?.apnsToken) throw new HttpError(400, "no_apns_token");
+  if (!(await apnsConfigured())) throw new HttpError(503, "apns_not_configured", "La clé APNs n'est pas encore configurée côté serveur.");
+  const r = await apnsSend(d.env, d.apnsToken, "alert", {
+    aps: { alert: { title: "+9,99 € · MoneyMaker", subtitle: "Notification de test", body: "Nouvel abonné · mensuel · 🇫🇷 FR" }, sound: d.prefs?.sound === false ? "default" : "cash.caf", "thread-id": "test", category: "SALE" },
+  });
+  if (r.status !== 200) throw new HttpError(502, "apns_failed", r.reason ?? String(r.status));
+  return { ok: true };
+});
+
+route("GET", "/v1/today", async req => {
+  const uid = requireUser(await authenticate(req));
+  const { todayFor, liveActivityState } = await import("./push");
+  let tz = String(req.query.tz ?? "UTC");
+  try { new Intl.DateTimeFormat("en", { timeZone: tz }); } catch { tz = "UTC"; }
+  const cur = typeof req.query.currency === "string" && /^[A-Z]{3}$/.test(req.query.currency) ? req.query.currency : undefined;
+  const t = await todayFor(uid, tz, cur);
+  return { ...t, liveActivity: liveActivityState(t), generatedAt: Date.now() };
+});
+
+route("GET", "/v1/feed", async req => {
+  const uid = requireUser(await authenticate(req));
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 30)));
+  const projects = await db.collection("projects").where("members", "array-contains", uid).select("name").get();
+  const all = (await Promise.all(projects.docs.map(async p =>
+    (await db.collection(`projects/${p.id}/events`).orderBy("at", "desc").limit(limit).select("type", "productId", "priceMicros", "currency", "country", "store", "isSandbox", "isTrial", "periodMonths", "at").get())
+      .docs.map(d => ({ id: d.id, projectId: p.id, projectName: p.get("name"), ...d.data() })),
+  ))).flat().filter((e: any) => e.type !== "TEST").sort((a: any, b: any) => b.at - a.at).slice(0, limit);
+  return { events: all };
+});
+
 // ── Dispatcher ─────────────────────────────────────────────────────────────
 export async function handle(req: Request, res: Response) {
   res.set("Access-Control-Allow-Origin", "*");
