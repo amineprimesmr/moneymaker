@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MoneyMaker Docs</title><link rel="stylesheet" href="/app.css">
-<style>main{margin:0 auto;max-width:860px}h1{margin-top:8px}h2{margin-top:28px}h3{margin-top:20px;text-transform:none;letter-spacing:0;font-size:15px;color:var(--text)}li{margin:6px 0}pre{margin:10px 0}blockquote{color:var(--muted);margin:0}</style></head>
-<body><main><p><a href="/">← Dashboard</a> · <a href="/llms.txt">llms.txt</a></p><div id="doc">Chargement…</div></main>
+</head>
+<body class="doc"><main><nav class="crumbs"><a href="/">← Dashboard</a><a href="/guide">Guide</a><a href="/llms.txt">llms.txt</a></nav><div id="doc">Chargement…</div></main>
 <script>
 const esc = s => s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 const inline = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/(https:\/\/[^\s)<]+)/g, '<a href="$1">$1</a>');

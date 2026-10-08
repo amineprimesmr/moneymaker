@@ -36,8 +36,9 @@ const copyRow = (value, secret = false) =>
 
 // ── Auth ────────────────────────────────────────────────────────────────
 $("#google").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e => $("#loginError").textContent = e.message);
-$("#emailForm").onsubmit = e => { e.preventDefault(); signInWithEmailAndPassword(auth, $("#email").value, $("#password").value).catch(err => $("#loginError").textContent = err.message); };
-$("#signup").onclick = () => createUserWithEmailAndPassword(auth, $("#email").value, $("#password").value).catch(e => $("#loginError").textContent = e.message);
+const loginFail = e => { $("#loginError").textContent = e.message; document.querySelectorAll(".wl-field").forEach(f => { f.classList.remove("is-shake"); void f.offsetWidth; f.classList.add("is-shake"); }); };
+$("#emailForm").onsubmit = e => { e.preventDefault(); signInWithEmailAndPassword(auth, $("#email").value, $("#password").value).catch(loginFail); };
+$("#signup").onclick = () => createUserWithEmailAndPassword(auth, $("#email").value, $("#password").value).catch(loginFail);
 $("#logout").onclick = () => signOut(auth);
 
 onAuthStateChanged(auth, async user => {
@@ -65,22 +66,49 @@ function route() {
 }
 
 // ── Charts (dependency-free SVG) ────────────────────────────────────────
+let chartSeq = 0;
+// Courbe lissée (Catmull-Rom → Bézier), dégradé bleu → accent, halo flou, aire en fondu.
+function smoothPath(pts) {
+  return pts.map((p, i) => {
+    if (!i) return `M${p[0].toFixed(1)},${p[1].toFixed(1)}`;
+    const p0 = pts[i - 2] ?? pts[i - 1], p1 = pts[i - 1], p3 = pts[i + 1] ?? p;
+    const c1 = [p1[0] + (p[0] - p0[0]) / 6, p1[1] + (p[1] - p0[1]) / 6], c2 = [p[0] - (p3[0] - p1[0]) / 6, p[1] - (p3[1] - p1[1]) / 6];
+    return `C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p[0].toFixed(1)},${p[1].toFixed(1)}`;
+  }).join("");
+}
 function lineChart(points, cur, color = "var(--accent)") {
   if (points.length < 2) return `<div class="empty">Pas encore assez d'historique — le graphique se remplit chaque jour.</div>`;
-  const W = 600, H = 200, P = 6, max = Math.max(1, ...points.map(p => p.v)), min = Math.min(0, ...points.map(p => p.v));
+  const id = `c${++chartSeq}`;
+  const W = 600, H = 220, P = 10, max = Math.max(1, ...points.map(p => p.v)) * 1.08, min = Math.min(0, ...points.map(p => p.v));
   const x = i => P + (i / (points.length - 1)) * (W - 2 * P), y = v => H - P - ((v - min) / (max - min || 1)) * (H - 2 * P);
-  const d = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join("");
+  const xy = points.map((p, i) => [x(i), y(p.v)]);
+  const d = smoothPath(xy);
+  const accent = color === "var(--accent)" ? "#00F19F" : color;
+  const grid = [0.25, 0.5, 0.75].map(f => `<line x1="0" x2="${W}" y1="${(H * f).toFixed(0)}" y2="${(H * f).toFixed(0)}" stroke="rgba(255,255,255,.05)" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/>`).join("");
+  const step = (W - 2 * P) / (points.length - 1);
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="graphique">
-    <path d="${d}L${x(points.length - 1)},${H}L${x(0)},${H}Z" fill="${color}" opacity=".12"/><path d="${d}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>
-    ${points.map((p, i) => `<circle cx="${x(i)}" cy="${y(p.v)}" r="6" fill="transparent"><title>${esc(p.label)} · ${esc(money(p.v, cur))}</title></circle>`).join("")}</svg>`;
+    <defs>
+      <linearGradient id="${id}s" x1="0" x2="1"><stop offset="0" stop-color="#2E8BFF"/><stop offset="1" stop-color="${accent}"/></linearGradient>
+      <linearGradient id="${id}f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${accent}" stop-opacity=".26"/><stop offset=".6" stop-color="#2E8BFF" stop-opacity=".05"/><stop offset="1" stop-color="#2E8BFF" stop-opacity="0"/></linearGradient>
+      <filter id="${id}g" x="-10%" y="-30%" width="120%" height="160%"><feGaussianBlur stdDeviation="6"/></filter>
+    </defs>
+    ${grid}
+    <path d="${d}L${x(points.length - 1)},${H}L${x(0)},${H}Z" fill="url(#${id}f)"/>
+    <path d="${d}" fill="none" stroke="url(#${id}s)" stroke-width="5" opacity=".7" filter="url(#${id}g)"/>
+    <path d="${d}" fill="none" stroke="url(#${id}s)" stroke-width="2.2" stroke-linecap="round" vector-effect="non-scaling-stroke" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" style="animation:mmDraw 1.4s cubic-bezier(.16,1,.3,1) forwards"/>
+    ${xy.map(([cx, cy], i) => `<g><rect class="hit" x="${(cx - step / 2).toFixed(1)}" y="0" width="${step.toFixed(1)}" height="${H}" fill="transparent"><title>${esc(points[i].label)} · ${esc(money(points[i].v, cur))}</title></rect><g class="dot" opacity="0" pointer-events="none" style="transition:opacity .15s"><line x1="${cx}" x2="${cx}" y1="0" y2="${H}" stroke="rgba(255,255,255,.3)" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/><circle cx="${cx}" cy="${cy}" r="9" fill="${accent}" opacity=".25"/><circle cx="${cx}" cy="${cy}" r="4" fill="#fff"/></g></g>`).join("")}
+  </svg>`;
 }
 function barChart(byDay, days, cur) {
+  const id = `c${++chartSeq}`;
   const out = [];
   for (let i = days - 1; i >= 0; i--) { const k = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10); out.push({ label: k, v: byDay[k] ?? 0 }); }
-  const W = 600, H = 200, max = Math.max(1, ...out.map(p => p.v)), bw = W / out.length;
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="revenus par jour">${out.map((p, i) => {
+  const W = 600, H = 220, max = Math.max(1, ...out.map(p => p.v)), bw = W / out.length;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="revenus par jour">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#00F19F"/><stop offset="1" stop-color="#2E8BFF" stop-opacity=".25"/></linearGradient></defs>
+    ${out.map((p, i) => {
     const h = Math.max(p.v > 0 ? 2 : 0, (Math.max(0, p.v) / max) * (H - 4));
-    return `<rect x="${i * bw + 1}" y="${H - h}" width="${Math.max(1, bw - 2)}" height="${h}" rx="2" fill="var(--accent2)"><title>${p.label} · ${esc(money(p.v, cur))}</title></rect>`;
+    return `<rect x="${i * bw + bw * 0.18}" y="${H - h}" width="${Math.max(1, bw * 0.64)}" height="${h}" rx="${Math.min(4, bw * 0.3)}" fill="url(#${id})" style="transform-origin:bottom;transform-box:fill-box;animation:mmBarUp .8s cubic-bezier(.16,1,.3,1) ${(i * 12)}ms both"><title>${p.label} · ${esc(money(p.v, cur))}</title></rect>`;
   }).join("")}</svg>`;
 }
 
