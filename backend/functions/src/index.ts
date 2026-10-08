@@ -7,6 +7,8 @@ import { handle } from "./api";
 import { db, getProject, getCredentials } from "./store";
 import { snapshotProject } from "./metrics";
 import { sendToAppsFlyer } from "./appsflyer";
+import { toRevenueCatEvent } from "./rccompat";
+import { computeEntitlements } from "./engine";
 import { fanOut } from "./integrations";
 import { importRevenueCat } from "./revenuecat";
 import { FieldValue } from "firebase-admin/firestore";
@@ -39,13 +41,21 @@ export const deliverEvent = onDocumentCreated({ document: "projects/{pid}/events
   const { webhookSigningSecret } = creds;
   const body = JSON.stringify({ id: event.params.eid, projectId: project.id, ...data, delivered: undefined, appsflyer: undefined, integrations: undefined });
   const t = Math.floor(Date.now() / 1000);
-  const signature = createHmac("sha256", webhookSigningSecret).update(`${t}.${body}`).digest("hex");
+  const auth = ((creds as any).webhookAuthorization ?? {}) as Record<string, string>;
+  const entitlementIds = Object.entries(project.config.entitlements).filter(([, ids]) => ids.includes("*") || ids.includes(data.productId)).map(([id]) => id);
+  const rcEvent = hooks.some(h => (h as any).format === "revenuecat") ? toRevenueCatEvent(data, event.params.eid, entitlementIds) : null;
   const failures: string[] = [];
   await Promise.all(hooks.map(async h => {
     try {
+      const isRc = (h as any).format === "revenuecat";
+      if (isRc && !rcEvent) return; // no RevenueCat equivalent (e.g. GRANT)
+      const payload = isRc ? JSON.stringify({ api_version: "1.0", event: rcEvent }) : body;
       const res = await fetch(h.url, {
-        method: "POST", body, redirect: "error", signal: AbortSignal.timeout(10000),
-        headers: { "Content-Type": "application/json", "MoneyMaker-Signature": `t=${t},v1=${signature}`, "User-Agent": "MoneyMaker-Webhooks/1" },
+        method: "POST", body: payload, redirect: "error", signal: AbortSignal.timeout(10000),
+        headers: {
+          "Content-Type": "application/json", "MoneyMaker-Signature": `t=${t},v1=${createHmac("sha256", webhookSigningSecret).update(`${t}.${payload}`).digest("hex")}`,
+          "User-Agent": "MoneyMaker-Webhooks/1", ...(auth[h.id] ? { Authorization: auth[h.id] } : {}),
+        },
       });
       if (!res.ok) failures.push(`${h.id}:${res.status}`);
     } catch (e) { failures.push(`${h.id}:${(e as Error).message}`); }

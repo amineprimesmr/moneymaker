@@ -184,3 +184,23 @@ test("stripe one-time payment mapping", () => {
   assert.equal(p.id, "pi_1"); assert.equal(p.priceMicros, 15_990_000); assert.equal(p.country, "FR"); assert.equal(p.type, "non_consumable");
   assert.equal(appUserIdFrom({ firebaseUID: "abc" }), "abc"); assert.equal(appUserIdFrom({ foo: "x" }), null);
 });
+
+test("RevenueCat-compatible subscriber + events", () => {
+  const { toRevenueCatSubscriber, toRevenueCatEvent, promotionalDays } = require("../lib/rccompat");
+  const now = Date.now();
+  const sub = { id: "100", store: "app_store", productId: "com.useprocess.annual3499", type: "subscription", status: "active", purchasedAt: now - 1e9,
+    latestPurchaseAt: now - 1e8, expiresAt: now + 1e9, willRenew: true, isTrial: false, isSandbox: false, priceMicros: 34_990_000, currency: "EUR", periodMonths: 12, billingIssue: false, updatedAt: now };
+  const life = { ...sub, id: "200", productId: "com.useprocess.lifetime", type: "non_consumable", expiresAt: null, periodMonths: 0 };
+  const r = toRevenueCatSubscriber("u1", [sub, life], { premium: { expiresAt: now + 1e9, productId: sub.productId, purchasedAt: sub.purchasedAt } });
+  const s = r.subscriber;
+  assert.equal(s.subscriptions["com.useprocess.annual3499"].period_type, "normal");
+  assert.ok(Date.parse(s.entitlements.premium.expires_date) > now);
+  assert.equal(s.entitlements.premium.product_identifier, "com.useprocess.annual3499");
+  assert.equal(s.non_subscriptions["com.useprocess.lifetime"].length, 1);
+  assert.equal(promotionalDays("monthly"), 31); assert.equal(promotionalDays("lifetime"), null); assert.equal(promotionalDays("nope"), undefined);
+  const conv = toRevenueCatEvent({ type: "TRIAL_CONVERTED", appUserId: "u1", productId: "p", at: now, priceMicros: 9_990_000, currency: "EUR", store: "app_store" }, "e1", ["premium"]);
+  assert.equal(conv.type, "RENEWAL"); assert.equal(conv.is_trial_conversion, true); assert.equal(conv.price, 9.99);
+  const trial = toRevenueCatEvent({ type: "TRIAL_STARTED", appUserId: "u1", productId: "p", at: now, isTrial: true, priceMicros: 0 }, "e2", []);
+  assert.equal(trial.type, "INITIAL_PURCHASE"); assert.equal(trial.period_type, "TRIAL");
+  assert.equal(toRevenueCatEvent({ type: "GRANT", appUserId: "u1", at: now }, "e3", []), null);
+});

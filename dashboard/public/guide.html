@@ -94,6 +94,7 @@ try await MoneyMaker.shared.purchase(package)         // acheter (ou MoneyMakerP
 <li>Garde les mêmes identifiants produits : rien ne change côté App Store / Play.</li>
 <li>Remplace le SDK RevenueCat par MoneyMaker (ton agent le fait avec le prompt). Au premier lancement, le SDK resynchronise <b>en silence</b> les achats en cours de chaque utilisateur.</li>
 <li>Redirige les notifications serveur Apple et Play vers MoneyMaker (étapes 3 et 4) et désactive l'intégration AppsFlyer de RevenueCat pour ne pas compter les revenus deux fois.</li>
+<li><b>Ton backend</b> appelle l'API RevenueCat (vérifier un abonné, offrir un mois) ou reçoit ses webhooks ? Remplace seulement l'URL de base par <code>https://moneymaker-io.web.app/v1/rc</code> et la clé par ta clé secrète MoneyMaker : mêmes réponses, mêmes webhooks (format « revenuecat » dans Réglages). Pendant la transition, lis les deux et garde l'accès qui expire le plus tard.</li>
 <li>Abonnés qui n'ouvrent plus l'app : leurs renouvellements sont rattachés automatiquement au bon compte dès qu'ils rouvrent l'app. Pour les rattacher tout de suite, importe la correspondance <code>original_transaction_id → app_user_id</code> depuis l'export RevenueCat (on l'a fait pour V2).</li>
 </ol>
 

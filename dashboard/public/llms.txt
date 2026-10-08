@@ -52,6 +52,13 @@ You need from the user: a PUBLIC key (`mm_pub_…`, safe to ship in apps) and th
 ## Migrate from RevenueCat
 `POST /v1/projects/{id}/import/revenuecat` `{ "secretKey": "sk_…", "appUserIds": ["uid1", …] (only for legacy v1 keys) }` → `{ jobId }`; poll `GET /v1/projects/{id}/import/{jobId}` → `{ status: queued|running|done|failed, result: { customers, purchases } }`. Imports current subscriptions and lifetime purchases (sandbox excluded). When the real store purchase later reaches MoneyMaker (SDK or notification) the imported copy is replaced, never double-counted. One-time payments (Checkout, Payment Links, charges) are imported and tracked too. Stripe customers are linked through metadata `app_user_id`, `firebaseUID`, `user_id` or `uid`.
 
+## RevenueCat-compatible API (migrate a backend by changing base URL + key)
+Base URL `https://moneymaker-io.web.app/v1/rc`, auth `Authorization: Bearer mm_sk_…` (secret key):
+- `GET /v1/rc/v1/subscribers/{app_user_id}` → RevenueCat v1 `{ subscriber: { entitlements, subscriptions, non_subscriptions, … } }`.
+- `POST /v1/rc/v1/subscribers/{app_user_id}/entitlements/{entitlement}/promotional` `{ "duration": "monthly" | "yearly" | "lifetime" | … }` (stacks like RevenueCat).
+- Webhooks in RevenueCat format: `PATCH` config `{ "webhooks": [{ "id": "rc", "url": "https://…", "format": "revenuecat" }] }` and set the header your receiver checks with `PUT …/credentials { "webhookAuthorization": { "rc": "Bearer <secret>" } }`. Bodies are `{ api_version, event: { type, app_user_id, product_id, period_type, price, is_trial_conversion, … } }`.
+During a migration, read both RevenueCat and MoneyMaker and keep the entitlement expiring last (old app versions still buy through RevenueCat).
+
 ## Integrations
 `PUT /v1/projects/{id}/credentials` `{ "integrations": { "slackWebhookUrl", "discordWebhookUrl", "mixpanelToken", "amplitudeApiKey", "segmentWriteKey", "posthog": { "apiKey", "host"? } }, "appsflyer": { "devKey" } }` (null removes one). AppsFlyer app ids: `PATCH` config `{ "integrations": { "appsflyer": { "appId": "id123", "androidAppId": "com.app" } } }`; the app must set attributes `$appsflyerId` (+ `$idfa`, `$idfv` when allowed). Events are sent as `mm_<event_type>` (Mixpanel/Amplitude/Segment/PostHog) and `rc_*_event` (AppsFlyer, RevenueCat-compatible names).
 

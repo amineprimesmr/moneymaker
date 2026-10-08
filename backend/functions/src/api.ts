@@ -14,6 +14,7 @@ import { ingestStripeWebhook, createCheckout, createPortal } from "./stripe";
 import { projectMetrics, projectCohorts } from "./metrics";
 import { connectStripe, connectAppStore, connectGooglePlay, markConnected } from "./connect";
 import { sanitizeIntegrations } from "./integrations";
+import { toRevenueCatSubscriber, promotionalDays } from "./rccompat";
 import { searchApps, syncTrackers, translateReview, lookupApp, TrackedApp } from "./appstore";
 
 /** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
@@ -83,7 +84,8 @@ function sanitizeConfig(input: any, current: ProjectConfig): ProjectConfig {
     if (!Array.isArray(input.webhooks) || input.webhooks.length > 10) throw new HttpError(400, "invalid_webhooks");
     next.webhooks = input.webhooks.map((w: any, i: number) => {
       if (typeof w.url !== "string" || !/^https:\/\//.test(w.url)) throw new HttpError(400, "webhook_must_be_https");
-      return { id: String(w.id ?? `wh_${i}`), url: w.url, ...(Array.isArray(w.events) ? { events: w.events.map(String) } : {}) };
+      const format = w.format === "revenuecat" ? "revenuecat" : undefined;
+      return { id: String(w.id ?? `wh_${i}`), url: w.url, ...(format ? { format } : {}), ...(Array.isArray(w.events) ? { events: w.events.map(String) } : {}) };
     });
   }
   if (input.apple !== undefined) next.apple = {
@@ -299,6 +301,14 @@ route("PUT", "/v1/projects/:pid/credentials", async (req, _res, [pid]) => {
     if (!sa?.client_email || !sa?.private_key) throw new HttpError(400, "invalid_service_account");
     update.google = { serviceAccount: { client_email: sa.client_email, private_key: sa.private_key } };
   }
+  if (b.webhookAuthorization) {
+    // Authorization header values for outgoing webhooks, per webhook id (e.g. a RevenueCat-format receiver's Bearer secret).
+    if (typeof b.webhookAuthorization !== "object") throw new HttpError(400, "invalid_webhook_authorization");
+    const current = (await getCredentials(project.id)) as any;
+    const next = { ...(current.webhookAuthorization ?? {}) };
+    for (const [id, v] of Object.entries(b.webhookAuthorization)) { if (v === null) delete next[id]; else next[cleanId(id, 64)] = String(v).slice(0, 500); }
+    update.webhookAuthorization = next;
+  }
   if (b.integrations) {
     try { update.integrations = sanitizeIntegrations(b.integrations, (await getCredentials(project.id)).integrations); }
     catch (e) { throw new HttpError(400, (e as Error).message); }
@@ -436,6 +446,41 @@ route("GET", "/v1/projects/:pid/setup", async (req, _res, [pid]) => {
   // Imported history (RevenueCat, Stripe) counts as "purchases received" too.
   const imported = purchases.empty && events?.empty ? await db.collectionGroup("purchases").where("projectId", "==", project.id).limit(1).get() : null;
   return setupSteps(snap.data(), creds, { customers: customers.data().count, purchases: purchases.size + (events?.size ?? 0) + (imported?.size ?? 0) });
+});
+
+// ── RevenueCat-compatible API (secret key): existing backends switch base URL + key ──
+route("GET", "/v1/rc/v1/subscribers/:id", async (req, _res, [id]) => {
+  const caller = await authenticate(req);
+  if (caller.kind !== "secret") throw new HttpError(403, "secret_key_required");
+  const project = await getProject(caller.projectId);
+  const appUserId = cleanId(decodeURIComponent(id));
+  const ref = db.doc(`projects/${project.id}/customers/${appUserId}`);
+  const [snap, purchases] = await Promise.all([ref.get(), ref.collection("purchases").get()]);
+  const list = purchases.docs.map(d => d.data() as Purchase);
+  const { computeEntitlements } = await import("./engine");
+  return toRevenueCatSubscriber(appUserId, list, computeEntitlements(list, project.config.entitlements), snap.get("firstSeenAt"));
+});
+
+route("POST", "/v1/rc/v1/subscribers/:id/entitlements/:ent/promotional", async (req, _res, [id, ent]) => {
+  const caller = await authenticate(req);
+  if (caller.kind !== "secret") throw new HttpError(403, "secret_key_required");
+  const project = await getProject(caller.projectId);
+  const appUserId = cleanId(decodeURIComponent(id)), entitlement = cleanId(decodeURIComponent(ent), 64);
+  const days = promotionalDays(req.body?.duration);
+  if (days === undefined) throw new HttpError(400, "invalid_duration");
+  const now = Date.now();
+  const ref = db.doc(`projects/${project.id}/customers/${appUserId}/purchases/promo_${entitlement}`);
+  const prev = (await ref.get()).data() as Purchase | undefined;
+  // Stack like RevenueCat: a new grant extends from the current promotional expiry when still running.
+  const from = prev?.expiresAt && prev.expiresAt > now ? prev.expiresAt : now;
+  await upsertPurchase(project, appUserId, {
+    id: `promo_${entitlement}`, store: "promotional", productId: `promo:${entitlement}`, type: "non_consumable", status: "active",
+    purchasedAt: prev?.purchasedAt ?? now, latestPurchaseAt: now, expiresAt: days === null ? null : from + days * 86400000,
+    willRenew: false, isTrial: false, isSandbox: false, priceMicros: 0, currency: project.config.currency, periodMonths: 0, billingIssue: false, updatedAt: now,
+  });
+  const purchases = (await db.collection(`projects/${project.id}/customers/${appUserId}/purchases`).get()).docs.map(d => d.data() as Purchase);
+  const { computeEntitlements } = await import("./engine");
+  return toRevenueCatSubscriber(appUserId, purchases, computeEntitlements(purchases, project.config.entitlements));
 });
 
 // ── Connections (one step per store) ──────────────────────────────────────
