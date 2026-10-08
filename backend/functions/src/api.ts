@@ -15,7 +15,7 @@ import { projectMetrics } from "./metrics";
 type Caller =
   | { kind: "public"; projectId: string }
   | { kind: "secret"; projectId: string }
-  | { kind: "user"; uid: string };
+  | { kind: "user"; uid: string; email?: string; emailVerified?: boolean };
 
 async function authenticate(req: Request): Promise<Caller> {
   const header = req.get("authorization") ?? "";
@@ -29,7 +29,7 @@ async function authenticate(req: Request): Promise<Caller> {
   }
   try {
     const decoded = await getAuth().verifyIdToken(raw);
-    return { kind: "user", uid: decoded.uid };
+    return { kind: "user", uid: decoded.uid, email: decoded.email, emailVerified: decoded.email_verified };
   } catch {
     throw new HttpError(401, "invalid_token");
   }
@@ -41,6 +41,15 @@ async function projectFor(caller: Caller, pid: string, allowPublic = false): Pro
   if (caller.kind === "secret" && caller.projectId === project.id) return project;
   if (allowPublic && caller.kind === "public" && caller.projectId === project.id) return project;
   throw new HttpError(403, "forbidden");
+}
+
+/** Projects provisioned server-side for an email are attached on the owner's first verified sign-in. */
+async function claimPendingProjects(caller: Caller) {
+  if (caller.kind !== "user" || !caller.email || !caller.emailVerified) return;
+  const pending = await db.collection("projects").where("pendingOwnerEmail", "==", caller.email.toLowerCase()).get();
+  await Promise.all(pending.docs.map(d => d.ref.update({
+    members: FieldValue.arrayUnion(caller.uid), ownerUid: caller.uid, pendingOwnerEmail: FieldValue.delete(),
+  })));
 }
 
 function requireUser(caller: Caller) {
@@ -161,7 +170,9 @@ route("POST", "/v1/customers/:id/stripe/portal", async (req, _res, [id]) =>
 
 // ── Account (dashboard session or personal access token) ──────────────────
 route("GET", "/v1/projects", async req => {
-  const uid = requireUser(await authenticate(req));
+  const caller = await authenticate(req);
+  const uid = requireUser(caller);
+  await claimPendingProjects(caller);
   const snap = await db.collection("projects").where("members", "array-contains", uid).get();
   return { projects: snap.docs.map(d => ({ id: d.id, name: d.get("name"), config: d.get("config") })) };
 });
