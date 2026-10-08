@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MoneyMaker</title>
+<meta name="description" content="Abonnements App Store, Google Play et Stripe centralisés.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2300d084'/><text x='16' y='23' font-size='18' text-anchor='middle' font-family='system-ui' font-weight='800' fill='%23000'>$</text></svg>">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div id="login" class="center hidden">
+  <div class="card login">
+    <div class="logo">$</div>
+    <h1>MoneyMaker</h1>
+    <p class="muted">Tous tes abonnements App Store, Google Play et Stripe au même endroit.</p>
+    <button id="google" class="primary wide">Continuer avec Google</button>
+    <div class="sep">ou</div>
+    <form id="emailForm" class="stack">
+      <input id="email" type="email" placeholder="email" autocomplete="email" required>
+      <input id="password" type="password" placeholder="mot de passe (8+ caractères)" autocomplete="current-password" minlength="8" required>
+      <div class="row"><button class="primary" type="submit">Connexion</button><button id="signup" class="ghost" type="button">Créer un compte</button></div>
+    </form>
+    <p id="loginError" class="error"></p>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <aside>
+    <div class="brand"><span class="logo sm">$</span> MoneyMaker</div>
+    <button class="nav active" data-view="overview">Vue globale</button>
+    <div class="label">Business</div>
+    <div id="projectNav"></div>
+    <button id="newProject" class="ghost small">+ Nouveau business</button>
+    <div class="spacer"></div>
+    <button class="nav" data-view="account">Compte & accès</button>
+    <button id="logout" class="ghost small">Déconnexion</button>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<dialog id="modal"><form method="dialog" id="modalBody"></form></dialog>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

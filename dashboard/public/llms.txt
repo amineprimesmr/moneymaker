@@ -1,0 +1,49 @@
+# MoneyMaker
+
+> Self-hosted alternative to RevenueCat. One backend for App Store (StoreKit 2), Google Play Billing and Stripe subscriptions: receipt validation, server notifications, entitlements, remote paywall offerings, metrics (MRR, churn, trials), outgoing signed webhooks. Base URL: https://moneymaker-io.web.app/v1
+
+## Instructions for coding agents integrating MoneyMaker into an app
+
+You need from the user: a PUBLIC key (`mm_pub_…`, safe to ship in apps) and the entitlement id to gate (default `premium`). The SECRET key (`mm_sk_…`) must never be put in an app binary — server-side only.
+
+### iOS / macOS / watchOS (Swift, StoreKit 2)
+1. Add Swift package: `https://github.com/amine-ennasri/moneymaker` → product `MoneyMaker` (path `sdk/ios`). Or copy `sdk/ios/Sources/MoneyMaker` into the project.
+2. At launch (App init):
+   ```swift
+   import MoneyMaker
+   MoneyMaker.configure(apiKey: "mm_pub_…", appUserID: currentUser?.id) // nil = anonymous
+   ```
+3. After sign-in: `try await MoneyMaker.shared.logIn(user.id)` (anonymous purchases are merged). On sign-out: `MoneyMaker.shared.logOut()`.
+4. Gate features: `MoneyMaker.shared.isEntitled("premium")` (sync, cached, offline-safe). SwiftUI: observe `@ObservedObject var mm = MoneyMaker.shared` and read `mm.customerInfo`, or use `.requiresEntitlement("premium")`.
+5. Paywall: `let offerings = try await MoneyMaker.shared.loadOfferings()`; `offerings.current?.packages` each has `.product` (StoreKit `Product`), `.localizedPrice`, `.hasFreeTrial`, `.metadata`. Buy: `try await MoneyMaker.shared.purchase(package)` → `.success(info) | .userCancelled | .pending`. Or present the drop-in `MoneyMakerPaywall(termsURL:privacyURL:)`.
+6. Restore button: `try await MoneyMaker.shared.restorePurchases()`. Manage: `await MoneyMaker.shared.showManageSubscriptions()`.
+7. Remove RevenueCat (`Purchases.configure`, `Purchases.shared.*`) and any custom StoreKit transaction listener — the SDK already listens to `Transaction.updates` and finishes transactions after server validation.
+
+### Android (Kotlin, Play Billing 7)
+1. Add module `sdk/android/moneymaker` (or the AAR) — depends on `com.android.billingclient:billing-ktx:7.1.1`.
+2. `MoneyMaker.configure(applicationContext, apiKey = "mm_pub_…", appUserId = user?.id)` in `Application.onCreate`.
+3. `MoneyMaker.shared.logIn(id)` (suspend), `MoneyMaker.shared.isEntitled("premium")`, `MoneyMaker.shared.customerInfo` (StateFlow).
+4. `val offerings = MoneyMaker.shared.loadOfferings()`; `MoneyMaker.shared.purchase(activity, offerings.current!!.packages.first())`. Purchases are verified and acknowledged by the server.
+5. `MoneyMaker.shared.restorePurchases()`.
+
+### Web / Stripe
+- Checkout: `POST /v1/customers/{appUserId}/stripe/checkout` with public key, body `{ "priceId": "price_…", "successUrl": "https://…", "cancelUrl": "https://…" }` → `{ url }`. Redirect to url.
+- Portal: `POST /v1/customers/{appUserId}/stripe/portal` body `{ "returnUrl": "https://…" }` → `{ url }`.
+- Subscriptions created elsewhere are linked when `metadata.app_user_id` is set on the Stripe subscription or customer.
+
+### Your own backend
+- Check access: `GET /v1/customers/{appUserId}` with public or secret key → `{ activeEntitlements: ["premium"], entitlements: {...}, purchases: [...] }`.
+- Receive events: configure webhook URLs in the dashboard. Each POST has header `MoneyMaker-Signature: t=<unix>,v1=<hex>` where `hex = HMAC_SHA256(signingSecret, t + "." + rawBody)`. Reject if older than 5 minutes. Event `type` ∈ INITIAL_PURCHASE, RENEWAL, TRIAL_STARTED, TRIAL_CONVERTED, CANCELLATION, UNCANCELLATION, EXPIRATION, BILLING_ISSUE, BILLING_RECOVERED, REFUND, REVOKED, PRODUCT_CHANGE, NON_RENEWING_PURCHASE, PAUSED, GRANT, TEST.
+
+## Project setup by an agent (personal access token `mm_pat_…`)
+- `POST /v1/projects` `{ "name": "MyApp", "config": { "currency": "EUR", "entitlements": { "premium": ["com.myapp.monthly", "com.myapp.annual"] }, "apple": { "bundleId": "com.myapp", "appAppleId": 6400000000 }, "google": { "packageName": "com.myapp" } } }` → `{ projectId, publicKey, secretKey }` (secret shown once).
+- `PATCH /v1/projects/{id}` `{ "config": { "offerings": { "default": { "packages": [ { "id": "annual", "productIds": { "app_store": "com.myapp.annual", "play_store": "annual", "stripe": "price_…" }, "metadata": { "badge": "-40%" } } ] } }, "currentOffering": "default", "webhooks": [ { "url": "https://api.myapp.com/moneymaker" } ] } }`
+- `PUT /v1/projects/{id}/credentials` `{ "apple": { "issuerId", "keyId", "privateKey": "-----BEGIN PRIVATE KEY-----…" }, "google": { "serviceAccount": {…json…} }, "stripe": { "secretKey": "rk_live_…", "webhookSecret": "whsec_…" } }`
+- `GET /v1/projects/{id}` → `endpoints.appleNotifications` (paste in App Store Connect → App Information → App Store Server Notifications V2, production and sandbox), `endpoints.googleRtdn` (Pub/Sub push subscription URL), `endpoints.stripeWebhook`.
+
+## Reference
+- Metrics: `GET /v1/projects/{id}/metrics?days=30` (MRR, ARR, active subs, trials, churn, conversion, revenue by day). All businesses: `GET /v1/overview` (PAT).
+- Customers: `GET /v1/projects/{id}/customers`, `GET /v1/projects/{id}/customers/{appUserId}`, grant: `POST …/customers/{appUserId}/grant { entitlement, days? }` (omit days = lifetime, 0 = revoke).
+- Events: `GET /v1/projects/{id}/events`. Transactions: `GET /v1/projects/{id}/transactions`.
+- Errors: JSON `{ error, message }` with HTTP 400/401/403/404/5xx.
+- Dashboard: https://moneymaker-io.web.app

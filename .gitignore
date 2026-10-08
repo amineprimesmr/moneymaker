@@ -1,0 +1,17 @@
+node_modules/
+backend/functions/lib/
+.firebase/
+*.log
+.DS_Store
+build/
+DerivedData/
+.derivedData/
+*.xcuserstate
+xcuserdata/
+.build/
+.gradle/
+local.properties
+.env*
+*.p8
+service-account*.json
+app/signing/
