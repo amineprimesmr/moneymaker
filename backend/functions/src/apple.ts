@@ -4,7 +4,7 @@ import {
 } from "@apple/app-store-server-library";
 import { APPLE_ROOT_CERTIFICATES } from "./appleRootCertificates";
 import { Purchase, PurchaseStatus, PurchaseType, HttpError } from "./engine";
-import { Project, getCredentials, lookupIndex, upsertPurchase } from "./store";
+import { Project, getCredentials, lookupIndex, upsertPurchase, mergeCustomers } from "./store";
 
 const ROOTS = APPLE_ROOT_CERTIFICATES;
 
@@ -106,7 +106,13 @@ export async function ingestAppleTransaction(project: Project, appUserId: string
     purchase = (await refreshFromServer(project, purchase.id, env).catch(() => null)) ?? purchase;
   }
   // A transaction already bound to another user (shared Apple ID) stays with its first owner unless restoring.
-  const owner = await lookupIndex(project.id, `apple:${purchase.id}`);
+  let owner = await lookupIndex(project.id, `apple:${purchase.id}`);
+  // A placeholder owner ($apple:…, $anon:…) — e.g. a renewal notified before the user ever opened
+  // the migrated app — always hands the purchase over to the real account.
+  if (owner && owner !== appUserId && owner.startsWith("$") && !appUserId.startsWith("$")) {
+    await mergeCustomers(project, owner, appUserId);
+    owner = appUserId;
+  }
   const target = owner ?? appUserId;
   const result = await upsertPurchase(project, target, purchase, [`apple:${purchase.id}`]);
   return { appUserId: target, transferredFrom: owner && owner !== appUserId ? owner : null, purchase, ...result };

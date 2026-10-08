@@ -60,4 +60,8 @@ assert.equal(ov.projects.length, 1);
 const detail = await j(`/projects/${pid}`, { key: pat });
 assert.match(detail.endpoints.appleNotifications, /webhooks\/apple\//);
 assert.equal(JSON.stringify(detail).includes("whsec_test123"), false, "secrets never leak");
+// placeholder owner → real user on login (migration path)
+await j(`/projects/${pid}/customers/%24apple%3A123/grant`, { key: secretKey, method: "POST", body: { entitlement: "premium" } });
+info = await j("/customers/%24apple%3A123/alias", { key: publicKey, method: "POST", body: { newAppUserId: "migrated_user" } });
+assert.deepEqual(info.activeEntitlements, ["premium"]);
 console.log("E2E OK", { pid, events, revenue: m.revenueMicros });

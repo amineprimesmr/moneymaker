@@ -1,6 +1,6 @@
 import { JWT } from "google-auth-library";
 import { Purchase, PurchaseStatus, HttpError, isoPeriodToMonths } from "./engine";
-import { Project, getCredentials, lookupIndex, upsertPurchase, sha256, db } from "./store";
+import { Project, getCredentials, lookupIndex, upsertPurchase, sha256, db, mergeCustomers } from "./store";
 
 const API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications";
 
@@ -103,7 +103,11 @@ async function fetchAndStore(project: Project, token: string, productId: string,
       await call(`/purchases/products/${encodeURIComponent(productId)}/tokens/${tokenPath}:acknowledge`, "POST", {}).catch(() => null);
     }
   }
-  const owner = await lookupIndex(project.id, `google:${sha256(token)}`, accountHash ? `acct:${accountHash}` : null);
+  let owner = await lookupIndex(project.id, `google:${sha256(token)}`, accountHash ? `acct:${accountHash}` : null);
+  if (owner && appUserId && owner !== appUserId && owner.startsWith("$") && !appUserId.startsWith("$")) {
+    await mergeCustomers(project, owner, appUserId);
+    owner = appUserId;
+  }
   const target = owner ?? appUserId ?? `$google:${purchase.id}`;
   await remember(project, token, { productId: purchase.productId, kind, consumable, hints, appUserId: target });
   const result = await upsertPurchase(project, target, purchase, [`google:${sha256(token)}`]);
