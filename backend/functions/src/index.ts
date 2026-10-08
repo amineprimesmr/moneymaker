@@ -8,6 +8,8 @@ import { db, getProject, getCredentials } from "./store";
 import { snapshotProject } from "./metrics";
 import { sendToAppsFlyer } from "./appsflyer";
 import { fanOut } from "./integrations";
+import { importRevenueCat } from "./revenuecat";
+import { FieldValue } from "firebase-admin/firestore";
 import { scanRankings, scanRatings, scanReviews, countriesForRun, PRIORITY_COUNTRIES } from "./appstore";
 
 setGlobalOptions({ region: "europe-west1", maxInstances: 20 });
@@ -97,4 +99,17 @@ export const scanOnRequest = onDocumentCreated({ document: "scanRequests/{rid}",
   const rankings = await scanRankings(appIds, PRIORITY_COUNTRIES);
   for (const id of appIds) { await scanRatings(id).catch(() => null); await scanReviews(id).catch(() => null); }
   await event.data!.ref.update({ doneAt: Date.now(), rankings });
+});
+
+export const runImportJob = onDocumentCreated({ document: "importJobs/{jid}", timeoutSeconds: 540, memory: "512MiB" }, async event => {
+  const job = event.data?.data();
+  if (!job || job.status !== "queued") return;
+  const ref = event.data!.ref;
+  await ref.update({ status: "running", startedAt: Date.now() });
+  try {
+    const result = await importRevenueCat(await getProject(job.projectId), job);
+    await ref.update({ status: "done", result, doneAt: Date.now(), secretKey: FieldValue.delete(), appUserIds: FieldValue.delete() });
+  } catch (e) {
+    await ref.update({ status: "failed", error: (e as Error).message, doneAt: Date.now(), secretKey: FieldValue.delete() });
+  }
 });

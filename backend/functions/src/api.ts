@@ -3,6 +3,7 @@ import type { Response } from "express";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpError, cleanId, Purchase } from "./engine";
+import type { Credentials } from "./store";
 import {
   db, getProject, createProject, customerInfo, mergeCustomers, touchCustomer, resolveKey, issueKey, revokeProjectKeys,
   upsertPurchase, Project, ProjectConfig, getCredentials, KeyRecord, DEFAULT_CONFIG,
@@ -13,7 +14,7 @@ import { ingestStripeWebhook, createCheckout, createPortal } from "./stripe";
 import { projectMetrics, projectCohorts } from "./metrics";
 import { connectStripe, connectAppStore, connectGooglePlay, markConnected } from "./connect";
 import { sanitizeIntegrations } from "./integrations";
-import { searchApps, syncTrackers, translateReview, TrackedApp } from "./appstore";
+import { searchApps, syncTrackers, translateReview, lookupApp, TrackedApp } from "./appstore";
 
 /** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
 export const PUBLIC_BASE = process.env.MONEYMAKER_PUBLIC_BASE ?? "https://moneymaker-io.web.app";
@@ -94,6 +95,10 @@ function sanitizeConfig(input: any, current: ProjectConfig): ProjectConfig {
     const af = input.integrations?.appsflyer;
     next.integrations = af ? { appsflyer: { appId: cleanId(af.appId, 64), ...(af.androidAppId ? { androidAppId: cleanId(af.androidAppId, 200) } : {}) } } : {};
   }
+  if (input.mode !== undefined) {
+    if (!["subscriptions", "rankings"].includes(input.mode)) throw new HttpError(400, "invalid_mode");
+    (next as any).mode = input.mode;
+  }
   if (input.stripe !== undefined) next.stripe = { enabled: Boolean(input.stripe.enabled), prices: input.stripe.prices };
   if (JSON.stringify(next).length > 200000) throw new HttpError(400, "config_too_large");
   return next;
@@ -113,24 +118,45 @@ const route = (method: string, pattern: string, handler: Handler) =>
 route("GET", "/v1/health", async () => ({ ok: true, service: "moneymaker", time: Date.now() }));
 
 // ── Store webhooks (no API key: authenticated by store signatures) ─────────
-route("POST", "/v1/webhooks/apple/:pid", async (req, _res, [pid]) =>
-  ingestAppleNotification(await getProject(cleanId(pid)), req.body?.signedPayload));
+/** Remembers the last successful delivery per source: drives the setup checklist ("is it really wired?"). */
+const markHealth = (pid: string, source: string, extra: Record<string, unknown> = {}) =>
+  db.doc(`projects/${pid}`).set({ health: { [source]: { lastAt: Date.now(), ...extra } } }, { merge: true }).catch(() => null);
+
+route("POST", "/v1/webhooks/apple/:pid", async (req, _res, [pid]) => {
+  const project = await getProject(cleanId(pid));
+  const r = await ingestAppleNotification(project, req.body?.signedPayload);
+  await markHealth(project.id, "appleNotifications", { type: String((r as any).notificationType ?? "") });
+  return r;
+});
 
 route("POST", "/v1/webhooks/google/:pid", async (req, _res, [pid]) => {
   const project = await getProject(cleanId(pid));
   const creds = await getCredentials(project.id);
   if (req.query.token !== creds.googleRtdnToken) throw new HttpError(401, "invalid_rtdn_token");
-  return ingestGoogleNotification(project, req.body);
+  const r = await ingestGoogleNotification(project, req.body);
+  await markHealth(project.id, "googleNotifications");
+  return r;
 });
 
-route("POST", "/v1/webhooks/stripe/:pid", async (req, _res, [pid]) =>
-  ingestStripeWebhook(await getProject(cleanId(pid)), req.rawBody, req.get("stripe-signature")));
+route("POST", "/v1/webhooks/stripe/:pid", async (req, _res, [pid]) => {
+  const project = await getProject(cleanId(pid));
+  const r = await ingestStripeWebhook(project, req.rawBody, req.get("stripe-signature"));
+  await markHealth(project.id, "stripeWebhook");
+  return r;
+});
 
 // ── Client SDK (public key) ────────────────────────────────────────────────
+const sdkSeen = new Map<string, number>();
 async function clientProject(req: Request) {
   const caller = await authenticate(req);
   if (caller.kind === "user") throw new HttpError(403, "project_key_required");
-  return getProject(caller.projectId);
+  const project = await getProject(caller.projectId);
+  if (caller.kind === "public" && Date.now() - (sdkSeen.get(project.id) ?? 0) > 600000) {
+    sdkSeen.set(project.id, Date.now());
+    const ua = String(req.get("user-agent") ?? "");
+    await markHealth(project.id, "sdk", { platform: /Android/i.test(ua) ? "android" : /iOS|CFNetwork|Darwin/i.test(ua) ? "ios" : "web" });
+  }
+  return project;
 }
 
 route("GET", "/v1/offerings", async req => offeringsFor(await clientProject(req)));
@@ -193,7 +219,19 @@ route("POST", "/v1/projects", async req => {
   if (!name) throw new HttpError(400, "name_required");
   const created = await createProject(name, uid);
   const project = await getProject(created.projectId);
-  if (req.body?.config) await db.doc(`projects/${project.id}`).update({ config: sanitizeConfig(req.body.config, project.config) });
+  let config = req.body?.config ? sanitizeConfig(req.body.config, project.config) : project.config;
+  // Pre-fill from the App Store listing: bundle id, Apple ID, ranking tracking.
+  const appStoreAppId = req.body?.appStoreAppId ? String(req.body.appStoreAppId) : null;
+  if (appStoreAppId && /^\d{5,12}$/.test(appStoreAppId)) {
+    const app = await lookupApp(appStoreAppId, "fr").catch(() => null) ?? await lookupApp(appStoreAppId, "us").catch(() => null);
+    if (app) {
+      config = { ...config, apple: { bundleId: app.bundleId, appAppleId: Number(app.appId) }, appStore: { apps: [{ appId: app.appId, own: true }] } };
+      await syncTrackers(project.id, config.appStore!.apps);
+      await db.collection("scanRequests").add({ appIds: [app.appId], at: Date.now() });
+    }
+  }
+  if (req.body?.googlePackageName) config = { ...config, google: { packageName: cleanId(req.body.googlePackageName, 200) } };
+  await db.doc(`projects/${project.id}`).update({ config });
   return { ...created, note: "Store the secret key now: it is never shown again." };
 });
 
@@ -350,6 +388,56 @@ route("POST", "/v1/projects/:pid/webhooks/test", async (req, _res, [pid]) => {
   return { eventId: ref.id };
 });
 
+// ── Setup checklist (auto-detected) ────────────────────────────────────────
+export function setupSteps(project: any, creds: Credentials, counts: { customers: number; purchases: number }) {
+  const h = project.health ?? {}, c = project.config ?? {};
+  const apple = Boolean(c.apple?.bundleId), google = Boolean(c.google?.packageName), stripe = Boolean(creds.stripe?.secretKey);
+  const steps = [
+    { id: "products", group: "Base", title: "Définir l'accès premium et ses produits", done: Object.values(c.entitlements ?? {}).some((v: any) => v.length), tab: "products",
+      help: "Liste les identifiants produits (App Store, Play, Stripe) qui débloquent l'accès. Connecter App Store Connect ou Google Play les importe automatiquement." },
+    { id: "sdk", group: "Base", title: "Brancher le SDK dans l'app", done: Boolean(h.sdk?.lastAt), tab: "connect", detail: h.sdk ? `dernier appel ${h.sdk.platform ?? ""}` : null,
+      help: "Copie le prompt de l'onglet Connexions dans ton agent (Claude Code, Cursor…). L'étape se valide dès que l'app appelle MoneyMaker." },
+    { id: "asc", group: "App Store", title: "Connecter App Store Connect", done: Boolean(creds.appStoreConnect), optional: !apple, tab: "connect",
+      help: "Clé API App Store Connect (rôle App Manager) : importe les produits, active les classements et règle l'URL des notifications." },
+    { id: "appleNotifications", group: "App Store", title: "Recevoir les notifications serveur Apple", done: Boolean(h.appleNotifications?.lastAt), optional: !apple, tab: "connect",
+      help: "URL V2 en production et en sandbox (réglée automatiquement par la connexion App Store Connect si elle était vide). Se valide à la première notification reçue." },
+    { id: "iap", group: "App Store", title: "Ajouter la clé In-App Purchase", done: Boolean(creds.apple), optional: true, tab: "settings",
+      help: "Recommandé : MoneyMaker interroge Apple pour le statut exact (période de grâce, renouvellement) au lieu de se fier au seul reçu." },
+    { id: "google", group: "Google Play", title: "Connecter Google Play", done: Boolean(creds.google), optional: !google, tab: "connect",
+      help: "Compte de service avec l'accès « Finances » dans Play Console." },
+    { id: "googleNotifications", group: "Google Play", title: "Recevoir les notifications Play (RTDN)", done: Boolean(h.googleNotifications?.lastAt), optional: !google, tab: "connect",
+      help: "Topic Pub/Sub + abonnement push vers l'URL fournie, puis topic renseigné dans Play Console → Monétisation." },
+    { id: "stripe", group: "Stripe", title: "Connecter Stripe", done: stripe && Boolean(creds.stripe?.webhookSecret), optional: !stripe, tab: "connect",
+      help: "Une clé suffit : le webhook est créé et l'historique importé automatiquement." },
+    { id: "firstPurchase", group: "Validation", title: "Premier achat reçu (sandbox ou réel)", done: counts.purchases > 0, tab: "events",
+      help: "Fais un achat sandbox dans l'app : il doit apparaître dans Événements en quelques secondes." },
+    { id: "appstore", group: "Bonus", title: "Suivre les classements App Store", done: (c.appStore?.apps ?? []).length > 0, optional: true, tab: "appstore",
+      help: "Ajoute ton app et tes concurrents : classements dans 177 pays, alertes, avis." },
+    { id: "integrations", group: "Bonus", title: "Brancher Slack ou tes outils", done: Object.keys(creds.integrations ?? {}).length > 0 || (c.webhooks ?? []).length > 0, optional: true, tab: "connect",
+      help: "Slack/Discord pour être notifié de chaque vente, Mixpanel/Amplitude/Segment/PostHog pour l'analytique, webhooks pour ton backend." },
+  ];
+  // Rankings-only businesses (no in-app sales): only App Store tracking matters.
+  if (c.mode === "rankings") {
+    const only = steps.filter(s => s.id === "appstore").map(s => ({ ...s, optional: false }));
+    return { steps: only, progress: only.every(s => s.done) ? 1 : 0, next: only.find(s => !s.done)?.id ?? null };
+  }
+  const required = steps.filter(s => !s.optional);
+  return { steps, progress: required.length ? required.filter(s => s.done).length / required.length : 1, next: required.find(s => !s.done)?.id ?? null };
+}
+
+route("GET", "/v1/projects/:pid/setup", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const [snap, creds, customers, purchases] = await Promise.all([
+    db.doc(`projects/${project.id}`).get(), getCredentials(project.id),
+    db.collection(`projects/${project.id}/customers`).count().get(),
+    db.collection(`projects/${project.id}/transactions`).limit(1).get(),
+  ]);
+  const events = purchases.empty ? await db.collection(`projects/${project.id}/events`).where("type", "!=", "TEST").limit(1).get() : null;
+  // Imported history (RevenueCat, Stripe) counts as "purchases received" too.
+  const imported = purchases.empty && events?.empty ? await db.collectionGroup("purchases").where("projectId", "==", project.id).limit(1).get() : null;
+  return setupSteps(snap.data(), creds, { customers: customers.data().count, purchases: purchases.size + (events?.size ?? 0) + (imported?.size ?? 0) });
+});
+
 // ── Connections (one step per store) ──────────────────────────────────────
 route("POST", "/v1/projects/:pid/connect/stripe", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid);
@@ -371,6 +459,25 @@ route("POST", "/v1/projects/:pid/connect/google", async (req, _res, [pid]) => {
   const r = await connectGooglePlay(project, req.body);
   await markConnected(project.id, "play_store");
   return { ...r, rtdn: { pushEndpoint: PUBLIC_BASE + r.rtdn.pushEndpoint } };
+});
+
+// Imports run in the background (Hosting caps requests at 60 s); the RevenueCat key is erased once done.
+route("POST", "/v1/projects/:pid/import/revenuecat", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  if (!/^sk_/.test(String(req.body?.secretKey ?? ""))) throw new HttpError(400, "invalid_revenuecat_key", "Use a RevenueCat secret key (sk_…)");
+  const ids = Array.isArray(req.body?.appUserIds) ? req.body.appUserIds.slice(0, 20000).map(String) : [];
+  const job = await db.collection("importJobs").add({
+    projectId: project.id, source: "revenuecat", status: "queued", createdAt: Date.now(),
+    secretKey: String(req.body.secretKey), appUserIds: ids, revenueCatProjectId: req.body?.revenueCatProjectId ?? null,
+  });
+  return { jobId: job.id, status: "queued" };
+});
+
+route("GET", "/v1/projects/:pid/import/:jid", async (req, _res, [pid, jid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const job = (await db.doc(`importJobs/${cleanId(jid)}`).get()).data();
+  if (!job || job.projectId !== project.id) throw new HttpError(404, "job_not_found");
+  return { status: job.status, result: job.result ?? null, error: job.error ?? null, createdAt: job.createdAt, doneAt: job.doneAt ?? null };
 });
 
 // ── Advanced analytics ─────────────────────────────────────────────────────

@@ -2,6 +2,9 @@
 
 > Self-hosted alternative to RevenueCat. One backend for App Store (StoreKit 2), Google Play Billing and Stripe subscriptions: receipt validation, server notifications, entitlements, remote paywall offerings, metrics (MRR, churn, trials), outgoing signed webhooks. Base URL: https://moneymaker-io.web.app/v1
 
+## Setup status (use it to know what is left)
+`GET /v1/projects/{id}/setup` → `{ progress (0–1), next, steps: [{ id, title, done, optional, help }] }`. Steps auto-validate from real traffic (SDK call, Apple/Google notification received, Stripe webhook, first purchase). Human guide: https://moneymaker-io.web.app/guide
+
 ## Instructions for coding agents integrating MoneyMaker into an app
 
 You need from the user: a PUBLIC key (`mm_pub_…`, safe to ship in apps) and the entitlement id to gate (default `premium`). The SECRET key (`mm_sk_…`) must never be put in an app binary — server-side only.
@@ -36,7 +39,7 @@ You need from the user: a PUBLIC key (`mm_pub_…`, safe to ship in apps) and th
 - Receive events: configure webhook URLs in the dashboard. Each POST has header `MoneyMaker-Signature: t=<unix>,v1=<hex>` where `hex = HMAC_SHA256(signingSecret, t + "." + rawBody)`. Reject if older than 5 minutes. Event `type` ∈ INITIAL_PURCHASE, RENEWAL, TRIAL_STARTED, TRIAL_CONVERTED, CANCELLATION, UNCANCELLATION, EXPIRATION, BILLING_ISSUE, BILLING_RECOVERED, REFUND, REVOKED, PRODUCT_CHANGE, NON_RENEWING_PURCHASE, PAUSED, GRANT, TEST.
 
 ## Project setup by an agent (personal access token `mm_pat_…`)
-- `POST /v1/projects` `{ "name": "MyApp", "config": { "currency": "EUR", "entitlements": { "premium": ["com.myapp.monthly", "com.myapp.annual"] }, "apple": { "bundleId": "com.myapp", "appAppleId": 6400000000 }, "google": { "packageName": "com.myapp" } } }` → `{ projectId, publicKey, secretKey }` (secret shown once).
+- `POST /v1/projects` `{ "name": "MyApp", "appStoreAppId": "6400000000" (optional: pre-fills bundle id, Apple ID and ranking tracking), "googlePackageName": "com.myapp" (optional), "config": { "currency": "EUR", "entitlements": { "premium": ["com.myapp.monthly", "com.myapp.annual"] }, "apple": { "bundleId": "com.myapp", "appAppleId": 6400000000 }, "google": { "packageName": "com.myapp" } } }` → `{ projectId, publicKey, secretKey }` (secret shown once).
 - `PATCH /v1/projects/{id}` `{ "config": { "offerings": { "default": { "packages": [ { "id": "annual", "productIds": { "app_store": "com.myapp.annual", "play_store": "annual", "stripe": "price_…" }, "metadata": { "badge": "-40%" } } ] } }, "currentOffering": "default", "webhooks": [ { "url": "https://api.myapp.com/moneymaker" } ] } }`
 - `PUT /v1/projects/{id}/credentials` `{ "apple": { "issuerId", "keyId", "privateKey": "-----BEGIN PRIVATE KEY-----…" }, "google": { "serviceAccount": {…json…} }, "stripe": { "secretKey": "rk_live_…", "webhookSecret": "whsec_…" } }`
 - `GET /v1/projects/{id}` → `endpoints.appleNotifications` (paste in App Store Connect → App Information → App Store Server Notifications V2, production and sandbox), `endpoints.googleRtdn` (Pub/Sub push subscription URL), `endpoints.stripeWebhook`.
@@ -45,6 +48,9 @@ You need from the user: a PUBLIC key (`mm_pub_…`, safe to ship in apps) and th
 - Stripe: `POST /v1/projects/{id}/connect/stripe` `{ "secretKey": "sk_live_…" | "rk_live_…" }` → validates the key, creates the Stripe webhook endpoint automatically, imports every subscription and 12 months of paid invoices. Response: `{ account, livemode, importedSubscriptions, importedInvoices }`.
 - App Store Connect: `POST /v1/projects/{id}/connect/appstore` `{ "issuerId", "keyId", "privateKey": "-----BEGIN PRIVATE KEY-----…", "appAppleId": "6400000000", "setNotificationUrl": true? }` (App Store Connect API key, App Manager role) → reads the app, imports subscription/IAP product ids into the first entitlement, starts ranking tracking, and points App Store Server Notifications V2 (production + sandbox) at MoneyMaker when the URL is empty or `setNotificationUrl: true`.
 - Google Play: `POST /v1/projects/{id}/connect/google` `{ "packageName", "serviceAccount": {…} }` → verifies Play access, imports subscription ids, returns the Pub/Sub push endpoint for RTDN.
+
+## Migrate from RevenueCat
+`POST /v1/projects/{id}/import/revenuecat` `{ "secretKey": "sk_…", "appUserIds": ["uid1", …] (only for legacy v1 keys) }` → `{ jobId }`; poll `GET /v1/projects/{id}/import/{jobId}` → `{ status: queued|running|done|failed, result: { customers, purchases } }`. Imports current subscriptions and lifetime purchases (sandbox excluded). When the real store purchase later reaches MoneyMaker (SDK or notification) the imported copy is replaced, never double-counted. Stripe customers are linked through metadata `app_user_id`, `firebaseUID`, `user_id` or `uid`.
 
 ## Integrations
 `PUT /v1/projects/{id}/credentials` `{ "integrations": { "slackWebhookUrl", "discordWebhookUrl", "mixpanelToken", "amplitudeApiKey", "segmentWriteKey", "posthog": { "apiKey", "host"? } }, "appsflyer": { "devKey" } }` (null removes one). AppsFlyer app ids: `PATCH` config `{ "integrations": { "appsflyer": { "appId": "id123", "androidAppId": "com.app" } } }`; the app must set attributes `$appsflyerId` (+ `$idfa`, `$idfv` when allowed). Events are sent as `mm_<event_type>` (Mixpanel/Amplitude/Segment/PostHog) and `rc_*_event` (AppsFlyer, RevenueCat-compatible names).

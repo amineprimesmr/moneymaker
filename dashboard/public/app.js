@@ -49,7 +49,7 @@ onAuthStateChanged(auth, async user => {
 async function loadProjects() {
   state.projects = (await api("/v1/projects")).projects;
   $("#projectNav").innerHTML = state.projects.map(p => `<button class="nav" data-project="${esc(p.id)}">${esc(p.name)}</button>`).join("");
-  document.querySelectorAll("[data-project]").forEach(b => b.onclick = () => go({ view: "project", projectId: b.dataset.project, tab: "metrics" }));
+  document.querySelectorAll("[data-project]").forEach(b => b.onclick = () => openProject(b.dataset.project));
 }
 document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => go({ view: b.dataset.view, projectId: null }));
 $("#newProject").onclick = newProjectDialog;
@@ -106,11 +106,11 @@ async function renderOverview(main) {
   <div class="card" style="margin-top:12px"><h2>Dernières alertes App Store</h2><div id="ovAlerts" class="muted">Chargement…</div></div>`;
   api("/v1/alerts").then(({ alerts }) => { $("#ovAlerts").outerHTML = alerts.length ? `<table>${alerts.slice(0, 15).map(alertRow).join("")}</table>` : `<p class="muted">Aucune alerte — ajoute tes apps dans l'onglet App Store d'un business.</p>`; }).catch(() => null);
   bindDays();
-  document.querySelectorAll("[data-open]").forEach(r => r.onclick = () => go({ view: "project", projectId: r.dataset.open, tab: "metrics" }));
+  document.querySelectorAll("[data-open]").forEach(r => r.onclick = () => openProject(r.dataset.open));
 }
 
 // ── Project ─────────────────────────────────────────────────────────────
-const TABS = { metrics: "Métriques", map: "Carte", cohorts: "Cohortes", appstore: "App Store", reviews: "Avis", alerts: "Alertes", customers: "Clients", events: "Événements", products: "Produits & accès", connect: "Connexions", settings: "Réglages" };
+const TABS = { start: "Démarrage", metrics: "Métriques", map: "Carte", cohorts: "Cohortes", appstore: "App Store", reviews: "Avis", alerts: "Alertes", customers: "Clients", events: "Événements", products: "Produits & accès", connect: "Connexions", settings: "Réglages" };
 async function renderProject(main) {
   const p = state.projects.find(x => x.id === state.projectId);
   if (!TABS[state.tab]) state.tab = "metrics";
@@ -118,7 +118,7 @@ async function renderProject(main) {
     <div class="tabs">${Object.entries(TABS).map(([k, v]) => `<button class="small ${state.tab === k ? "active" : ""}" data-tab="${k}">${v}</button>`).join("")}</div><div id="tab"></div>`;
   document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => go({ tab: b.dataset.tab }));
   bindDays();
-  await ({ metrics: tabMetrics, map: tabMap, cohorts: tabCohorts, appstore: tabAppStore, reviews: tabReviews, alerts: tabAlerts, customers: tabCustomers, events: tabEvents, products: tabProducts, connect: tabConnect, settings: tabSettings }[state.tab] ?? tabMetrics)($("#tab"));
+  await ({ start: tabStart, metrics: tabMetrics, map: tabMap, cohorts: tabCohorts, appstore: tabAppStore, reviews: tabReviews, alerts: tabAlerts, customers: tabCustomers, events: tabEvents, products: tabProducts, connect: tabConnect, settings: tabSettings }[state.tab] ?? tabMetrics)($("#tab"));
 }
 
 const delta = (cur, prev, fmt = v => v) => {
@@ -362,6 +362,28 @@ async function tabAlerts(el) {
     : `<div class="empty">Aucune alerte pour l'instant. Tu seras prévenu ici (et sur Slack/Discord/webhooks si connectés) quand une app entre dans un nouveau pays, le top 10, le top 1 ou bouge fortement.</div>`}</div>`;
 }
 
+// ── Getting started (auto-detected checklist) ─────────────────────────
+async function openProject(id) {
+  const setup = await api(`/v1/projects/${id}/setup`).catch(() => null);
+  go({ view: "project", projectId: id, tab: setup && setup.progress < 1 ? "start" : "metrics" });
+}
+
+async function tabStart(el) {
+  const s = await api(`/v1/projects/${state.projectId}/setup`);
+  const groups = [...new Set(s.steps.map(x => x.group))];
+  const pctDone = Math.round(s.progress * 100);
+  el.innerHTML = `<div class="card section"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${pctDone === 100 ? "✅ Tout est branché" : "Mise en route"}</h2><b style="flex:0">${pctDone} %</b></div>
+    <div class="bar"><div style="width:${pctDone}%"></div></div>
+    <p class="muted">Chaque étape se coche toute seule dès que MoneyMaker détecte qu'elle fonctionne. ${s.next ? "Prochaine étape surlignée." : "Les étapes bonus restent optionnelles."} <a href="/guide" target="_blank">Guide pas à pas →</a></p></div>
+    ${groups.map(g => `<h3 style="margin:18px 0 8px">${esc(g)}</h3>${s.steps.filter(x => x.group === g).map(x => `<div class="card step ${x.id === s.next ? "next" : ""} ${x.done ? "done" : ""}">
+      <div class="row" style="align-items:flex-start"><span class="check" style="flex:0">${x.done ? "✓" : ""}</span>
+      <div style="flex:1"><b>${esc(x.title)}</b>${x.optional ? ' <span class="pill">optionnel</span>' : ""}${x.detail ? ` <span class="muted">· ${esc(x.detail)}</span>` : ""}<p class="muted" style="margin:4px 0 0">${esc(x.help)}</p></div>
+      ${x.done ? "" : `<button class="small ${x.id === s.next ? "primary" : ""}" style="flex:0;white-space:nowrap" data-goto="${x.tab}">Faire →</button>`}</div></div>`).join("")}`).join("")}
+    <div class="row" style="margin-top:12px"><button id="recheck" style="flex:0">↻ Revérifier</button></div>`;
+  el.querySelectorAll("[data-goto]").forEach(b => b.onclick = () => go({ tab: b.dataset.goto }));
+  $("#recheck").onclick = () => tabStart(el);
+}
+
 // ── Connections & integrations ─────────────────────────────────────────
 async function tabConnect(el) {
   const p = await api(`/v1/projects/${state.projectId}`);
@@ -374,7 +396,7 @@ Clé publique SDK: <colle ta clé mm_pub_ ici>
 Accès à vérifier: ${Object.keys(p.config.entitlements)[0] ?? "premium"}
 Remplace toute logique RevenueCat/StoreKit existante, appelle MoneyMaker.configure au lancement, logIn avec l'id utilisateur, purchase() depuis le paywall, et verrouille les écrans premium avec isEntitled.`;
   el.innerHTML = `<div class="card section"><h2>⚡ Brancher le SDK : demande à ton agent</h2><p class="muted">Colle ce prompt dans Claude Code / Cursor / Codex à la racine de ton app.</p><pre>${esc(agentPrompt)}</pre>
-    <div class="row" style="margin-top:10px"><button class="primary" style="flex:0" onclick='mmCopy(${esc(JSON.stringify(agentPrompt))})'>Copier le prompt</button><a href="/docs" style="flex:0;white-space:nowrap">Documentation →</a></div></div>
+    <div class="row" style="margin-top:10px"><button class="primary" style="flex:0" onclick='mmCopy(${esc(JSON.stringify(agentPrompt))})'>Copier le prompt</button><a href="/guide" style="flex:0;white-space:nowrap">Guide pas à pas →</a></div></div>
   <div class="grid2">
     <div class="card"><h2>Stripe ${ok(p.credentials.stripeKey && p.credentials.stripeWebhook)}</h2><p class="muted">Colle une clé secrète (ou restreinte avec accès webhooks, abonnements, factures, clients, Checkout). MoneyMaker crée le webhook tout seul et importe tes abonnements + 12 mois de factures.</p>
       <div class="row"><input id="stripeKey" placeholder="sk_live_… ou rk_live_…" autocomplete="off"><button class="primary" style="flex:0;white-space:nowrap" id="cStripe">Connecter</button></div><div id="stripeOut"></div></div>
@@ -388,6 +410,9 @@ Remplace toute logique RevenueCat/StoreKit existante, appelle MoneyMaker.configu
       <input id="gPkg" placeholder="com.example.app" value="${esc(p.config.google?.packageName ?? "")}"><textarea id="gSa2" style="min-height:70px;margin-top:8px" placeholder='{"type":"service_account",…}'></textarea>
       <button class="primary" id="cGoogle" style="margin-top:8px">Connecter</button><div id="gOut"></div>
       <p class="muted" style="margin-top:10px">Notifications en temps réel : crée un abonnement Pub/Sub <b>push</b> vers :</p>${copyRow(p.endpoints.googleRtdn, true)}</div>
+    <div class="card"><h2>Migrer depuis RevenueCat</h2><p class="muted">Importe les abonnements et achats en cours de tous tes clients. Clé secrète RevenueCat (Project settings → API keys). Avec une clé v2, tout est listé automatiquement ; avec une ancienne clé v1, colle la liste de tes ids utilisateurs (un par ligne).</p>
+      <input id="rcKey" placeholder="sk_…" autocomplete="off"><textarea id="rcIds" style="min-height:60px;margin-top:8px" placeholder="ids utilisateurs (seulement pour une clé v1)"></textarea>
+      <button class="primary" id="rcImport" style="margin-top:8px">Importer</button><div id="rcOut"></div></div>
     <div class="card"><h2>Tes backends ${ok(p.config.webhooks.length)}</h2><p class="muted">Webhooks signés <code>MoneyMaker-Signature</code> pour chaque événement d'abonnement et chaque alerte de classement (<code>RANKING_*</code>). URLs dans Réglages. Secret de signature :</p>${copyRow(p.webhookSigningSecret, true)}</div>
   </div>
   <div class="card" style="margin-top:12px"><h2>Intégrations</h2><p class="muted">Les événements d'abonnement partent vers ces outils, et les alertes de classement vers Slack et Discord. Laisse un champ vide pour ne rien changer, ou tape <code>-</code> pour déconnecter.</p>
@@ -411,6 +436,18 @@ Remplace toute logique RevenueCat/StoreKit existante, appelle MoneyMaker.configu
   $("#cGoogle").onclick = e => busy(e.target, async () => {
     const r = await api(`/v1/projects/${state.projectId}/connect/google`, { method: "POST", body: { packageName: $("#gPkg").value.trim(), serviceAccount: $("#gSa2").value.trim() } });
     $("#gSa2").value = ""; out("#gOut", `✅ ${esc(r.packageName)} · ${r.importedProducts.length} abonnements importés · compte ${esc(r.serviceAccount)}`);
+  });
+  $("#rcImport").onclick = e => busy(e.target, async () => {
+    const ids = $("#rcIds").value.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
+    const { jobId } = await api(`/v1/projects/${state.projectId}/import/revenuecat`, { method: "POST", body: { secretKey: $("#rcKey").value.trim(), appUserIds: ids } });
+    $("#rcKey").value = ""; out("#rcOut", "Import en cours…");
+    for (let i = 0; i < 120; i++) {
+      await new Promise(r => setTimeout(r, 5000));
+      const j = await api(`/v1/projects/${state.projectId}/import/${jobId}`);
+      if (j.status === "done") { out("#rcOut", `✅ ${j.result.customers} clients analysés · ${j.result.purchases} achats importés`); return; }
+      if (j.status === "failed") { out("#rcOut", `❌ ${esc(j.error)}`); return; }
+      out("#rcOut", `Import ${j.status === "running" ? "en cours" : "en file d'attente"}…`);
+    }
   });
   $("#saveInteg").onclick = e => busy(e.target, async () => {
     const integrations = {};
@@ -539,22 +576,39 @@ async function renderAccount(main) {
   <div class="card section"><h2>Jeton personnel (app iPhone, widgets, agents, scripts)</h2>
     <p class="muted">Un jeton <code>mm_pat_</code> lit tous tes business. Colle-le dans l'app MoneyMaker sur iPhone pour les widgets, ou donne-le à ton agent pour qu'il crée et configure des projets.</p>
     <div class="row"><input id="label" placeholder="Nom du jeton (ex. iPhone)"><button class="primary" style="flex:0;white-space:nowrap" id="mk">Créer un jeton</button></div><div id="tok" style="margin-top:12px"></div></div>
-  <div class="card"><h2>API</h2><p class="muted">Base URL :</p>${copyRow(location.origin + "/v1")}<p><a href="/docs">Documentation</a> · <a href="/llms.txt">llms.txt (pour agents)</a></p></div>`;
+  <div class="card"><h2>API</h2><p class="muted">Base URL :</p>${copyRow(location.origin + "/v1")}<p><a href="/guide">Guide pas à pas</a> · <a href="/docs">Référence API</a> · <a href="/llms.txt">llms.txt (pour agents)</a></p></div>`;
   $("#mk").onclick = async () => { const r = await api("/v1/tokens", { method: "POST", body: { label: $("#label").value || "token" } }); $("#tok").innerHTML = `<p class="muted">Affiché une seule fois :</p>${copyRow(r.token)}`; };
 }
 
 // ── Modals ──────────────────────────────────────────────────────────────
 function openModal(html) { $("#modalBody").innerHTML = html; if (!$("#modal").open) $("#modal").showModal(); }
 function newProjectDialog() {
-  openModal(`<h2>Nouveau business</h2><div class="field"><label>Nom</label><input id="pName" placeholder="ex. V2" required></div>
-    <div class="field"><label>Devise</label><input id="pCur" value="EUR" maxlength="3"></div>
+  openModal(`<h2>Nouveau business</h2>
+    <div class="field"><label>Ton app sur l'App Store (optionnel — remplit tout automatiquement)</label><div class="row"><input id="pSearch" placeholder="Nom de l'app…"><button type="button" id="pFind" style="flex:0">Chercher</button></div><div id="pResults"></div></div>
+    <div class="field"><label>Nom du business</label><input id="pName" placeholder="ex. V2" required></div>
+    <div class="field"><label>Package Android (optionnel)</label><input id="pPkg" placeholder="com.example.app"></div>
+    <div class="field"><label>Devise de reporting</label><input id="pCur" value="EUR" maxlength="3"></div>
     <div class="row"><button value="cancel">Annuler</button><button type="button" class="primary" id="pCreate">Créer</button></div>`);
+  let appId = null;
+  $("#pFind").onclick = async () => {
+    const term = $("#pSearch").value.trim(); if (!term) return;
+    const { results } = await api(`/v1/appstore/search?term=${encodeURIComponent(term)}&country=fr`);
+    $("#pResults").innerHTML = results.slice(0, 5).map(r => `<div class="row pick" data-app="${esc(r.appId)}" data-name="${esc(r.name)}" style="gap:10px;padding:8px;border-radius:10px;cursor:pointer;margin-top:6px">
+      <img src="${esc(r.icon)}" class="appicon sm" alt="" style="flex:0 0 40px"><div><b>${esc(r.name)}</b><div class="muted">${esc(r.developer)}</div></div></div>`).join("") || `<p class="muted">Aucun résultat — tu peux créer sans.</p>`;
+    document.querySelectorAll(".pick").forEach(el => el.onclick = () => {
+      document.querySelectorAll(".pick").forEach(x => x.classList.remove("picked")); el.classList.add("picked");
+      appId = el.dataset.app; if (!$("#pName").value) $("#pName").value = el.dataset.name;
+    });
+  };
+  $("#pSearch").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); $("#pFind").click(); } };
   $("#pCreate").onclick = async () => {
-    const r = await api("/v1/projects", { method: "POST", body: { name: $("#pName").value, config: { currency: $("#pCur").value.toUpperCase(), entitlements: { premium: ["*"] } } } });
+    if (!$("#pName").value.trim()) return toast("Donne un nom au business");
+    const r = await api("/v1/projects", { method: "POST", body: { name: $("#pName").value, appStoreAppId: appId ?? undefined, googlePackageName: $("#pPkg").value.trim() || undefined,
+      config: { currency: $("#pCur").value.toUpperCase(), entitlements: { premium: ["*"] } } } });
     await loadProjects();
-    openModal(`<h2>✅ Business créé</h2><p class="muted">Copie la clé secrète maintenant : elle ne sera plus jamais affichée.</p>
+    openModal(`<h2>✅ Business créé</h2><p class="muted">Copie la clé secrète maintenant : elle ne sera plus jamais affichée.${appId ? " Ton app est reconnue : bundle ID, Apple ID et suivi des classements sont déjà réglés." : ""}</p>
       <div class="field"><label>Clé publique (apps)</label>${copyRow(r.publicKey)}</div><div class="field"><label>Clé secrète (serveurs)</label>${copyRow(r.secretKey)}</div>
-      <div class="row"><button type="button" class="primary" id="goSetup">Brancher mes stores →</button></div>`);
-    $("#goSetup").onclick = () => { $("#modal").close(); go({ view: "project", projectId: r.projectId, tab: "connect" }); };
+      <div class="row"><button type="button" class="primary" id="goSetup">Continuer la mise en route →</button></div>`);
+    $("#goSetup").onclick = () => { $("#modal").close(); go({ view: "project", projectId: r.projectId, tab: "start" }); };
   };
 }

@@ -44,8 +44,11 @@ export function stripeSubscriptionPurchase(s: Stripe.Subscription, now = Date.no
   };
 }
 
-function appUserIdFrom(...sources: (Stripe.Metadata | null | undefined)[]) {
-  for (const m of sources) if (m?.app_user_id) return String(m.app_user_id);
+/** Metadata keys apps commonly use to store their own user id on Stripe objects. */
+export const USER_ID_METADATA_KEYS = ["app_user_id", "appUserId", "firebaseUID", "firebase_uid", "firebaseUid", "user_id", "userId", "uid", "supabase_user_id", "clerk_user_id"];
+
+export function appUserIdFrom(...sources: (Stripe.Metadata | null | undefined)[]) {
+  for (const m of sources) for (const k of USER_ID_METADATA_KEYS) if (m?.[k]) return String(m[k]);
   return null;
 }
 

@@ -148,3 +148,32 @@ test("v2 marketing feed parsing", () => {
   const m = parseChartV2({ feed: { results: [{ id: "5" }, { id: "7" }] } });
   assert.equal(m.get("7"), 2); assert.equal(parseChartV2({}).size, 0);
 });
+
+test("setup checklist detects progress", () => {
+  const { setupSteps } = require("../lib/api");
+  const empty = setupSteps({ config: { entitlements: {} } }, {}, { customers: 0, purchases: 0 });
+  assert.equal(empty.next, "products"); assert.equal(empty.progress, 0);
+  const ios = setupSteps({ config: { entitlements: { premium: ["m"] }, apple: { bundleId: "a" } }, health: { sdk: { lastAt: 1 } } }, { appStoreConnect: {} }, { customers: 3, purchases: 0 });
+  assert.equal(ios.next, "appleNotifications");
+  assert.ok(ios.steps.find(s => s.id === "google").optional);
+  const done = setupSteps({ config: { entitlements: { premium: ["m"] }, apple: { bundleId: "a" } }, health: { sdk: { lastAt: 1 }, appleNotifications: { lastAt: 1 } } }, { appStoreConnect: {} }, { customers: 3, purchases: 1 });
+  assert.equal(done.progress, 1); assert.equal(done.next, null);
+});
+
+test("RevenueCat v1 subscriber import mapping", () => {
+  const { purchasesFromV1 } = require("../lib/revenuecat");
+  const now = Date.parse("2026-10-08T12:00:00Z");
+  const ps = purchasesFromV1({
+    subscriptions: {
+      "com.app.annual": { store: "app_store", purchase_date: "2026-03-01T00:00:00Z", original_purchase_date: "2025-03-01T00:00:00Z", expires_date: "2027-03-01T00:00:00Z", period_type: "normal", is_sandbox: false, price: { amount: 34.99, currency: "eur" } },
+      "com.app.monthly": { store: "app_store", purchase_date: "2026-08-01T00:00:00Z", expires_date: "2026-09-01T00:00:00Z", unsubscribe_detected_at: "2026-08-10T00:00:00Z", is_sandbox: false },
+      "com.app.trial": { store: "play_store", purchase_date: "2026-10-05T00:00:00Z", expires_date: "2026-10-12T00:00:00Z", period_type: "trial", is_sandbox: false },
+    },
+    non_subscriptions: { "com.app.lifetime": [{ store: "app_store", purchase_date: "2025-01-01T00:00:00Z", is_sandbox: false }] },
+  }, now);
+  const by = Object.fromEntries(ps.map(p => [p.productId, p]));
+  assert.equal(by["com.app.annual"].status, "active"); assert.equal(by["com.app.annual"].periodMonths, 12); assert.equal(by["com.app.annual"].priceMicros, 34_990_000); assert.equal(by["com.app.annual"].currency, "EUR");
+  assert.equal(by["com.app.monthly"].status, "expired"); assert.equal(by["com.app.monthly"].willRenew, false);
+  assert.equal(by["com.app.trial"].isTrial, true); assert.equal(by["com.app.trial"].store, "play_store");
+  assert.equal(by["com.app.lifetime"].expiresAt, null); assert.ok(by["com.app.lifetime"].id.startsWith("rc_"));
+});

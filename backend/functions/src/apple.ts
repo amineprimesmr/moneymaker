@@ -4,6 +4,7 @@ import {
 } from "@apple/app-store-server-library";
 import { APPLE_ROOT_CERTIFICATES } from "./appleRootCertificates";
 import { toAlpha2 } from "./countries";
+import { dropImportedDuplicates } from "./revenuecat";
 import { Purchase, PurchaseStatus, PurchaseType, HttpError } from "./engine";
 import { Project, getCredentials, lookupIndex, upsertPurchase, mergeCustomers } from "./store";
 
@@ -116,6 +117,7 @@ export async function ingestAppleTransaction(project: Project, appUserId: string
     owner = appUserId;
   }
   const target = owner ?? appUserId;
+  await dropImportedDuplicates(project.id, target, purchase.productId, "app_store");
   const result = await upsertPurchase(project, target, purchase, [`apple:${purchase.id}`]);
   return { appUserId: target, transferredFrom: owner && owner !== appUserId ? owner : null, purchase, ...result };
 }
@@ -137,6 +139,7 @@ export async function ingestAppleNotification(project: Project, signedPayload: s
   purchase.updatedAt = n.signedDate ?? Date.now();
   const appUserId = await lookupIndex(project.id, `apple:${purchase.id}`, tx.appAccountToken ? `acct:${tx.appAccountToken.toLowerCase()}` : null)
     ?? `$apple:${purchase.id}`;
+  if (!appUserId.startsWith("$")) await dropImportedDuplicates(project.id, appUserId, purchase.productId, "app_store");
   const result = await upsertPurchase(project, appUserId, purchase, [`apple:${purchase.id}`]);
   return { notificationType: n.notificationType, subtype: n.subtype, appUserId, ...result };
 }

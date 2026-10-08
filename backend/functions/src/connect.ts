@@ -21,15 +21,29 @@ export async function connectStripe(project: Project, baseUrl: string, secretKey
   if (!/^(sk|rk)_(live|test)_/.test(secretKey ?? "")) throw new HttpError(400, "invalid_stripe_key");
   const stripe = new Stripe(secretKey);
   let account: Stripe.Account;
-  try { account = await stripe.accounts.retrieveCurrent(); } catch (e) { throw new HttpError(400, "stripe_key_rejected", (e as Error).message); }
+  try { account = await stripe.accounts.retrieveCurrent(); }
+  catch (e) {
+    if ((e as any)?.type === "StripeAuthenticationError") throw new HttpError(400, "stripe_key_rejected", (e as Error).message);
+    // Restricted key without account read: prove it works with a subscriptions read instead.
+    try { await stripe.subscriptions.list({ limit: 1 }); } catch (e2) { throw new HttpError(400, "stripe_key_rejected", (e2 as Error).message); }
+    account = { id: "stripe", settings: null, business_profile: null } as unknown as Stripe.Account;
+  }
   const url = `${baseUrl}/v1/webhooks/stripe/${project.id}`;
-  const existing = (await stripe.webhookEndpoints.list({ limit: 100 })).data.filter(w => w.url === url);
-  for (const w of existing) await stripe.webhookEndpoints.del(w.id); // secrets are only returned on creation
-  const endpoint = await stripe.webhookEndpoints.create({ url, enabled_events: STRIPE_EVENTS, description: `MoneyMaker · ${project.name}` });
-  await db.doc(`projects/${project.id}/private/credentials`).set({ stripe: { secretKey, webhookSecret: endpoint.secret } }, { merge: true });
+  let webhookEndpoint: string | null = null, warning: string | null = null;
+  try {
+    const existing = (await stripe.webhookEndpoints.list({ limit: 100 })).data.filter(w => w.url === url);
+    for (const w of existing) await stripe.webhookEndpoints.del(w.id); // secrets are only returned on creation
+    const endpoint = await stripe.webhookEndpoints.create({ url, enabled_events: STRIPE_EVENTS, description: `MoneyMaker · ${project.name}` });
+    webhookEndpoint = endpoint.id;
+    await db.doc(`projects/${project.id}/private/credentials`).set({ stripe: { secretKey, webhookSecret: endpoint.secret } }, { merge: true });
+  } catch (e) {
+    // Restricted keys often lack "Webhook Endpoints: write": keep going with the import and say exactly what to add.
+    await db.doc(`projects/${project.id}/private/credentials`).set({ stripe: { secretKey } }, { merge: true });
+    warning = `Webhook non créé (${(e as Error).message.slice(0, 120)}). Ajoute la permission « Webhook Endpoints : écriture » à la clé restreinte puis reconnecte, ou crée le webhook à la main vers ${url} et colle son secret whsec_ dans Réglages.`;
+  }
   await db.doc(`projects/${project.id}`).update({ "config.stripe.enabled": true, "config.stripe.accountName": account.settings?.dashboard?.display_name ?? account.business_profile?.name ?? account.id });
   const imported = await importStripeHistory(project, stripe);
-  return { account: account.settings?.dashboard?.display_name ?? account.id, livemode: secretKey.includes("_live_"), webhookEndpoint: endpoint.id, ...imported };
+  return { account: account.settings?.dashboard?.display_name ?? account.id, livemode: secretKey.includes("_live_"), webhookEndpoint, warning, ...imported };
 }
 
 export async function importStripeHistory(project: Project, stripe: Stripe) {

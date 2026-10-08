@@ -85,3 +85,8 @@ dialog::backdrop { background: rgba(0,0,0,.6); }
 main { min-width: 0; } .tabs { max-width: 100%; }
 .row > .pill { flex: 0 0 auto; }
 dialog { max-height: 90vh; overflow: auto; }
+.bar { height: 8px; border-radius: 4px; background: var(--panel2); margin: 12px 0; overflow: hidden; } .bar > div { height: 100%; background: var(--accent); border-radius: 4px; transition: width .4s; }
+.step { margin-bottom: 8px; padding: 14px; } .step.next { border-color: var(--accent); } .step.done { opacity: .65; }
+.check { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-weight: 800; color: #001a10; margin-right: 10px; }
+.step.done .check { background: var(--accent); border-color: var(--accent); }
+.pick:hover, .pick.picked { background: var(--panel2); outline: 1px solid var(--accent); }

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guide MoneyMaker</title>
+<meta name="description" content="Brancher ses abonnements App Store, Google Play et Stripe à MoneyMaker, étape par étape.">
+<link rel="stylesheet" href="/app.css">
+<style>
+  main{margin:0 auto;max-width:860px} h1{font-size:30px;margin-top:6px} h2{margin-top:34px;font-size:21px} h3{margin-top:20px;text-transform:none;letter-spacing:0;font-size:15px;color:var(--text)}
+  ol li,ul li{margin:6px 0} .tip{border-left:3px solid var(--accent);padding:8px 14px;background:#062118;border-radius:0 10px 10px 0;margin:12px 0}
+  .warn{border-left-color:var(--warn);background:#1f1806} .toc a{display:inline-block;margin:3px 10px 3px 0} kbd{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:12px}
+  .time{color:var(--muted);font-weight:500;font-size:13px}
+</style></head>
+<body><main>
+<p><a href="/">← Dashboard</a> · <a href="/docs">Référence API</a> · <a href="/llms.txt">llms.txt</a></p>
+<h1>Brancher ton app en 15 minutes</h1>
+<p class="muted">MoneyMaker remplace RevenueCat : achats App Store, Google Play et Stripe validés sur ton serveur, accès premium, paywall à distance, analytique, carte des ventes et classements App Store. Ce guide suit exactement la checklist de l'onglet <b>Démarrage</b> — chaque étape s'y coche toute seule dès qu'elle fonctionne.</p>
+<div class="card toc"><b>Sommaire</b><br>
+<a href="#compte">1. Compte et business</a><a href="#sdk">2. SDK (par ton agent)</a><a href="#apple">3. App Store</a><a href="#google">4. Google Play</a><a href="#stripe">5. Stripe</a><a href="#test">6. Tester</a><a href="#bonus">7. Classements, Slack, outils</a><a href="#migrer">Migrer depuis RevenueCat</a><a href="#faq">FAQ</a></div>
+
+<h2 id="compte">1. Compte et business <span class="time">· 1 min</span></h2>
+<ol>
+<li>Va sur <a href="/">moneymaker-io.web.app</a> → <b>Continuer avec Google</b>.</li>
+<li><b>+ Nouveau business</b> → tape le nom de ton app dans « Ton app sur l'App Store » → <b>Chercher</b> → clique sur ton app. Bundle ID, Apple ID et suivi des classements se remplissent seuls.</li>
+<li>Ajoute le package Android si tu en as un, puis <b>Créer</b>.</li>
+<li><b>Copie la clé secrète</b> (<code>mm_sk_…</code>) dans ton gestionnaire de mots de passe : elle n'est affichée qu'une fois. La clé publique (<code>mm_pub_…</code>) se retrouve à tout moment dans Réglages → Clés API.</li>
+</ol>
+<div class="tip">Plusieurs apps ? Un business par app. La <b>Vue globale</b> additionne tout, et le jeton personnel (Compte & accès) donne à l'app iPhone et à tes agents l'accès à tous tes business.</div>
+
+<h2 id="sdk">2. Brancher le SDK — ton agent le fait <span class="time">· 5 min</span></h2>
+<ol>
+<li>Onglet <b>Connexions</b> → <b>Copier le prompt</b>.</li>
+<li>Ouvre Claude Code (ou Cursor, Codex…) à la racine de ton app, colle le prompt, remplace <code>&lt;colle ta clé mm_pub_ ici&gt;</code> par ta clé publique.</li>
+<li>L'agent ajoute le SDK (<code>https://github.com/amineprimesmr/moneymaker</code> sur iOS, <code>com.github.amineprimesmr:moneymaker</code> via JitPack sur Android), configure le lancement, la connexion utilisateur, le paywall et le bouton « Restaurer ».</li>
+</ol>
+<p>À la main, c'est 4 lignes :</p>
+<pre>import MoneyMaker
+MoneyMaker.configure(apiKey: "mm_pub_…")              // au lancement
+try await MoneyMaker.shared.logIn(user.id)            // après connexion
+if MoneyMaker.shared.isEntitled("premium") { … }      // verrouiller
+try await MoneyMaker.shared.purchase(package)         // acheter (ou MoneyMakerPaywall())</pre>
+<div class="tip">✔︎ L'étape « Brancher le SDK » se coche dès que l'app appelle MoneyMaker une première fois.</div>
+
+<h2 id="apple">3. App Store <span class="time">· 5 min</span></h2>
+<h3>a) Clé API App Store Connect (une seule pour toutes tes apps)</h3>
+<ol>
+<li><a href="https://appstoreconnect.apple.com/access/integrations/api" target="_blank">App Store Connect → Utilisateurs et accès → Intégrations → App Store Connect API</a> → onglet <b>Clés d'équipe</b> → <b>+</b>.</li>
+<li>Nom « MoneyMaker », accès <b>App Manager</b> → <b>Générer</b>.</li>
+<li>Note l'<b>Issuer ID</b> (en haut) et le <b>Key ID</b>, puis <b>Télécharger</b> le fichier <code>.p8</code> (téléchargeable une seule fois).</li>
+<li>Dans MoneyMaker → <b>Connexions → App Store Connect</b> : colle Issuer ID, Key ID, le contenu du <code>.p8</code> → <b>Connecter</b>.</li>
+</ol>
+<p>Ce que fait la connexion : elle lit ton app, importe tous tes abonnements et achats intégrés dans l'accès premium, active le suivi des classements et <b>règle l'URL des notifications serveur V2</b> (production et sandbox) si elle était vide.</p>
+<div class="tip warn">Tu as déjà un serveur qui reçoit les notifications Apple ? MoneyMaker ne la remplace pas sans ton accord. Soit tu coches « Remplacer l'URL », soit ton serveur renvoie chaque notification à l'URL affichée sous le formulaire (c'est ce que fait V2).</div>
+<h3>b) Clé In-App Purchase (recommandée)</h3>
+<ol>
+<li>Même page → onglet <b>Achats intégrés</b> → <b>+</b> → nom « MoneyMaker » → <b>Générer</b> → télécharge le <code>.p8</code>.</li>
+<li>MoneyMaker → <b>Réglages → Identifiants des stores</b> : Issuer ID, Key ID de cette clé et contenu du <code>.p8</code> → <b>Enregistrer</b>.</li>
+</ol>
+<p class="muted">Sans elle tout marche, mais MoneyMaker se fie au reçu signé ; avec elle, il demande à Apple le statut exact (période de grâce, renouvellement automatique coupé…).</p>
+
+<h2 id="google">4. Google Play <span class="time">· 10 min, une seule fois</span></h2>
+<ol>
+<li><a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank">Google Cloud → IAM → Comptes de service</a> (projet lié à Play Console) → <b>Créer</b> « moneymaker » → <b>Clés → Ajouter une clé → JSON</b>.</li>
+<li><a href="https://play.google.com/console/users-and-permissions" target="_blank">Play Console → Utilisateurs et autorisations</a> → <b>Inviter</b> l'email du compte de service → autorisations de l'app : <b>Afficher les données financières</b> et <b>Gérer les commandes et les abonnements</b>.</li>
+<li>MoneyMaker → <b>Connexions → Google Play</b> : package + contenu du JSON → <b>Connecter</b> (les abonnements sont importés).</li>
+<li>Notifications en temps réel : <a href="https://console.cloud.google.com/cloudpubsub/topic/list" target="_blank">Pub/Sub</a> → <b>Créer un sujet</b> « play-rtdn » → ajoute <code>google-play-developer-notifications@system.gserviceaccount.com</code> en <b>Éditeur Pub/Sub</b> du sujet → <b>Créer un abonnement</b> de type <b>Push</b> vers l'URL copiée depuis MoneyMaker.</li>
+<li>Play Console → ton app → <b>Monétiser → Configuration de la monétisation</b> → colle le nom complet du sujet → <b>Envoyer un message de test</b>.</li>
+</ol>
+<div class="tip">Les nouvelles autorisations Play peuvent mettre jusqu'à 24 h à s'appliquer : si la connexion échoue juste après l'invitation, réessaie plus tard.</div>
+
+<h2 id="stripe">5. Stripe <span class="time">· 1 min</span></h2>
+<ol>
+<li><a href="https://dashboard.stripe.com/apikeys" target="_blank">Stripe → Développeurs → Clés API</a> → <b>Créer une clé restreinte</b> « MoneyMaker » avec : Abonnements, Factures, Clients, Charges, Prix, Produits en <b>lecture</b> ; Webhook Endpoints, Sessions Checkout, Portail client en <b>écriture</b>. (Une clé secrète <code>sk_</code> marche aussi.)</li>
+<li>MoneyMaker → <b>Connexions → Stripe</b> → colle la clé → <b>Connecter</b>.</li>
+</ol>
+<p>C'est tout : le webhook est créé automatiquement, et tous tes abonnements ainsi que 12 mois de factures sont importés. Pour relier un client Stripe à un utilisateur, mets son id dans les métadonnées (<code>app_user_id</code>, <code>firebaseUID</code>, <code>user_id</code> ou <code>uid</code> — tous reconnus), ou utilise <code>POST /v1/customers/{id}/stripe/checkout</code> qui le fait pour toi.</p>
+
+<h2 id="test">6. Tester <span class="time">· 2 min</span></h2>
+<ol>
+<li>iPhone : Réglages → App Store → <b>Compte sandbox</b> (créé dans App Store Connect → Utilisateurs et accès → Testeurs sandbox).</li>
+<li>Lance ton app depuis Xcode, achète un abonnement depuis le paywall.</li>
+<li>MoneyMaker → <b>Événements</b> : l'achat apparaît en quelques secondes avec l'étiquette <span class="pill">sandbox</span>. Les achats sandbox ne comptent jamais dans le revenu.</li>
+</ol>
+
+<h2 id="bonus">7. Bonus</h2>
+<ul>
+<li><b>Classements App Store</b> : onglet App Store → ajoute ton app et tes concurrents. Classements gratuits, payants et revenus dans 177 pays, carte des rangs, alertes (nouveau pays, top 10, n°1), cartes à partager, notes et avis traduits.</li>
+<li><b>Slack / Discord</b> : Connexions → Intégrations → colle l'URL de webhook entrant : chaque vente et chaque alerte de classement y arrivent.</li>
+<li><b>Mixpanel, Amplitude, Segment, PostHog, AppsFlyer</b> : même endroit. Pour AppsFlyer, l'app doit envoyer <code>$appsflyerId</code> via <code>setAttributes</code>.</li>
+<li><b>Ton backend</b> : Réglages → Webhooks sortants. Chaque requête est signée <code>MoneyMaker-Signature: t=…,v1=HMAC-SHA256(secret, t.body)</code>.</li>
+<li><b>App iPhone + widgets</b> : Compte & accès → crée un jeton → colle-le dans l'app MoneyMaker. Widgets MRR et Classements sur l'écran d'accueil et l'écran verrouillé.</li>
+</ul>
+
+<h2 id="migrer">Migrer depuis RevenueCat</h2>
+<ol>
+<li>Garde les mêmes identifiants produits : rien ne change côté App Store / Play.</li>
+<li>Remplace le SDK RevenueCat par MoneyMaker (ton agent le fait avec le prompt). Au premier lancement, le SDK resynchronise <b>en silence</b> les achats en cours de chaque utilisateur.</li>
+<li>Redirige les notifications serveur Apple et Play vers MoneyMaker (étapes 3 et 4) et désactive l'intégration AppsFlyer de RevenueCat pour ne pas compter les revenus deux fois.</li>
+<li>Abonnés qui n'ouvrent plus l'app : leurs renouvellements sont rattachés automatiquement au bon compte dès qu'ils rouvrent l'app. Pour les rattacher tout de suite, importe la correspondance <code>original_transaction_id → app_user_id</code> depuis l'export RevenueCat (on l'a fait pour V2).</li>
+</ol>
+
+<h2 id="faq">FAQ</h2>
+<h3>Combien ça coûte ?</h3><p>0 % de commission. Tu paies seulement l'hébergement Firebase, gratuit à petite échelle.</p>
+<h3>Mes données sont où ?</h3><p>Dans Firestore, accessibles uniquement par le serveur. Les clés des stores ne sont jamais renvoyées au navigateur ; les clés API sont stockées hachées.</p>
+<h3>Un achat n'apparaît pas</h3><p>Vérifie l'onglet Démarrage : si « notifications Apple » n'est pas coché, l'URL n'est pas réglée. Côté app, l'achat est aussi envoyé directement par le SDK : vérifie que <code>MoneyMaker.configure</code> est appelé avant le paywall.</p>
+<h3>Pourquoi le pays est « Inconnu » ?</h3><p>Ventes antérieures au branchement, ou client Stripe sans adresse.</p>
+<h3>Les classements ne s'affichent pas</h3><p>L'app doit être publiée. Premier scan en ~1 min sur les 25 plus gros marchés, puis tous les pays en 6 h.</p>
+</main></body></html>
