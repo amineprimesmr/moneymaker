@@ -5,7 +5,7 @@ import { JWT } from "google-auth-library";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpError } from "./engine";
 import { Project, ProjectConfig, db, getCredentials, sha256, upsertPurchase } from "./store";
-import { storeSubscription, stripeOneTimePurchase, oneTimeOwner } from "./stripe";
+import { storeSubscription, stripeOneTimePurchase, oneTimeOwner, isInvoiceCharge } from "./stripe";
 import { toAlpha2 } from "./countries";
 import { convertMicros } from "./engine";
 import { syncTrackers } from "./appstore";
@@ -77,7 +77,7 @@ export async function importStripeHistory(project: Project, stripe: Stripe) {
   // One-time payments (Checkout payment mode, Payment Links, direct charges) of the last 12 months.
   let payments = 0;
   for await (const ch of stripe.charges.list({ created: { gte: since }, limit: 100 })) {
-    if ((ch as any).invoice || !ch.paid || ch.status !== "succeeded") continue;
+    if (!ch.paid || ch.status !== "succeeded" || await isInvoiceCharge(stripe, ch)) continue;
     const owner = await oneTimeOwner(project, ch);
     const purchase = stripeOneTimePurchase(ch);
     await upsertPurchase(project, owner, purchase, [`stripe:${ch.payment_intent ?? ch.id}`, ...(ch.customer ? [`stripe_cus:${ch.customer}`] : [])], { silent: true });

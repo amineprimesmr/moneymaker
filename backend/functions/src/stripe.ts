@@ -65,6 +65,15 @@ export function stripeOneTimePurchase(ch: Stripe.Charge, now = Date.now()): Purc
   };
 }
 
+/** True when a charge pays a subscription invoice (newer API versions dropped `charge.invoice`). */
+export async function isInvoiceCharge(stripe: Stripe | undefined, ch: Stripe.Charge) {
+  if ((ch as any).invoice) return true;
+  if (!stripe || !ch.payment_intent) return /^Subscription (creation|update|cycle)/i.test(ch.description ?? "");
+  const pi = typeof ch.payment_intent === "string" ? ch.payment_intent : ch.payment_intent.id;
+  const list = await stripe.invoicePayments.list({ payment: { type: "payment_intent", payment_intent: pi }, limit: 1 }).catch(() => null);
+  return list ? list.data.length > 0 : /^Subscription/i.test(ch.description ?? "");
+}
+
 /** Customer id for a one-time payment: app id in metadata, else known Stripe customer, else the buyer's email. */
 export async function oneTimeOwner(project: Project, ch: Stripe.Charge) {
   const pi = typeof ch.payment_intent === "object" ? (ch.payment_intent as any) : null;
@@ -146,7 +155,7 @@ export async function ingestStripeWebhook(project: Project, rawBody: Buffer, sig
     }
     case "charge.succeeded": {
       const ch = event.data.object as Stripe.Charge;
-      if ((ch as any).invoice || !ch.paid) break; // subscription invoices are handled through the subscription
+      if (!ch.paid || await isInvoiceCharge(stripe, ch)) break; // subscription invoices are handled through the subscription
       const owner = await oneTimeOwner(project, ch);
       result = await upsertPurchase(project, owner, stripeOneTimePurchase(ch), [`stripe:${ch.payment_intent ?? ch.id}`, ...(ch.customer ? [`stripe_cus:${ch.customer}`] : [])]);
       break;
