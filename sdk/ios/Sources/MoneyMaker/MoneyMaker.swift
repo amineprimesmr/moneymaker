@@ -50,6 +50,7 @@ public final class MoneyMaker: ObservableObject {
         updatesTask = Task { [weak self] in await self?.listenForTransactions() }
         Task { [weak self] in
             await self?.syncUnfinishedTransactions()
+            await self?.syncPurchases()
             _ = try? await self?.refreshCustomerInfo()
         }
     }
@@ -73,7 +74,8 @@ public final class MoneyMaker: ObservableObject {
             info = try await api.get("customers/\(newAppUserID.urlPath)")
         }
         publish(info)
-        return info
+        await syncPurchases()
+        return customerInfo ?? info
     }
 
     /// Switches back to a fresh anonymous id.
@@ -205,6 +207,16 @@ public final class MoneyMaker: ObservableObject {
             do { _ = try await handle(verification) }
             catch { log.error("transaction update failed: \(error.localizedDescription, privacy: .public)") }
         }
+    }
+
+    /// Silently posts every purchase the Apple ID currently owns (no password prompt).
+    /// Migrates subscribers who bought before MoneyMaker was integrated; cheap and idempotent.
+    public func syncPurchases() async {
+        var last: CustomerInfo?
+        for await verification in Transaction.currentEntitlements {
+            if let info = try? await post(verification) { last = info }
+        }
+        if let last { publish(last) }
     }
 
     private func syncUnfinishedTransactions() async {

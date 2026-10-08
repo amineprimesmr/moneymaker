@@ -18,6 +18,7 @@ export interface ProjectConfig {
   apple?: { bundleId?: string; appAppleId?: number };
   google?: { packageName?: string };
   stripe?: { enabled?: boolean; prices?: Record<string, { productId: string; periodMonths: number }> };
+  integrations?: { appsflyer?: { appId: string; androidAppId?: string } };
 }
 
 export interface Project {
@@ -32,6 +33,7 @@ export interface Credentials {
   apple?: { issuerId: string; keyId: string; privateKey: string };
   google?: { serviceAccount: { client_email: string; private_key: string } };
   stripe?: { secretKey?: string; webhookSecret?: string };
+  appsflyer?: { devKey: string };
   googleRtdnToken: string;
   webhookSigningSecret: string;
 }

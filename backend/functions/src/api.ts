@@ -84,6 +84,10 @@ function sanitizeConfig(input: any, current: ProjectConfig): ProjectConfig {
     appAppleId: input.apple.appAppleId ? Number(input.apple.appAppleId) : undefined,
   };
   if (input.google !== undefined) next.google = { packageName: input.google.packageName ? cleanId(input.google.packageName, 200) : undefined };
+  if (input.integrations !== undefined) {
+    const af = input.integrations?.appsflyer;
+    next.integrations = af ? { appsflyer: { appId: cleanId(af.appId, 64), ...(af.androidAppId ? { androidAppId: cleanId(af.androidAppId, 200) } : {}) } } : {};
+  }
   if (input.stripe !== undefined) next.stripe = { enabled: Boolean(input.stripe.enabled), prices: input.stripe.prices };
   if (JSON.stringify(next).length > 200000) throw new HttpError(400, "config_too_large");
   return next;
@@ -218,7 +222,7 @@ route("GET", "/v1/projects/:pid", async (req, _res, [pid]) => {
   const base = `https://${req.get("x-forwarded-host") ?? req.get("host")}`;
   return {
     ...project,
-    credentials: { apple: Boolean(creds.apple), google: Boolean(creds.google), stripeKey: Boolean(creds.stripe?.secretKey), stripeWebhook: Boolean(creds.stripe?.webhookSecret) },
+    credentials: { appsflyer: Boolean(creds.appsflyer), apple: Boolean(creds.apple), google: Boolean(creds.google), stripeKey: Boolean(creds.stripe?.secretKey), stripeWebhook: Boolean(creds.stripe?.webhookSecret) },
     endpoints: {
       appleNotifications: `${base}/v1/webhooks/apple/${project.id}`,
       googleRtdn: `${base}/v1/webhooks/google/${project.id}?token=${creds.googleRtdnToken}`,
@@ -250,6 +254,10 @@ route("PUT", "/v1/projects/:pid/credentials", async (req, _res, [pid]) => {
     const sa = typeof b.google.serviceAccount === "string" ? JSON.parse(b.google.serviceAccount) : b.google.serviceAccount;
     if (!sa?.client_email || !sa?.private_key) throw new HttpError(400, "invalid_service_account");
     update.google = { serviceAccount: { client_email: sa.client_email, private_key: sa.private_key } };
+  }
+  if (b.appsflyer) {
+    if (typeof b.appsflyer.devKey !== "string" || b.appsflyer.devKey.length < 10) throw new HttpError(400, "invalid_appsflyer_dev_key");
+    update.appsflyer = { devKey: b.appsflyer.devKey };
   }
   if (b.stripe) {
     const s: Record<string, string> = {};

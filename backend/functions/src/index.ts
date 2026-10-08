@@ -6,6 +6,7 @@ import { createHmac } from "crypto";
 import { handle } from "./api";
 import { db, getProject, getCredentials } from "./store";
 import { snapshotProject } from "./metrics";
+import { sendToAppsFlyer } from "./appsflyer";
 
 setGlobalOptions({ region: "europe-west1", maxInstances: 20 });
 
@@ -13,15 +14,22 @@ export const api = onRequest({ timeoutSeconds: 60, memory: "512MiB", concurrency
 
 /** Delivers every lifecycle event to the project's own backends, signed with HMAC-SHA256. Retried by Eventarc on failure. */
 export const deliverEvent = onDocumentCreated({ document: "projects/{pid}/events/{eid}", retry: true }, async event => {
-  const data = event.data?.data();
+  // Re-read: on retries the trigger payload is the creation snapshot, not the current delivery state.
+  const data = event.data ? (await event.data.ref.get()).data() : undefined;
   if (!data || data.delivered) return;
   const createdAt = Number(data.at ?? Date.now());
   if (Date.now() - createdAt > 24 * 3600000) return; // stop retrying after a day
   const project = await getProject(event.params.pid);
+  const creds = await getCredentials(project.id);
+  if (!data.appsflyer) {
+    // Attribution is best-effort and isolated: an AppsFlyer outage must not block the customer's own webhooks.
+    const status = await sendToAppsFlyer(project, creds, data).catch(e => `error: ${(e as Error).message}`);
+    await event.data!.ref.update({ appsflyer: status });
+  }
   const hooks = project.config.webhooks.filter(h => !h.events?.length || h.events.includes(data.type));
   if (!hooks.length) { await event.data!.ref.update({ delivered: true }); return; }
-  const { webhookSigningSecret } = await getCredentials(project.id);
-  const body = JSON.stringify({ id: event.params.eid, projectId: project.id, ...data, delivered: undefined });
+  const { webhookSigningSecret } = creds;
+  const body = JSON.stringify({ id: event.params.eid, projectId: project.id, ...data, delivered: undefined, appsflyer: undefined });
   const t = Math.floor(Date.now() / 1000);
   const signature = createHmac("sha256", webhookSigningSecret).update(`${t}.${body}`).digest("hex");
   const failures: string[] = [];
