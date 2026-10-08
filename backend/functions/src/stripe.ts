@@ -52,6 +52,27 @@ export function appUserIdFrom(...sources: (Stripe.Metadata | null | undefined)[]
   return null;
 }
 
+/** One-time Stripe payment (Checkout "payment" mode, Payment Links, plain charges). Pure — unit-tested. */
+export function stripeOneTimePurchase(ch: Stripe.Charge, now = Date.now()): Purchase {
+  const net = ch.amount_captured - (ch.amount_refunded ?? 0);
+  return {
+    id: String(ch.payment_intent ?? ch.id), store: "stripe",
+    productId: String(ch.metadata?.product_id ?? ch.description ?? "stripe_payment").slice(0, 200), type: "non_consumable",
+    status: ch.refunded ? "refunded" : "active", purchasedAt: ch.created * 1000, latestPurchaseAt: ch.created * 1000,
+    expiresAt: null, willRenew: false, isTrial: false, isSandbox: !ch.livemode, priceMicros: Math.max(0, net) * 10000,
+    currency: ch.currency.toUpperCase(), periodMonths: 0, billingIssue: false, updatedAt: now,
+    country: toAlpha2(ch.billing_details?.address?.country ?? (ch.payment_method_details as any)?.card?.country),
+  };
+}
+
+/** Customer id for a one-time payment: app id in metadata, else known Stripe customer, else the buyer's email. */
+export async function oneTimeOwner(project: Project, ch: Stripe.Charge) {
+  const pi = typeof ch.payment_intent === "object" ? (ch.payment_intent as any) : null;
+  return appUserIdFrom(ch.metadata, pi?.metadata)
+    ?? (ch.customer ? await lookupIndex(project.id, `stripe_cus:${ch.customer}`) : null)
+    ?? (ch.customer ? `$stripe:${ch.customer}` : ch.billing_details?.email ? `$email:${ch.billing_details.email.toLowerCase()}` : `$stripe:${ch.id}`);
+}
+
 export async function storeSubscription(project: Project, sub: Stripe.Subscription, stripe?: Stripe, opts: { silent?: boolean } = {}) {
   let appUserId = appUserIdFrom(sub.metadata) ?? await lookupIndex(project.id, `stripe:${sub.id}`, `stripe_cus:${sub.customer}`);
   let country: string | null = null;
@@ -104,7 +125,10 @@ export async function ingestStripeWebhook(project: Project, rawBody: Buffer, sig
     case "checkout.session.completed": {
       const s = event.data.object as Stripe.Checkout.Session;
       const appUserId = s.client_reference_id ?? appUserIdFrom(s.metadata);
-      if (s.mode === "payment" && appUserId && s.payment_status === "paid") {
+      if (s.mode === "payment" && !appUserId && s.payment_status === "paid") {
+        // Web checkout without an app account: charge.succeeded records it (keyed by email / Stripe customer).
+        result = { recordedBy: "charge.succeeded" };
+      } else if (s.mode === "payment" && appUserId && s.payment_status === "paid") {
         const productId = String(s.metadata?.product_id ?? "stripe_one_time");
         result = await upsertPurchase(project, appUserId, {
           id: String(s.payment_intent ?? s.id), store: "stripe", productId, type: "non_consumable", status: "active",
@@ -118,6 +142,13 @@ export async function ingestStripeWebhook(project: Project, rawBody: Buffer, sig
         if (appUserId && !sub.metadata?.app_user_id) await stripe.subscriptions.update(sub.id, { metadata: { ...sub.metadata, app_user_id: appUserId } });
         result = await storeSubscription(project, { ...sub, metadata: { ...sub.metadata, ...(appUserId ? { app_user_id: appUserId } : {}) } }, stripe);
       }
+      break;
+    }
+    case "charge.succeeded": {
+      const ch = event.data.object as Stripe.Charge;
+      if ((ch as any).invoice || !ch.paid) break; // subscription invoices are handled through the subscription
+      const owner = await oneTimeOwner(project, ch);
+      result = await upsertPurchase(project, owner, stripeOneTimePurchase(ch), [`stripe:${ch.payment_intent ?? ch.id}`, ...(ch.customer ? [`stripe_cus:${ch.customer}`] : [])]);
       break;
     }
     case "charge.refunded": {

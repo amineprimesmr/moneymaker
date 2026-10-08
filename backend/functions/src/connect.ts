@@ -4,8 +4,8 @@ import { createSign } from "crypto";
 import { JWT } from "google-auth-library";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpError } from "./engine";
-import { Project, ProjectConfig, db, getCredentials, sha256 } from "./store";
-import { storeSubscription } from "./stripe";
+import { Project, ProjectConfig, db, getCredentials, sha256, upsertPurchase } from "./store";
+import { storeSubscription, stripeOneTimePurchase, oneTimeOwner } from "./stripe";
 import { toAlpha2 } from "./countries";
 import { convertMicros } from "./engine";
 import { syncTrackers } from "./appstore";
@@ -13,7 +13,7 @@ import { syncTrackers } from "./appstore";
 const STRIPE_EVENTS: Stripe.WebhookEndpointCreateParams.EnabledEvent[] = [
   "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted",
   "customer.subscription.paused", "customer.subscription.resumed", "invoice.paid", "invoice.payment_failed",
-  "checkout.session.completed", "charge.refunded",
+  "checkout.session.completed", "charge.succeeded", "charge.refunded",
 ];
 
 /** Stripe: validate key → create the webhook endpoint automatically → import subscriptions + 12 months of invoices. */
@@ -74,7 +74,23 @@ export async function importStripeHistory(project: Project, stripe: Stripe) {
     if (++pending >= 400) { await batch.commit(); batch = db.batch(); pending = 0; }
   }
   if (pending) await batch.commit();
-  return { importedSubscriptions: subscriptions, importedInvoices: invoices };
+  // One-time payments (Checkout payment mode, Payment Links, direct charges) of the last 12 months.
+  let payments = 0;
+  for await (const ch of stripe.charges.list({ created: { gte: since }, limit: 100 })) {
+    if ((ch as any).invoice || !ch.paid || ch.status !== "succeeded") continue;
+    const owner = await oneTimeOwner(project, ch);
+    const purchase = stripeOneTimePurchase(ch);
+    await upsertPurchase(project, owner, purchase, [`stripe:${ch.payment_intent ?? ch.id}`, ...(ch.customer ? [`stripe_cus:${ch.customer}`] : [])], { silent: true });
+    if (purchase.priceMicros > 0) {
+      await db.doc(`projects/${project.id}/transactions/stripe_ch_${ch.id}`).set({
+        appUserId: owner, store: "stripe", productId: purchase.productId, purchaseId: purchase.id, kind: "purchase",
+        amountMicros: purchase.priceMicros, currency: purchase.currency, amountMicrosProject: convertMicros(purchase.priceMicros, purchase.currency, project.config.currency),
+        isSandbox: purchase.isSandbox, country: purchase.country ?? null, periodMonths: 0, at: purchase.purchasedAt, imported: true,
+      }, { merge: true });
+    }
+    payments++;
+  }
+  return { importedSubscriptions: subscriptions, importedInvoices: invoices, importedPayments: payments };
 }
 
 // ── App Store Connect API (ES256 JWT) ───────────────────────────────────────

@@ -177,3 +177,10 @@ test("RevenueCat v1 subscriber import mapping", () => {
   assert.equal(by["com.app.trial"].isTrial, true); assert.equal(by["com.app.trial"].store, "play_store");
   assert.equal(by["com.app.lifetime"].expiresAt, null); assert.ok(by["com.app.lifetime"].id.startsWith("rc_"));
 });
+
+test("stripe one-time payment mapping", () => {
+  const { stripeOneTimePurchase, appUserIdFrom } = require("../lib/stripe");
+  const p = stripeOneTimePurchase({ id: "ch_1", payment_intent: "pi_1", amount_captured: 1599, amount_refunded: 0, created: 1700000000, currency: "eur", livemode: true, paid: true, refunded: false, description: "Carnet", metadata: {}, billing_details: { address: { country: "fr" } } });
+  assert.equal(p.id, "pi_1"); assert.equal(p.priceMicros, 15_990_000); assert.equal(p.country, "FR"); assert.equal(p.type, "non_consumable");
+  assert.equal(appUserIdFrom({ firebaseUID: "abc" }), "abc"); assert.equal(appUserIdFrom({ foo: "x" }), null);
+});
