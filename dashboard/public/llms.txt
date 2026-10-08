@@ -20,7 +20,7 @@ You need from the user: a PUBLIC key (`mm_pub_…`, safe to ship in apps) and th
 7. Remove RevenueCat (`Purchases.configure`, `Purchases.shared.*`) and any custom StoreKit transaction listener — the SDK already listens to `Transaction.updates` and finishes transactions after server validation.
 
 ### Android (Kotlin, Play Billing 7)
-1. Add module `sdk/android/moneymaker` (or the AAR) — depends on `com.android.billingclient:billing-ktx:7.1.1`.
+1. Add `maven("https://jitpack.io")` to repositories and `implementation("com.github.amineprimesmr:moneymaker:1.0.1")` (brings `com.android.billingclient:billing-ktx:7.1.1`).
 2. `MoneyMaker.configure(applicationContext, apiKey = "mm_pub_…", appUserId = user?.id)` in `Application.onCreate`.
 3. `MoneyMaker.shared.logIn(id)` (suspend), `MoneyMaker.shared.isEntitled("premium")`, `MoneyMaker.shared.customerInfo` (StateFlow).
 4. `val offerings = MoneyMaker.shared.loadOfferings()`; `MoneyMaker.shared.purchase(activity, offerings.current!!.packages.first())`. Purchases are verified and acknowledged by the server.
