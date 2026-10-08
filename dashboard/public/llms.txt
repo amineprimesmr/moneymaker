@@ -7,7 +7,7 @@
 You need from the user: a PUBLIC key (`mm_pub_…`, safe to ship in apps) and the entitlement id to gate (default `premium`). The SECRET key (`mm_sk_…`) must never be put in an app binary — server-side only.
 
 ### iOS / macOS / watchOS (Swift, StoreKit 2)
-1. Add Swift package: `https://github.com/amine-ennasri/moneymaker` → product `MoneyMaker` (path `sdk/ios`). Or copy `sdk/ios/Sources/MoneyMaker` into the project.
+1. Add Swift package: `https://github.com/amineprimesmr/moneymaker` → product `MoneyMaker`. Or copy `sdk/ios/Sources/MoneyMaker` into the project.
 2. At launch (App init):
    ```swift
    import MoneyMaker
