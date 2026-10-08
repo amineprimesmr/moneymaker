@@ -300,3 +300,5 @@ aside button.ghost { text-align: left; padding: 9px 12px; border-radius: 14px; w
   aside::-webkit-scrollbar { display: none; }
   aside button, aside .nav { flex: 0 0 auto; width: auto !important; white-space: nowrap; padding: 8px 14px; }
 }
+.wl-logo { line-height: 0; margin-bottom: 22px; -webkit-text-fill-color: initial; background: none; }
+.wl-logo img { width: min(560px, 86vw); height: auto; filter: drop-shadow(0 0 24px rgba(255, 255, 255, 0.18)); }
