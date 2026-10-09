@@ -168,9 +168,10 @@ struct FeedScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Ventes en direct").font(MMFont.system(34, .bold)).tracking(-0.8)
-                ForEach(groups, id: \.0) { day, items in
-                    MMLabel(text: day).padding(.horizontal, 4).padding(.top, 6)
+                Text("Ventes en direct").font(MMFont.system(34, .bold)).tracking(-0.8).padding(.top, 8).mmAppear(0)
+                ForEach(Array(groups.enumerated()), id: \.element.0) { gi, group in
+                    let (day, items) = group
+                    MMLabel(text: day).padding(.horizontal, 4).padding(.top, 6).mmAppear(1 + gi)
                     MMCard(padding: 0) {
                         VStack(spacing: 0) {
                             ForEach(Array(items.enumerated()), id: \.element.id) { i, e in
@@ -180,6 +181,7 @@ struct FeedScreen: View {
                         }
                     }
                     .mmScrollReveal()
+                    .mmAppear(1 + gi)
                 }
             }
             .padding(.horizontal, 16).padding(.bottom, 40)
@@ -231,28 +233,28 @@ struct LiveSettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if embedded {
-                        Text("Réglages").font(MMFont.system(34, .bold)).tracking(-0.8).padding(.top, 8)
+                        Text("Réglages").font(MMFont.system(34, .bold)).tracking(-0.8).padding(.top, 8).mmAppear(0)
                     }
-                    statusCard
+                    statusCard.mmAppear(1)
                     group("Ventes", [
                         toggle("Nouveaux abonnés & achats", "arrow.up.right", \.sales),
                         toggle("Renouvellements", "arrow.clockwise", \.renewals),
                         toggle("Essais démarrés", "sparkles", \.trials),
-                    ])
+                    ]).mmAppear(2)
                     group("Risques", [
                         toggle("Problèmes de paiement", "exclamationmark.triangle", \.billing),
                         toggle("Remboursements", "arrow.uturn.backward", \.refunds),
                         toggle("Annulations & expirations", "xmark.circle", \.churn),
-                    ])
+                    ]).mmAppear(3)
                     group("App Store & récap", [
                         toggle("Classements App Store", "trophy", \.rankings),
                         toggle("Récap du soir (21 h)", "moon.stars", \.dailySummary),
-                    ])
+                    ]).mmAppear(4)
                     group("Expérience", [
                         toggle("Son « cha-ching »", "speaker.wave.2", \.sound),
                         toggle("Live Activity automatique à la 1re vente", "dot.radiowaves.left.and.right", \.liveActivityAuto),
                         toggle("Inclure les achats sandbox", "hammer", \.sandbox),
-                    ])
+                    ]).mmAppear(5)
                     if let projects = store.overview?.projects, projects.count > 1 {
                         MMLabel(text: "Business notifiés").padding(.horizontal, 4).padding(.top, 8)
                         MMCard(padding: 0) {
@@ -268,8 +270,8 @@ struct LiveSettingsView: View {
                             }
                         }
                     }
-                    widgetsCard
-                    if embedded { accountCard }
+                    widgetsCard.mmAppear(6)
+                    if embedded { accountCard.mmAppear(7) }
                     if let e = push.lastError {
                         Text(e).font(MMFont.system(12)).foregroundStyle(MMColor.red).padding(.horizontal, 4)
                     }

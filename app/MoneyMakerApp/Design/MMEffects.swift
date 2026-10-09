@@ -49,17 +49,35 @@ extension View {
     func mmAppear(_ index: Int) -> some View { modifier(AppearModifier(index: index)) }
 }
 
+private struct TabVisibleKey: EnvironmentKey { static let defaultValue = true }
+extension EnvironmentValues {
+    /// Faux tant que l'onglet qui contient la vue n'est pas affiché : la cascade attend.
+    var mmTabVisible: Bool {
+        get { self[TabVisibleKey.self] }
+        set { self[TabVisibleKey.self] = newValue }
+    }
+}
+
+/// Apparition des sections : montée de 22 pt + fondu + léger flou, en cascade (70 ms entre deux).
+/// Au lancement, attend que le logo soit posé, pour que tout arrive dans l'ordre.
 private struct AppearModifier: ViewModifier {
     let index: Int
     @State private var shown = false
+    @ObservedObject private var launch = LaunchCoordinator.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mmTabVisible) private var tabVisible
     func body(content: Content) -> some View {
         content
             .opacity(shown ? 1 : 0)
-            .offset(y: shown || reduceMotion ? 0 : 18)
-            .onAppear {
-                withAnimation(.spring(response: 0.6, dampingFraction: 0.86).delay(Double(index) * 0.06)) { shown = true }
-            }
+            .offset(y: shown || reduceMotion ? 0 : 22)
+            .blur(radius: shown || reduceMotion ? 0 : 6)
+            .onAppear { if launch.revealed && tabVisible { show() } }
+            .onChange(of: launch.revealed) { _, r in if r && tabVisible { show() } }
+            .onChange(of: tabVisible) { _, v in if v && launch.revealed { show() } }
+    }
+    private func show() {
+        guard !shown else { return }
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.9).delay(Double(index) * 0.07)) { shown = true }
     }
 }
 

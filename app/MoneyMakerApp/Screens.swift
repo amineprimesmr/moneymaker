@@ -137,12 +137,13 @@ struct RootTabView: View {
 
 private extension View {
     func tabLayer(_ visible: Bool) -> some View {
-        opacity(visible ? 1 : 0).allowsHitTesting(visible).accessibilityHidden(!visible)
+        opacity(visible ? 1 : 0).allowsHitTesting(visible).accessibilityHidden(!visible).environment(\.mmTabVisible, visible)
     }
 }
 
 struct OverviewView: View {
     @EnvironmentObject var store: Store
+    @ObservedObject private var launch = LaunchCoordinator.shared
     @Binding var path: NavigationPath
     @State private var selected: Date?
 
@@ -150,7 +151,7 @@ struct OverviewView: View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    header.mmAppear(0)
+                    header
                     EnableAlertsCard().mmAppear(1)
                     if store.today != nil { TodayCard().mmAppear(1) }
                     if let o = store.overview {
@@ -185,13 +186,23 @@ struct OverviewView: View {
             Image("Logo")
                 .resizable().scaledToFit()
                 .frame(height: 40)
-                .frame(maxWidth: .infinity)
                 .shadow(color: .white.opacity(0.18), radius: 10)
+                .background {
+                    GeometryReader { g in
+                        Color.clear
+                            .onAppear { LaunchCoordinator.shared.headerLogoFrame = g.frame(in: .global) }
+                            .onChange(of: g.frame(in: .global)) { _, f in LaunchCoordinator.shared.headerLogoFrame = f }
+                    }
+                }
+                .opacity(launch.logoLanded ? 1 : 0)
+                .frame(maxWidth: .infinity)
                 .accessibilityLabel("MoneyMaker")
                 .padding(.bottom, 14)
             Text(Date().formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
                 .font(MMFont.system(11, .medium)).tracking(2.2).foregroundStyle(MMColor.ink3)
+                .mmAppear(0)
             Text("Revenus").font(MMFont.system(34, .bold)).tracking(-0.8)
+                .mmAppear(0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 8)

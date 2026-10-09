@@ -36,6 +36,10 @@ enum GlobeData {
         return (try? JSONDecoder().decode([String: Country].self, from: data)) ?? [:]
     }()
 
+    static func name(_ cc: String) -> String {
+        Locale(identifier: "fr_FR").localizedString(forRegionCode: cc) ?? countries[cc]?.name ?? cc
+    }
+
     static func unit(lat: Double, lng: Double) -> GeoPoint {
         let la = lat * .pi / 180, lo = lng * .pi / 180
         return GeoPoint(x: cos(la) * sin(lo), y: sin(la), z: cos(la) * cos(lo))
@@ -191,14 +195,13 @@ struct GlobeView: View {
                      with: .radialGradient(Gradient(colors: [tint.opacity(0.9 * fade), tint.opacity(0)]), center: base.point, startRadius: 0, endRadius: gr))
             ctx.fill(Path(ellipseIn: CGRect(x: top.point.x - 2, y: top.point.y - 2, width: 4, height: 4)), with: .color(.white.opacity(0.9 * fade)))
 
-            // Onde : vente récente (< 10 min) → anneaux qui s'étendent, en boucle douce.
+            // Vente récente (< 10 min) : la base du faisceau respire doucement, sans anneau.
             if let last = s.lastSale, now.timeIntervalSince(last) < 600, fade > 0 {
-                for k in 0..<2 {
-                    let ph = (t * 0.7 + Double(k) * 0.5).truncatingRemainder(dividingBy: 1)
-                    let rr = 4 + 22 * ph
-                    ctx.stroke(Path(ellipseIn: CGRect(x: base.point.x - rr, y: base.point.y - rr * 0.6, width: rr * 2, height: rr * 1.2)),
-                               with: .color(MMColor.accent.opacity((1 - ph) * 0.8 * fade)), lineWidth: 1.4)
-                }
+                let breath = 0.5 + 0.5 * sin(t * 3)
+                let pr = gr * (1.4 + 0.8 * breath)
+                ctx.fill(Path(ellipseIn: CGRect(x: base.point.x - pr, y: base.point.y - pr, width: pr * 2, height: pr * 2)),
+                         with: .radialGradient(Gradient(colors: [MMColor.accent.opacity(0.55 * fade * (0.6 + 0.4 * breath)), MMColor.accent.opacity(0)]),
+                                               center: base.point, startRadius: 0, endRadius: pr))
             }
         }
     }
@@ -261,6 +264,7 @@ struct GlobeCard: View {
 struct GlobeScreen: View {
     @EnvironmentObject var store: Store
     @State private var selected: String?
+    @State private var globeIn = false
 
     var body: some View {
         let spots = store.globeSpots
@@ -270,20 +274,24 @@ struct GlobeScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Planète").font(MMFont.system(34, .bold)).tracking(-0.8)
+                    Text("Planète").font(MMFont.system(34, .bold)).tracking(-0.8).padding(.top, 8)
                     Text("\(ranked.count) pays · revenu \(store.overview?.periodDays ?? 30) j").font(MMFont.system(13)).foregroundStyle(MMColor.ink3)
                 }
+                .mmAppear(0)
                 ZStack(alignment: .bottom) {
                     GlobeView(spots: spots, highlight: selected) { cc in
                         withAnimation(.snappy) { selected = cc }
                     }
                     .frame(height: 380)
                     .sensoryFeedback(.selection, trigger: selected)
+                    .scaleEffect(globeIn ? 1 : 0.86)
+                    .opacity(globeIn ? 1 : 0)
+                    .onAppear { withAnimation(.spring(response: 0.8, dampingFraction: 0.85).delay(0.05)) { globeIn = true } }
                     if let cc = selected, let s = spots.first(where: { $0.cc == cc }) {
                         HStack(spacing: 10) {
                             Text(flagEmoji(cc)).font(.system(size: 22))
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(GlobeData.countries[cc]?.name ?? cc).font(MMFont.system(14, .medium))
+                                Text(GlobeData.name(cc)).font(MMFont.system(14, .medium))
                                 Text("\((s.value / total).formatted(.percent.precision(.fractionLength(0)))) du revenu").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
                             }
                             Spacer()
@@ -295,7 +303,7 @@ struct GlobeScreen: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
-                MMLabel(text: "Classement").padding(.horizontal, 4)
+                MMLabel(text: "Classement").padding(.horizontal, 4).mmAppear(2)
                 MMCard(padding: 0) {
                     VStack(spacing: 0) {
                         ForEach(Array(ranked.prefix(20).enumerated()), id: \.element.cc) { i, s in
@@ -305,7 +313,7 @@ struct GlobeScreen: View {
                                     Text(flagEmoji(s.cc)).font(.system(size: 20)).frame(width: 26)
                                     VStack(alignment: .leading, spacing: 5) {
                                         HStack {
-                                            Text(GlobeData.countries[s.cc]?.name ?? s.cc).font(MMFont.system(14, .medium)).lineLimit(1)
+                                            Text(GlobeData.name(s.cc)).font(MMFont.system(14, .medium)).lineLimit(1)
                                             Spacer()
                                             Text(Int(s.value * 1e6).money(cur, compact: true)).font(MMFont.number(14, .regular))
                                         }
@@ -326,6 +334,7 @@ struct GlobeScreen: View {
                         }
                     }
                 }
+                .mmAppear(3)
             }
             .padding(.horizontal, 16).padding(.bottom, 40)
         }
