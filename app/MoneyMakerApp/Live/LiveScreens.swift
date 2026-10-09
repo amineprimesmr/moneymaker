@@ -168,7 +168,11 @@ struct FeedScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Ventes en direct").font(MMFont.system(34, .bold)).tracking(-0.8).padding(.top, 8).mmAppear(0)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Ventes en direct").font(MMFont.system(34, .bold)).tracking(-0.8)
+                    Text(store.selectedProject?.name ?? "Tous les business").font(MMFont.system(13)).foregroundStyle(MMColor.ink3)
+                }
+                .padding(.top, 8).mmAppear(0)
                 ForEach(Array(groups.enumerated()), id: \.element.0) { gi, group in
                     let (day, items) = group
                     MMLabel(text: day).padding(.horizontal, 4).padding(.top, 6).mmAppear(1 + gi)
@@ -192,6 +196,7 @@ struct FeedScreen: View {
         .refreshable { await load() }
         .task { events = store.feed; await load() }
         .onReceive(NotificationCenter.default.publisher(for: .mmLiveEvent)) { _ in Task { await load() } }
+        .onChange(of: store.selectedProjectId) { _, _ in Task { await load() } }
     }
 
     private var groups: [(String, [FeedEvent])] {
@@ -203,7 +208,7 @@ struct FeedScreen: View {
     }
 
     private func load() async {
-        if let e = try? await store.client.feed(limit: 100) { withAnimation(.snappy) { events = e } }
+        if let e = try? await store.client.feed(limit: 100, projectId: store.selectedProjectId) { withAnimation(.snappy) { events = e } }
     }
 }
 

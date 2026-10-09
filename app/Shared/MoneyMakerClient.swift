@@ -44,6 +44,8 @@ struct ProjectSummary: Codable, Identifiable, Hashable {
     var downloads: Int? = nil
     var hasTrials: Bool? = nil
     var revenueByCountry: [String: Int]? = nil
+    /// Icône App Store de l'app du business (512 px), si suivie.
+    var iconUrl: String? = nil
     var id: String { projectId }
 }
 
@@ -88,6 +90,7 @@ struct RankingAlert: Codable, Identifiable, Hashable {
     let own: Bool?
     let projectName: String?
     let at: Double
+    var projectId: String? = nil
 
     var title: String {
         ["NEW_COUNTRY": "Nouveau pays", "TOP_100": "Retour dans le top 100", "TOP_10": "Top 10", "TOP_1": "Numéro 1",

@@ -44,6 +44,59 @@ private struct Channel: Identifiable {
     ]
 }
 
+// MARK: - Icône d'un business
+
+/// Icône App Store du business (coins continus façon iOS), initiale en repli.
+struct ProjectIcon: View {
+    let project: ProjectSummary?
+    var size: CGFloat = 40
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: size * 0.2237, style: .continuous)
+        Group {
+            if let s = project?.iconUrl, let url = URL(string: s) {
+                AsyncImage(url: url, transaction: Transaction(animation: .easeOut(duration: 0.25))) { phase in
+                    if let img = phase.image { img.resizable().scaledToFill() } else { fallback }
+                }
+            } else { fallback }
+        }
+        .frame(width: size, height: size)
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
+    }
+
+    private var fallback: some View {
+        ZStack {
+            Color.white.opacity(0.08)
+            if let p = project {
+                Text(String(p.name.prefix(1)).uppercased()).font(MMFont.system(size * 0.42, .semibold)).foregroundStyle(.white)
+            } else {
+                Image(systemName: "square.stack.3d.up.fill").font(.system(size: size * 0.38, weight: .semibold)).foregroundStyle(.white)
+            }
+        }
+    }
+}
+
+/// Icônes empilées des premiers business — l'avatar de « Tous les business ».
+struct ProjectIconStack: View {
+    let projects: [ProjectSummary]
+    var size: CGFloat = 40
+    var body: some View {
+        let shown = Array(projects.prefix(3))
+        ZStack {
+            if shown.isEmpty { ProjectIcon(project: nil, size: size) }
+            ForEach(Array(shown.enumerated().reversed()), id: \.element.id) { i, p in
+                ProjectIcon(project: p, size: size * 0.78)
+                    .offset(x: CGFloat(i) * size * 0.14, y: CGFloat(i) * -size * 0.08)
+                    .shadow(color: .black.opacity(0.5), radius: 3, x: -1)
+            }
+        }
+        .frame(width: size, height: size, alignment: .bottomLeading)
+    }
+}
+
+// MARK: - Panneau
+
 struct BusinessSideBar: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var setup = SetupCache.shared
@@ -58,22 +111,19 @@ struct BusinessSideBar: View {
             Image("Logo").resizable().scaledToFit().frame(height: 30)
                 .shadow(color: .white.opacity(0.15), radius: 8)
                 .padding(.bottom, 14)
-            Text(o.map { $0.mrrMicros.money($0.currency) } ?? "—")
-                .font(MMFont.number(30)).tracking(-0.8).foregroundStyle(.white)
-            HStack(spacing: 2) {
-                Text("\(projects.count)").fontWeight(.bold)
-                Text("business").foregroundStyle(MMColor.ink2)
-                Text("\(connectedCount(projects))").fontWeight(.bold).padding(.leading, 10)
-                Text("connectés").foregroundStyle(MMColor.ink2)
-            }
-            .font(MMFont.system(14, .medium))
-            .padding(.top, 2)
+            Text("AFFICHER")
+                .font(MMFont.system(11, .medium)).tracking(2.2).foregroundStyle(MMColor.ink3)
 
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 10) {
+                    Button { pick(nil) } label: { allRow(o, projects) }
+                        .buttonStyle(MMPressStyle(scale: 0.97))
                     ForEach(projects) { p in
-                        Button { isExpanded = false; open(p) } label: { row(p) }
+                        Button { pick(p.projectId) } label: { row(p) }
                             .buttonStyle(MMPressStyle(scale: 0.97))
+                            .contextMenu {
+                                Button { isExpanded = false; open(p) } label: { Label("Voir le détail", systemImage: "chart.bar.doc.horizontal") }
+                            }
                     }
                     if projects.isEmpty {
                         Text("Aucun business pour l'instant.").font(MMFont.system(14)).foregroundStyle(MMColor.ink3)
@@ -88,13 +138,11 @@ struct BusinessSideBar: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 18)
+                .padding(.top, 12)
                 .padding(.bottom, 40)
             }
             .scrollIndicators(.hidden)
             .mask { Rectangle().ignoresSafeArea() }
-            .overlay(alignment: .top) { Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.horizontal, -18) }
-            .padding(.top, 16)
             .scrollClipDisabled()
             .refreshable { await setup.load(projects, client: store.client, force: true) }
         }
@@ -102,10 +150,45 @@ struct BusinessSideBar: View {
         .padding([.horizontal, .top], 18)
         .task(id: projects.map(\.projectId)) { await setup.load(projects, client: store.client) }
         .onChange(of: isExpanded) { _, open in if open { Task { await setup.load(projects, client: store.client) } } }
+        .sensoryFeedback(.selection, trigger: store.selectedProjectId)
+    }
+
+    private func pick(_ id: String?) {
+        store.select(id)
+        // Laisse voir la sélection une fraction de seconde, puis referme sur l'Accueil transformé.
+        Task { try? await Task.sleep(for: .milliseconds(180)); isExpanded = false }
     }
 
     private func connectedCount(_ projects: [ProjectSummary]) -> Int {
         projects.filter { (setup.byProject[$0.projectId]?.progress ?? 0) >= 1 }.count
+    }
+
+    private func card<C: View>(selected: Bool, @ViewBuilder _ content: () -> C) -> some View {
+        content()
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white.opacity(selected ? 0.09 : 0.04)))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(selected ? MMColor.accent.opacity(0.85) : Color.white.opacity(0.06), lineWidth: selected ? 1.5 : 1))
+            .contentShape(Rectangle())
+            .animation(.snappy(duration: 0.25), value: selected)
+    }
+
+    private func allRow(_ o: Overview?, _ projects: [ProjectSummary]) -> some View {
+        let selected = store.selectedProjectId == nil
+        return card(selected: selected) {
+            HStack(spacing: 12) {
+                ProjectIconStack(projects: projects, size: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Tous les business").font(MMFont.system(16, .semibold)).foregroundStyle(.white)
+                    Text("\(projects.count) business · \(connectedCount(projects)) connectés").font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
+                }
+                Spacer(minLength: 4)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(o.map { $0.mrrMicros.money($0.currency, compact: true) } ?? "—").font(MMFont.number(15, .regular)).foregroundStyle(.white)
+                    Text("MRR").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
+                }
+            }
+        }
     }
 
     private func row(_ p: ProjectSummary) -> some View {
@@ -115,48 +198,46 @@ struct BusinessSideBar: View {
             return step.done || step.optional != true
         }
         let progress = status?.progress
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.07))
-                    Text(String(p.name.prefix(1)).uppercased()).font(MMFont.system(16, .semibold)).foregroundStyle(.white)
-                    if let progress {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .trim(from: 0, to: progress)
-                            .stroke(progress >= 1 ? MMColor.accent : MMColor.orange, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+        let selected = store.selectedProjectId == p.projectId
+        return card(selected: selected) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    ProjectIcon(project: p, size: 40)
+                        .overlay(alignment: .bottomTrailing) {
+                            if let progress {
+                                Circle().fill(progress >= 1 ? MMColor.accent : MMColor.orange)
+                                    .frame(width: 10, height: 10)
+                                    .overlay(Circle().stroke(Color.black, lineWidth: 2))
+                                    .offset(x: 3, y: 3)
+                            }
+                        }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(p.name).font(MMFont.system(16, .semibold)).foregroundStyle(.white).lineLimit(1)
+                        Text(progress.map { $0 >= 1 ? "Tout est branché" : "Mise en route \(Int($0 * 100)) %" } ?? "Vérification…")
+                            .font(MMFont.system(12)).foregroundStyle(progress.map { $0 >= 1 ? MMColor.accent : MMColor.orange } ?? MMColor.ink3)
+                    }
+                    Spacer(minLength: 4)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(p.mrrMicros.money(p.currency, compact: true)).font(MMFont.number(15, .regular)).foregroundStyle(.white)
+                        Text("\(p.activeSubscriptions) abonnés").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
                     }
                 }
-                .frame(width: 40, height: 40)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(p.name).font(MMFont.system(16, .semibold)).foregroundStyle(.white).lineLimit(1)
-                    Text(progress.map { $0 >= 1 ? "Tout est branché" : "Mise en route \(Int($0 * 100)) %" } ?? "Vérification…")
-                        .font(MMFont.system(12)).foregroundStyle(progress.map { $0 >= 1 ? MMColor.accent : MMColor.orange } ?? MMColor.ink3)
-                }
-                Spacer(minLength: 4)
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(p.mrrMicros.money(p.currency, compact: true)).font(MMFont.number(15, .regular)).foregroundStyle(.white)
-                    Text("\(p.activeSubscriptions) abonnés").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
-                }
-            }
-            if !channels.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(channels) { c in
-                        let done = status?.steps.first(where: { $0.id == c.id })?.done == true
-                        Image(systemName: c.icon)
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(done ? MMColor.accent : MMColor.ink3)
-                            .frame(width: 26, height: 22)
-                            .background((done ? MMColor.accent : Color.white).opacity(done ? 0.14 : 0.06), in: Capsule())
-                            .accessibilityLabel("\(c.label) \(done ? "branché" : "à brancher")")
+                if !channels.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(channels) { c in
+                            let done = status?.steps.first(where: { $0.id == c.id })?.done == true
+                            Image(systemName: c.icon)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(done ? MMColor.accent : MMColor.ink3)
+                                .frame(width: 26, height: 22)
+                                .background((done ? MMColor.accent : Color.white).opacity(done ? 0.14 : 0.06), in: Capsule())
+                                .accessibilityLabel("\(c.label) \(done ? "branché" : "à brancher")")
+                        }
                     }
+                    .padding(.leading, 52)
                 }
-                .padding(.leading, 52)
             }
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white.opacity(0.04)))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.06)))
-        .contentShape(Rectangle())
     }
 
     private func menuButton(_ icon: String, _ title: String, action: @escaping () -> Void) -> some View {

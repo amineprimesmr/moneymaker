@@ -167,17 +167,27 @@ struct OverviewView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     header
                     EnableAlertsCard().mmAppear(1)
-                    if store.today != nil { TodayCard().mmAppear(1) }
-                    if let o = store.overview {
-                        hero(o).mmAppear(2)
-                        stats(o).mmAppear(3)
-                        if !store.alerts.isEmpty { alerts.mmAppear(4) }
-                        businesses(o).mmAppear(5)
-                        Text("Mis à jour \(Date(timeIntervalSince1970: o.generatedAt / 1000).formatted(.relative(presentation: .named)))")
-                            .font(MMFont.system(11)).foregroundStyle(MMColor.ink3).frame(maxWidth: .infinity).padding(.top, 6)
-                    } else {
-                        skeleton
+                    // Tout ce qui suit dépend du business choisi : changer d'identité rejoue la cascade
+                    // avec les nouvelles données — l'Accueil se transforme au lieu d'ouvrir une page.
+                    VStack(alignment: .leading, spacing: 14) {
+                        if store.today != nil { TodayCard().mmAppear(1) }
+                        if let o = store.scoped {
+                            hero(o).mmAppear(2)
+                            stats(o).mmAppear(3)
+                            if !store.scopedAlerts.isEmpty { alerts.mmAppear(4) }
+                            if let p = store.selectedProject {
+                                ProjectInsights(p: p).mmAppear(5)
+                            } else {
+                                businesses(o).mmAppear(5)
+                            }
+                            Text("Mis à jour \(Date(timeIntervalSince1970: o.generatedAt / 1000).formatted(.relative(presentation: .named)))")
+                                .font(MMFont.system(11)).foregroundStyle(MMColor.ink3).frame(maxWidth: .infinity).padding(.top, 6)
+                        } else {
+                            skeleton
+                        }
                     }
+                    .id(store.selectedProjectId ?? "*")
+                    .transition(.opacity)
                     if let e = store.error {
                         Label(e, systemImage: "exclamationmark.triangle").font(MMFont.system(13)).foregroundStyle(MMColor.red)
                     }
@@ -225,11 +235,33 @@ struct OverviewView: View {
             Text(Date().formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
                 .font(MMFont.system(11, .medium)).tracking(2.2).foregroundStyle(MMColor.ink3)
                 .mmAppear(0)
-            Text("Revenus").font(MMFont.system(34, .bold)).tracking(-0.8)
-                .mmAppear(0)
+            scopeTitle.mmAppear(0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 8)
+    }
+
+    /// Titre = périmètre affiché. Toucher ouvre le sélecteur.
+    private var scopeTitle: some View {
+        Button { menuOpen = true } label: {
+            HStack(spacing: 12) {
+                if let p = store.selectedProject {
+                    ProjectIcon(project: p, size: 38)
+                } else {
+                    ProjectIconStack(projects: store.overview?.projects ?? [], size: 38)
+                }
+                Text(store.selectedProject?.name ?? "Tous les business")
+                    .font(MMFont.system(30, .bold)).tracking(-0.8).foregroundStyle(.white)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                    .contentTransition(.opacity)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 13, weight: .bold)).foregroundStyle(MMColor.ink3)
+                    .padding(.top, 4)
+            }
+            .animation(.smooth(duration: 0.35), value: store.selectedProjectId)
+        }
+        .buttonStyle(MMPressStyle(scale: 0.97))
+        .padding(.top, 2)
     }
 
     private func hero(_ o: Overview) -> some View {
@@ -272,7 +304,7 @@ struct OverviewView: View {
             MMLabel(text: "Classements App Store").padding(.horizontal, 4).padding(.top, 8)
             ScrollView(.horizontal) {
                 HStack(spacing: 10) {
-                    ForEach(store.alerts.prefix(8)) { AlertCard(a: $0) }
+                    ForEach(store.scopedAlerts.prefix(8)) { AlertCard(a: $0) }
                 }
                 .scrollTargetLayout()
             }
@@ -292,7 +324,9 @@ struct OverviewView: View {
                     VStack(spacing: 0) {
                         ForEach(Array(o.projects.enumerated()), id: \.element.id) { i, p in
                             if i > 0 { Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 18) }
-                            NavigationLink(value: p) { ProjectRow(p: p) }.buttonStyle(MMPressStyle(scale: 0.98))
+                            Button { store.select(p.projectId) } label: { ProjectRow(p: p) }
+                                .buttonStyle(MMPressStyle(scale: 0.98))
+                                .contextMenu { NavigationLink(value: p) { Label("Voir le détail", systemImage: "chart.bar.doc.horizontal") } }
                         }
                     }
                 }
@@ -332,10 +366,7 @@ struct ProjectRow: View {
     let p: ProjectSummary
     var body: some View {
         HStack(spacing: 14) {
-            Text(String(p.name.prefix(1)).uppercased())
-                .font(MMFont.system(15, .medium)).foregroundStyle(MMColor.ink)
-                .frame(width: 38, height: 38)
-                .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            ProjectIcon(project: p, size: 38)
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.name).font(MMFont.system(15, .medium)).foregroundStyle(MMColor.ink).lineLimit(1)
                 Text("\(p.activeSubscriptions) abonnés · \(p.activeTrials) essais").font(MMFont.system(12)).foregroundStyle(MMColor.ink3)

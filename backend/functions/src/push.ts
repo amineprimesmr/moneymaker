@@ -204,11 +204,12 @@ export function foldToday(
   return t;
 }
 
-export async function todayFor(uid: string, tz: string, currency?: string): Promise<Today> {
+export async function todayFor(uid: string, tz: string, currency?: string, projectId?: string): Promise<Today> {
   const snap = await db.collection("projects").where("members", "array-contains", uid).select("name", "config.currency").get();
-  const cur = currency ?? snap.docs[0]?.get("config.currency") ?? "EUR";
+  const docs = projectId ? snap.docs.filter(d => d.id === projectId) : snap.docs;
+  const cur = currency ?? docs[0]?.get("config.currency") ?? "EUR";
   const dayStart = startOfDay(tz);
-  const rows = await Promise.all(snap.docs.map(async p => {
+  const rows = await Promise.all(docs.map(async p => {
     const [tx, ev] = await Promise.all([
       db.collection(`projects/${p.id}/transactions`).where("at", ">=", dayStart).select("amountMicros", "currency", "at", "kind", "productId", "country", "isSandbox").get(),
       db.collection(`projects/${p.id}/events`).where("at", ">=", dayStart).select("type", "at", "isSandbox", "isTrial").get(),

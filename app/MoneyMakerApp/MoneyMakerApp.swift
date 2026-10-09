@@ -34,6 +34,36 @@ final class Store: ObservableObject {
     @Published var feed: [FeedEvent] = MMShared.cachedFeed
     /// Pulsation déclenchée à chaque nouvel événement reçu en direct.
     @Published var liveTick = 0
+    /// Business affiché sur l'Accueil (nil = tous). Mémorisé entre les lancements.
+    @Published var selectedProjectId: String? = UserDefaults.standard.string(forKey: "mm.selectedProject") {
+        didSet { UserDefaults.standard.set(selectedProjectId, forKey: "mm.selectedProject") }
+    }
+
+    var selectedProject: ProjectSummary? {
+        guard let id = selectedProjectId else { return nil }
+        return overview?.projects.first { $0.projectId == id }
+    }
+
+    /// L'overview ramené au business sélectionné : les cartes de l'Accueil le lisent sans rien savoir de la sélection.
+    var scoped: Overview? {
+        guard let o = overview else { return nil }
+        guard let p = selectedProject else { return o }
+        return Overview(currency: p.currency, periodDays: o.periodDays, mrrMicros: p.mrrMicros, revenueMicros: p.netRevenueMicros,
+                        activeSubscriptions: p.activeSubscriptions, activeTrials: p.activeTrials, newCustomers: p.newCustomers,
+                        projects: [p], generatedAt: o.generatedAt, payingCustomers: p.payingCustomers, downloads: p.downloads, hasTrials: p.hasTrials)
+    }
+
+    var scopedAlerts: [RankingAlert] {
+        guard let p = selectedProject else { return alerts }
+        return alerts.filter { $0.projectId == p.projectId || ($0.projectId == nil && $0.projectName == p.name) }
+    }
+
+    /// Change de business : l'Accueil se transforme, le jour est rechargé pour ce périmètre.
+    func select(_ projectId: String?) {
+        guard projectId != selectedProjectId else { return }
+        withAnimation(.smooth(duration: 0.45)) { selectedProjectId = projectId; today = nil }
+        Task { await refreshLive() }
+    }
 
     var client: MoneyMakerClient { MoneyMakerClient(token: token) }
 
@@ -56,8 +86,9 @@ final class Store: ObservableObject {
         let c = client
         async let o = Result.capture { try await c.overview(days: days) }
         async let a = try? c.alerts()
-        async let t = try? c.today()
-        async let f = try? c.feed()
+        let pid = selectedProjectId
+        async let t = try? c.today(projectId: pid)
+        async let f = try? c.feed(projectId: pid)
         switch await o {
         case .success(let v): overview = v; error = nil
         case .failure(let e): self.error = e.localizedDescription
@@ -69,8 +100,9 @@ final class Store: ObservableObject {
     /// Rafraîchissement léger (jour + flux) après un push ou un retour au premier plan.
     func refreshLive() async {
         let c = client
-        async let t = try? c.today()
-        async let f = try? c.feed()
+        let pid = selectedProjectId
+        async let t = try? c.today(projectId: pid)
+        async let f = try? c.feed(projectId: pid)
         let before = feed.first?.id
         await applyLive(today: t, feed: f)
         if let id = feed.first?.id, id != before { liveTick += 1 }
@@ -81,7 +113,7 @@ final class Store: ObservableObject {
             if let t { today = t }
             if let f { feed = f }
         }
-        if let t { await LiveActivityManager.shared.refresh(with: t) }
+        if let t, selectedProjectId == nil { await LiveActivityManager.shared.refresh(with: t) }
     }
 }
 

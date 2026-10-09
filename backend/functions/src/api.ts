@@ -247,7 +247,13 @@ route("GET", "/v1/overview", async req => {
   const uid = requireUser(await authenticate(req));
   const days = Math.min(365, Math.max(1, Number(req.query.days ?? 30)));
   const snap = await db.collection("projects").where("members", "array-contains", uid).get();
-  const projects = await Promise.all(snap.docs.map(async d => projectMetrics(await getProject(d.id), days)));
+  const projects = await Promise.all(snap.docs.map(async d => {
+    const pr = await getProject(d.id);
+    // Icône du business : la propre app suivie sur l'App Store, sinon l'Apple ID configuré.
+    const appId = (pr.config.appStore?.apps ?? []).find(a => a.own !== false)?.appId ?? pr.config.apple?.appAppleId;
+    const [m, app] = await Promise.all([projectMetrics(pr, days), appId ? db.doc(`apps/${appId}`).get() : Promise.resolve(null)]);
+    return { ...m, iconUrl: (app?.get("icon") as string | undefined) ?? null };
+  }));
   const currency = String(req.query.currency ?? projects[0]?.currency ?? "EUR");
   const { convertMicros } = await import("./engine");
   const sum = (f: (p: typeof projects[number]) => number) => projects.reduce((a, p) => a + convertMicros(f(p), p.currency, currency), 0);
@@ -264,7 +270,7 @@ route("GET", "/v1/overview", async req => {
       projectId: p.projectId, name: p.name, currency: p.currency, mrrMicros: p.mrrMicros, netRevenueMicros: p.netRevenueMicros,
       activeSubscriptions: p.activeSubscriptions, activeTrials: p.activeTrials, newCustomers: p.newCustomers, trialConversionRate: p.trialConversionRate,
       churnRate: p.churnRate, billingIssues: p.billingIssues, payingCustomers: p.payingCustomers, downloads: p.downloads,
-      hasTrials: p.hasTrials, revenueByCountry: p.revenueByCountry, downloadsByDay, revenueByDay,
+      hasTrials: p.hasTrials, revenueByCountry: p.revenueByCountry, iconUrl: p.iconUrl, downloadsByDay, revenueByDay,
     })),
     generatedAt: Date.now(),
   };
@@ -682,7 +688,8 @@ route("GET", "/v1/today", async req => {
   let tz = String(req.query.tz ?? "UTC");
   try { new Intl.DateTimeFormat("en", { timeZone: tz }); } catch { tz = "UTC"; }
   const cur = typeof req.query.currency === "string" && /^[A-Z]{3}$/.test(req.query.currency) ? req.query.currency : undefined;
-  const t = await todayFor(uid, tz, cur);
+  const pid = typeof req.query.projectId === "string" && req.query.projectId ? cleanId(req.query.projectId) : undefined;
+  const t = await todayFor(uid, tz, cur, pid);
   return { ...t, liveActivity: liveActivityState(t), generatedAt: Date.now() };
 });
 
@@ -690,7 +697,8 @@ route("GET", "/v1/feed", async req => {
   const uid = requireUser(await authenticate(req));
   const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 30)));
   const projects = await db.collection("projects").where("members", "array-contains", uid).select("name").get();
-  const all = (await Promise.all(projects.docs.map(async p =>
+  const only = typeof req.query.projectId === "string" && req.query.projectId ? req.query.projectId : null;
+  const all = (await Promise.all(projects.docs.filter(p => !only || p.id === only).map(async p =>
     (await db.collection(`projects/${p.id}/events`).orderBy("at", "desc").limit(limit).select("type", "productId", "priceMicros", "currency", "country", "store", "isSandbox", "isTrial", "periodMonths", "at").get())
       .docs.map(d => ({ id: d.id, projectId: p.id, projectName: p.get("name"), ...d.data() })),
   ))).flat().filter((e: any) => e.type !== "TEST").sort((a: any, b: any) => b.at - a.at).slice(0, limit);
