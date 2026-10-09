@@ -90,7 +90,7 @@ struct GlobeView: View {
         lastTick = now
         guard !dragging else { return }
         // Rotation automatique douce + inertie qui retombe vers elle.
-        let cruise = reduceMotion ? 0 : 0.09
+        let cruise = reduceMotion ? 0 : -0.09   // d'ouest en est, comme la Terre
         velocity += (cruise - velocity) * min(1, dt * 1.6)
         spin += velocity * dt
         // Crans pendant l'inertie, qui s'estompent avec la vitesse (rien pendant la croisière).
@@ -106,13 +106,13 @@ struct GlobeView: View {
                 guard horizontalDrag == true else { return }
                 if dragStart == nil { dragStart = spin; dragging = true; haptics.grab() }
                 let k = 0.0085
-                spin = dragStart! + v.translation.width * k
+                spin = dragStart! - v.translation.width * k   // la surface suit le doigt
                 haptics.rotated(to: spin, speed: abs(v.velocity.width) * k)
             }
             .onEnded { v in
                 defer { horizontalDrag = nil }
                 guard horizontalDrag == true else { return }
-                velocity = max(-6, min(6, v.velocity.width * 0.0085))
+                velocity = max(-6, min(6, -v.velocity.width * 0.0085))
                 dragStart = nil; dragging = false; lastTick = .now
                 haptics.release(speed: abs(velocity))
             }
@@ -150,12 +150,6 @@ struct GlobeView: View {
         if tapSize != size { DispatchQueue.main.async { tapSize = size } }
         let r = min(size.width, size.height) / 2 * 0.86
         let c = CGPoint(x: size.width / 2, y: size.height / 2)
-        let disc = Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2))
-
-        // Corps de la planète : sombre, éclairé en haut à gauche.
-        ctx.fill(disc, with: .radialGradient(Gradient(colors: [Color(white: 0.13), Color(white: 0.04), .black]),
-                                             center: CGPoint(x: c.x - r * 0.35, y: c.y - r * 0.4), startRadius: 0, endRadius: r * 1.5))
-        ctx.stroke(disc, with: .color(.white.opacity(0.07)), lineWidth: 0.5)
 
         // Terres : 6 niveaux d'opacité selon la profondeur → 6 remplissages.
         var buckets = [Path](repeating: Path(), count: 6)
