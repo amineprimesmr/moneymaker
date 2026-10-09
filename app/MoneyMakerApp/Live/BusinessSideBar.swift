@@ -62,7 +62,6 @@ struct ProjectIcon: View {
         }
         .frame(width: size, height: size)
         .clipShape(shape)
-        .overlay(shape.strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
     }
 
     private var fallback: some View {
@@ -97,10 +96,10 @@ struct ProjectIconStack: View {
 
 // MARK: - Éventail 3D des business affichés
 
-/// Les logos des business choisis, alignés à gauche comme des cartes posées en éventail :
-/// le premier devant, les suivants glissés derrière, tous pivotés en perspective.
-/// Relief réel : tranche extrudée (couches décalées), biseau clair en haut, ombre de contact.
-/// Statique — seules les entrées/sorties sont animées quand la sélection change.
+/// Les logos des business choisis, alignés à gauche comme des cartes posées en éventail.
+/// Empilement explicite (ZStack + profondeur fixe) : le premier est devant, chaque suivant
+/// derrière le précédent, le logo mis en avant passe devant tout — jamais d'inversion,
+/// même pendant les animations. Relief : tranche extrudée + biseau, une seule ombre douce.
 struct LogoFan: View {
     let projects: [ProjectSummary]
     var focusId: String? = nil
@@ -111,69 +110,69 @@ struct LogoFan: View {
     var body: some View {
         let shown = Array(projects.prefix(maxShown))
         let extra = projects.count - shown.count
-        HStack(spacing: shown.count > 1 ? -size * 0.12 : 0) {
+        let step = size * 0.88                         // ≈ 12 % de recouvrement
+        let width = size + step * CGFloat(max(shown.count - 1, 0)) + (extra > 0 ? size * 0.9 : 0)
+        ZStack(alignment: .leading) {
             ForEach(Array(shown.enumerated()), id: \.element.id) { i, p in
                 let focused = focusId == p.projectId
                 let dimmed = focusId != nil && !focused
                 Button { onTap(p.projectId) } label: {
                     tile(p)
-                        .rotation3DEffect(.degrees(focused ? -10 : -28), axis: (x: 0.15, y: 1, z: 0), anchor: .leading, perspective: 0.5)
-                        .rotationEffect(.degrees(focused ? 0 : Double(i) * 2.5), anchor: .bottomLeading)
-                        .scaleEffect(focused ? 1.12 : 1, anchor: .bottom)
-                        .offset(y: focused ? -4 : 0)
-                        .opacity(dimmed ? 0.4 : 1)
-                        .saturation(dimmed ? 0.2 : 1)
+                        .rotation3DEffect(.degrees(focused ? -8 : -22), axis: (x: 0.12, y: 1, z: 0), anchor: .leading, perspective: 0.45)
+                        .scaleEffect(focused ? 1.1 : 1, anchor: .bottomLeading)
+                        .offset(y: focused ? -3 : 0)
+                        .opacity(dimmed ? 0.38 : 1)
+                        .saturation(dimmed ? 0.15 : 1)
                 }
                 .buttonStyle(MMPressStyle(scale: 0.92))
                 .accessibilityLabel(p.name)
                 .accessibilityAddTraits(focused ? .isSelected : [])
-                .zIndex(focused ? 200 : Double(100 - i))
-                    .transition(.asymmetric(
-                        insertion: .scale(scale: 0.4, anchor: .leading).combined(with: .opacity),
-                        removal: .scale(scale: 0.6, anchor: .leading).combined(with: .opacity)))
+                .offset(x: step * CGFloat(i))
+                .zIndex(focused ? 1000 : Double(shown.count - i))
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.4, anchor: .leading).combined(with: .opacity),
+                    removal: .scale(scale: 0.6, anchor: .leading).combined(with: .opacity)))
             }
             if extra > 0 {
                 Text("+\(extra)")
                     .font(MMFont.number(14, .regular)).foregroundStyle(.white)
                     .frame(width: size * 0.7, height: size * 0.7)
-                    .background(Color.white.opacity(0.1), in: Circle())
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.15)))
-                    .padding(.leading, size * 0.45)
+                    .background(Color.white.opacity(0.08), in: Circle())
+                    .offset(x: step * CGFloat(shown.count) + size * 0.15)
+                    .zIndex(0)
                     .transition(.scale.combined(with: .opacity))
             }
         }
+        .frame(width: width, height: size * 1.2, alignment: .leading)
         .padding(.leading, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: size * 1.25)
-        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: projects.map(\.projectId))
-        .animation(.spring(response: 0.4, dampingFraction: 0.75), value: focusId)
+        .animation(.spring(response: 0.45, dampingFraction: 0.82), value: projects.map(\.projectId))
+        .animation(.spring(response: 0.38, dampingFraction: 0.78), value: focusId)
         .sensoryFeedback(.selection, trigger: focusId)
     }
 
+    /// Une icône en relief : tranche sombre sous la face, face légèrement bombée, ombre douce.
     private func tile(_ p: ProjectSummary) -> some View {
         let shape = RoundedRectangle(cornerRadius: size * 0.2237, style: .continuous)
         return ZStack {
-            // Tranche : 5 couches de plus en plus sombres, décalées vers le bas-droite.
-            ForEach((1...5).reversed(), id: \.self) { k in
-                shape.fill(Color(white: 0.20 - Double(k) * 0.03))
-                    .offset(x: CGFloat(k) * 0.7, y: CGFloat(k) * 0.9)
+            ForEach((1...4).reversed(), id: \.self) { k in
+                shape.fill(Color(white: 0.16 - Double(k) * 0.03))
+                    .offset(x: CGFloat(k) * 0.6, y: CGFloat(k) * 0.8)
             }
             ProjectIcon(project: p, size: size)
                 .overlay {
-                    // Biseau : lumière en haut, ombre en bas → la face paraît bombée.
                     shape.fill(LinearGradient(stops: [
-                        .init(color: .white.opacity(0.30), location: 0),
-                        .init(color: .white.opacity(0.0), location: 0.35),
-                        .init(color: .black.opacity(0.0), location: 0.65),
-                        .init(color: .black.opacity(0.28), location: 1)], startPoint: .top, endPoint: .bottom))
+                        .init(color: .white.opacity(0.18), location: 0),
+                        .init(color: .clear, location: 0.4),
+                        .init(color: .clear, location: 0.7),
+                        .init(color: .black.opacity(0.22), location: 1)], startPoint: .top, endPoint: .bottom))
                         .blendMode(.overlay)
                 }
-                .overlay(shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.8))
+                .overlay(shape.strokeBorder(Color.black.opacity(0.35), lineWidth: 0.5))
         }
         .frame(width: size, height: size)
         .compositingGroup()
-        .shadow(color: .black.opacity(0.8), radius: 6, x: 3, y: 6)
-        .shadow(color: .black.opacity(0.35), radius: 14, x: 6, y: 12)
+        .shadow(color: .black.opacity(0.55), radius: 5, x: 2, y: 4)
     }
 }
 

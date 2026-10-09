@@ -57,8 +57,25 @@ final class Store: ObservableObject {
 
     /// Touche un logo : met ce business en avant ; re-toucher revient à toute la sélection.
     func focus(_ projectId: String) {
+        lastFocusTap = Date()
         withAnimation(.smooth(duration: 0.55)) { focusId = focusId == projectId ? nil : projectId }
         Task { await refreshLive() }
+    }
+
+    private var lastFocusTap = Date.distantPast
+
+    /// Toucher ailleurs sur l'Accueil : retour à toute la sélection.
+    /// (Ignore le geste qui accompagne le toucher d'un logo.)
+    func clearFocus() {
+        guard focusId != nil else { return }
+        let asked = Date()
+        Task {
+            // Laisse passer l'action d'un logo touché en même temps : elle a la priorité.
+            try? await Task.sleep(for: .milliseconds(60))
+            guard focusId != nil, lastFocusTap < asked.addingTimeInterval(-0.3) else { return }
+            withAnimation(.smooth(duration: 0.55)) { focusId = nil }
+            await refreshLive()
+        }
     }
 
     /// Sélection effective : ids encore existants ; si rien de valable, tous.

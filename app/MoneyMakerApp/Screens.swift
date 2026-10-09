@@ -192,6 +192,7 @@ struct OverviewView: View {
                 .padding(.horizontal, 16).padding(.bottom, 24)
             }
             .scrollIndicators(.hidden)
+            .simultaneousGesture(TapGesture().onEnded { store.clearFocus() })
             .refreshable { await store.refresh() }
             .navigationDestination(for: ProjectSummary.self) { ProjectView(p: $0) }
             .navigationDestination(for: Router.Destination.self) { d in
