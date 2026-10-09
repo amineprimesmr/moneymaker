@@ -167,9 +167,9 @@ struct MoneyMakerClient {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    func overview(days: Int = 30) async throws -> Overview {
+    func overview(days: Int = 28) async throws -> Overview {
         let o: Overview = try await get("overview?days=\(days)")
-        if days == 30, let data = try? JSONEncoder().encode(o) {
+        if days == 28, let data = try? JSONEncoder().encode(o) {
             MM.write("overview", data)
             WidgetCenter.shared.reloadAllTimelines()
         }

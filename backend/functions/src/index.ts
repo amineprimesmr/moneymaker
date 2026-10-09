@@ -120,7 +120,7 @@ export const iconsRefresh = onSchedule({ schedule: "15 6 * * *", timeZone: "UTC"
 
 /** Icône recalculée dès que l'app, le site ou Stripe du business change. */
 export const iconOnConfigChange = onDocumentUpdated({ document: "projects/{pid}", timeoutSeconds: 60 }, async event => {
-  const pick = (x: any) => JSON.stringify([x?.config?.website, x?.config?.apple?.appAppleId, x?.config?.appStore?.apps, x?.health?.stripe]);
+  const pick = (x: any) => JSON.stringify([x?.config?.website, x?.config?.apple, x?.config?.google?.packageName, x?.config?.appStore?.apps, x?.config?.stripe?.enabled]);
   if (pick(event.data?.before.data()) === pick(event.data?.after.data())) return;
   await refreshIcon(await getProject(event.params.pid)).catch(e => console.error("icon", e));
 });

@@ -8,16 +8,23 @@ import SwiftUI
 import UserNotifications
 import WidgetKit
 
-// MARK: - Carte « Aujourd'hui »
+// MARK: - Carte « Revenu » (période au choix, 28 jours par défaut)
 
-struct TodayCard: View {
+struct RevenueCard: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var live = LiveActivityManager.shared
     @State private var selected: Date?
     @State private var pulse = false
 
+    private let periods: [(Int, String)] = [(0, "AUJ."), (7, "7 J"), (28, "28 J"), (90, "90 J"), (365, "1 AN")]
+
     var body: some View {
-        let t = store.today ?? MMShared.cachedToday
+        let o = store.scoped
+        let cur = o?.currency ?? store.today?.currency ?? "EUR"
+        let isToday = store.period == 0
+        let pts = isToday ? todayPoints(store.today) : dailySeries(o?.revenueByDay ?? [:], days: store.period)
+        let point = selected.flatMap { d in pts.min { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) } }
+        let total: Int? = isToday ? store.today?.netMicros : o?.revenueMicros
         MMCard(padding: 20, glow: MMColor.accent) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -25,56 +32,67 @@ struct TodayCard: View {
                         Circle().fill(MMColor.accent).frame(width: 7, height: 7)
                             .shadow(color: MMColor.accent, radius: pulse ? 7 : 2)
                             .scaleEffect(pulse ? 1.25 : 0.9)
-                        Text("AUJOURD'HUI").font(MMFont.system(11, .medium)).tracking(2.2).foregroundStyle(MMColor.ink3)
+                        Text(point == nil ? "REVENU" : point!.date.formatted(isToday ? .dateTime.hour() : .dateTime.day().month(.abbreviated)).uppercased())
+                            .font(MMFont.system(11, .medium)).tracking(2.2).foregroundStyle(MMColor.ink3)
                     }
                     Spacer()
                     Button {
                         Task { live.isRunning ? await live.stop() : await live.start() }
                     } label: {
-                        Label(live.isRunning ? "En direct" : "Suivre en direct", systemImage: live.isRunning ? "dot.radiowaves.left.and.right" : "play.circle")
-                            .font(MMFont.system(12, .medium))
+                        Image(systemName: live.isRunning ? "dot.radiowaves.left.and.right" : "play.circle")
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(live.isRunning ? .black : MMColor.ink)
-                            .padding(.horizontal, 12).padding(.vertical, 7)
-                            .background(live.isRunning ? AnyShapeStyle(MMColor.accent) : AnyShapeStyle(Color.white.opacity(0.08)), in: Capsule())
+                            .frame(width: 32, height: 32)
+                            .background(live.isRunning ? AnyShapeStyle(MMColor.accent) : AnyShapeStyle(Color.white.opacity(0.08)), in: Circle())
                     }
-                    .buttonStyle(MMPressStyle(scale: 0.94))
-                    .sensoryFeedback(.success, trigger: live.isRunning)
+                    .buttonStyle(MMPressStyle(scale: 0.9))
+                    .accessibilityLabel(live.isRunning ? "Arrêter le direct" : "Suivre en direct sur l'écran verrouillé")
                 }
-                if let t {
-                    let pts = points(t)
-                    let p = selected.flatMap { d in pts.min { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) } }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(p.map { Int($0.value * 1e6).money(t.currency) } ?? t.netMicros.money(t.currency))
-                            .font(MMFont.number(52)).tracking(-1.6).lineLimit(1).minimumScaleFactor(0.5)
-                            .contentTransition(.numericText(value: p?.value ?? Double(t.netMicros)))
-                            .animation(.snappy(duration: 0.3), value: p?.value ?? Double(t.netMicros))
-                        Text(p.map { "à \($0.date.formatted(.dateTime.hour()))" } ?? "\(t.sales) ventes · \(t.renewals) renouvellements · \(t.trials) essais")
-                            .font(MMFont.system(13)).foregroundStyle(MMColor.ink2).contentTransition(.numericText())
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(point.map { Int($0.value * 1e6).money(cur) } ?? total.map { $0.money(cur) } ?? "—")
+                        .font(MMFont.number(50, .light)).tracking(-1.6)
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                        .contentTransition(.numericText(value: point?.value ?? Double(total ?? 0)))
+                        .animation(.snappy(duration: 0.3), value: point?.value)
+                    if point == nil && !isToday { MMDelta(value: halfOverHalf(pts)).transition(.opacity) }
+                }
+                Text(subtitle(isToday: isToday, o: o))
+                    .font(MMFont.system(13)).foregroundStyle(MMColor.ink2)
+                    .contentTransition(.numericText())
+                MMGlowChart(points: pts, selection: $selected, showsAxis: !isToday)
+                    .frame(height: 140)
+                    .sensoryFeedback(.selection, trigger: point?.date)
+                MMSegmented(options: periods, selection: Binding(get: { store.period }, set: { store.setPeriod($0) }))
+                if isToday, let l = store.today?.last {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold)).foregroundStyle(MMColor.accent)
+                        Text("+\(l.amountMicros.money(l.currency)) · \(l.projectName)").lineLimit(1)
+                        Spacer()
+                        Text(Date(timeIntervalSince1970: l.at / 1000), style: .relative).monospacedDigit()
                     }
-                    MMGlowChart(points: pts, selection: $selected).frame(height: 110)
-                        .sensoryFeedback(.selection, trigger: p?.date)
-                    if let l = t.last {
-                        HStack(spacing: 8) {
-                            Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold)).foregroundStyle(MMColor.accent)
-                            Text("+\(l.amountMicros.money(l.currency)) · \(l.projectName)").lineLimit(1)
-                            Spacer()
-                            Text(Date(timeIntervalSince1970: l.at / 1000), style: .relative).monospacedDigit()
-                        }
-                        .font(MMFont.system(12)).foregroundStyle(MMColor.ink2)
-                    }
-                } else {
-                    Text("—").font(MMFont.number(52))
+                    .font(MMFont.system(12)).foregroundStyle(MMColor.ink2)
+                    .transition(.opacity)
                 }
             }
+            .animation(.smooth(duration: 0.5), value: store.period)
         }
         .onAppear { withAnimation(.easeInOut(duration: 1.6).repeatForever()) { pulse = true } }
-        .onChange(of: store.liveTick) { _, _ in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { pulse.toggle() }
-        }
+        .onChange(of: store.liveTick) { _, _ in withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { pulse.toggle() } }
         .sensoryFeedback(.impact(weight: .medium), trigger: store.liveTick)
     }
 
-    private func points(_ t: Today) -> [MMPoint] {
+    private func subtitle(isToday: Bool, o: Overview?) -> String {
+        if isToday, let t = store.today {
+            return "\(t.sales) ventes · \(t.renewals) renouvellements · \(t.trials) essais"
+        }
+        guard let o else { return " " }
+        var parts = ["\(o.payingCustomers ?? o.activeSubscriptions) users payants", "\(o.newCustomers) nouveaux clients"]
+        if let dl = o.downloads { parts.insert("\(dl.formatted()) téléchargements", at: 0) }
+        return parts.joined(separator: " · ")
+    }
+
+    private func todayPoints(_ t: Today?) -> [MMPoint] {
+        guard let t else { return [] }
         let start = Date(timeIntervalSince1970: t.dayStart / 1000)
         let hour = max(2, min(24, Int(Date().timeIntervalSince(start) / 3600) + 1))
         return t.hourly.prefix(hour).enumerated().map { MMPoint(date: start.addingTimeInterval(Double($0.offset) * 3600), value: Double($0.element) / 1e6) }
@@ -170,7 +188,7 @@ struct FeedScreen: View {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Ventes en direct").font(MMFont.system(34, .bold)).tracking(-0.8)
-                    Text(store.selectedProject?.name ?? "Tous les business").font(MMFont.system(13)).foregroundStyle(MMColor.ink3)
+                    Text(store.scopeLabel).font(MMFont.system(13)).foregroundStyle(MMColor.ink3)
                 }
                 .padding(.top, 8).mmAppear(0)
                 ForEach(Array(groups.enumerated()), id: \.element.0) { gi, group in
@@ -196,7 +214,7 @@ struct FeedScreen: View {
         .refreshable { await load() }
         .task { events = store.feed; await load() }
         .onReceive(NotificationCenter.default.publisher(for: .mmLiveEvent)) { _ in Task { await load() } }
-        .onChange(of: store.selectedProjectId) { _, _ in Task { await load() } }
+        .onChange(of: store.activeIds) { _, _ in Task { await load() } }
     }
 
     private var groups: [(String, [FeedEvent])] {
@@ -208,7 +226,7 @@ struct FeedScreen: View {
     }
 
     private func load() async {
-        if let e = try? await store.client.feed(limit: 100, projectId: store.selectedProjectId) { withAnimation(.snappy) { events = e } }
+        if let e = try? await store.client.feed(limit: 100, projectIds: store.scopeIds) { withAnimation(.snappy) { events = e } }
     }
 }
 

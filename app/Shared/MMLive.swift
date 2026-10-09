@@ -159,17 +159,17 @@ extension MoneyMakerClient {
 
     /// Revenus du jour dans le fuseau de l'appareil. Mis en cache pour les widgets.
     /// Revenus du jour (tous les business, ou un seul). Seule la vue « tous » alimente le cache des widgets.
-    func today(projectId: String? = nil) async throws -> Today {
+    func today(projectIds: [String]? = nil) async throws -> Today {
         let tz = TimeZone.current.identifier.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "UTC"
-        let t: Today = try await get("today?tz=\(tz)" + (projectId.map { "&projectId=\($0)" } ?? ""))
-        if projectId == nil, let data = try? JSONEncoder().encode(t) { MM.write("today", data) }
+        let t: Today = try await get("today?tz=\(tz)" + (projectIds.map { "&projectIds=\($0.joined(separator: ","))" } ?? ""))
+        if projectIds == nil, let data = try? JSONEncoder().encode(t) { MM.write("today", data) }
         return t
     }
 
-    func feed(limit: Int = 30, projectId: String? = nil) async throws -> [FeedEvent] {
+    func feed(limit: Int = 30, projectIds: [String]? = nil) async throws -> [FeedEvent] {
         struct R: Decodable { let events: [FeedEvent] }
-        let r: R = try await get("feed?limit=\(limit)" + (projectId.map { "&projectId=\($0)" } ?? ""))
-        if projectId == nil, let data = try? JSONEncoder().encode(Array(r.events.prefix(20))) { MM.write("feed", data) }
+        let r: R = try await get("feed?limit=\(limit)" + (projectIds.map { "&projectIds=\($0.joined(separator: ","))" } ?? ""))
+        if projectIds == nil, let data = try? JSONEncoder().encode(Array(r.events.prefix(20))) { MM.write("feed", data) }
         return r.events
     }
 

@@ -257,11 +257,10 @@ route("GET", "/v1/overview", async req => {
   const snap = await db.collection("projects").where("members", "array-contains", uid).get();
   const projects = await Promise.all(snap.docs.map(async d => {
     const pr = await getProject(d.id);
-    // Icône du business : la propre app suivie sur l'App Store, sinon l'Apple ID configuré.
-    const appId = (pr.config.appStore?.apps ?? []).find(a => a.own !== false)?.appId ?? pr.config.apple?.appAppleId;
-    const [m, app] = await Promise.all([projectMetrics(pr, days), appId ? db.doc(`apps/${appId}`).get() : Promise.resolve(null)]);
-    // App Store d'abord ; sinon l'icône résolue et mémorisée (site web, favicon) par icons.ts.
-    return { ...m, iconUrl: (app?.get("icon") as string | undefined) ?? (d.get("iconUrl") as string | undefined) ?? null };
+    const m = await projectMetrics(pr, days);
+    // Logo hébergé par MoneyMaker (icons.ts) : toujours un PNG 256 px lisible par l'app, versionné.
+    const v = d.get("iconVersion") as number | null | undefined;
+    return { ...m, iconUrl: v ? `${PUBLIC_BASE}/v1/icons/${d.id}?v=${v}` : null };
   }));
   const currency = String(req.query.currency ?? projects[0]?.currency ?? "EUR");
   const { convertMicros } = await import("./engine");
@@ -698,14 +697,42 @@ route("POST", "/v1/projects/:pid/icon/refresh", async (req, _res, [pid]) => {
   return refreshIcon(project);
 });
 
+/** Logo personnalisé (PNG/JPEG/WebP/SVG, base64 ou data URL) ; `null` revient à la détection automatique. */
+route("PUT", "/v1/projects/:pid/icon", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const { setCustomIcon, refreshIcon } = await import("./icons");
+  if (req.body?.image === null) {
+    await db.doc(`iconCache/${project.id}`).delete();
+    return refreshIcon(project);
+  }
+  if (typeof req.body?.image !== "string") throw new HttpError(400, "image_required");
+  try { return await setCustomIcon(project.id, req.body.image); } catch (e) { throw new HttpError(400, "invalid_image", (e as Error).message); }
+});
+
+/** Sert le logo hébergé (public : c'est le logo affiché d'une app, rien de confidentiel). */
+route("GET", "/v1/icons/:pid", async (req, res, [pid]) => {
+  const d = await db.doc(`iconCache/${cleanId(pid)}`).get();
+  const b64 = d.get("png") as string | undefined;
+  if (!b64) throw new HttpError(404, "icon_not_found");
+  res.set("Content-Type", "image/png");
+  res.set("Cache-Control", "public, max-age=86400, s-maxage=604800, immutable");
+  res.status(200).send(Buffer.from(b64, "base64"));
+});
+
+/** `projectIds=a,b` (ou `projectId=a`) : restreint aux business choisis ; absent = tous. */
+function projectIdsParam(req: Request): string[] | undefined {
+  const raw = [req.query.projectIds, req.query.projectId].filter(v => typeof v === "string" && v).join(",");
+  const ids = raw.split(",").map(s => s.trim()).filter(Boolean).slice(0, 50).map(s => cleanId(s));
+  return ids.length ? ids : undefined;
+}
+
 route("GET", "/v1/today", async req => {
   const uid = requireUser(await authenticate(req));
   const { todayFor, liveActivityState } = await import("./push");
   let tz = String(req.query.tz ?? "UTC");
   try { new Intl.DateTimeFormat("en", { timeZone: tz }); } catch { tz = "UTC"; }
   const cur = typeof req.query.currency === "string" && /^[A-Z]{3}$/.test(req.query.currency) ? req.query.currency : undefined;
-  const pid = typeof req.query.projectId === "string" && req.query.projectId ? cleanId(req.query.projectId) : undefined;
-  const t = await todayFor(uid, tz, cur, pid);
+  const t = await todayFor(uid, tz, cur, projectIdsParam(req));
   return { ...t, liveActivity: liveActivityState(t), generatedAt: Date.now() };
 });
 
@@ -713,8 +740,8 @@ route("GET", "/v1/feed", async req => {
   const uid = requireUser(await authenticate(req));
   const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 30)));
   const projects = await db.collection("projects").where("members", "array-contains", uid).select("name").get();
-  const only = typeof req.query.projectId === "string" && req.query.projectId ? req.query.projectId : null;
-  const all = (await Promise.all(projects.docs.filter(p => !only || p.id === only).map(async p =>
+  const only = projectIdsParam(req);
+  const all = (await Promise.all(projects.docs.filter(p => !only?.length || only.includes(p.id)).map(async p =>
     (await db.collection(`projects/${p.id}/events`).orderBy("at", "desc").limit(limit).select("type", "productId", "priceMicros", "currency", "country", "store", "isSandbox", "isTrial", "periodMonths", "at").get())
       .docs.map(d => ({ id: d.id, projectId: p.id, projectName: p.get("name"), ...d.data() })),
   ))).flat().filter((e: any) => e.type !== "TEST").sort((a: any, b: any) => b.at - a.at).slice(0, limit);

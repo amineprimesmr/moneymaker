@@ -93,5 +93,17 @@ test("icons: apple-touch-icon and dark variant win, svg/ico ignored", () => {
   const b = `<link rel="icon" type="image/png" href="/assets/light.png" media="(prefers-color-scheme: light)"><link rel="icon" type="image/png" href="/assets/dark.png" media="(prefers-color-scheme: dark)">`;
   assert.equal(pickIconFromHtml(b, "https://usev2.xyz/"), "https://usev2.xyz/assets/dark.png");
   const c = `<link rel="shortcut icon" href="/favicon.ico?v=3"/><link rel="icon" href="/favicon.svg?v=3" type="image/svg+xml"/><link rel="icon" href="/favicon-32.png?v=3" sizes="32x32" type="image/png"/>`;
-  assert.equal(pickIconFromHtml(c, "https://scrollshow.io"), "https://scrollshow.io/favicon-32.png?v=3");
+  assert.equal(pickIconFromHtml(c, "https://scrollshow.io"), "https://scrollshow.io/favicon.svg?v=3");
+});
+
+test("icons: normalised to a 256 px PNG from any image", async () => {
+  const sharp = require("sharp");
+  const { fetchIcon } = require("../lib/icons");
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><circle cx="32" cy="32" r="30" fill="#0f0"/></svg>');
+  const http = require("http");
+  const server = http.createServer((q, r) => { r.setHeader("content-type", "image/svg+xml"); r.end(svg); }).listen(0);
+  const png = await fetchIcon({ url: `http://127.0.0.1:${server.address().port}/i.svg`, source: "website" });
+  server.close();
+  const meta = await sharp(png).metadata();
+  assert.equal(meta.format, "png"); assert.equal(meta.width, 256); assert.equal(meta.height, 256);
 });

@@ -169,25 +169,22 @@ struct OverviewView: View {
                     EnableAlertsCard().mmAppear(1)
                     // Tout ce qui suit dépend du business choisi : changer d'identité rejoue la cascade
                     // avec les nouvelles données — l'Accueil se transforme au lieu d'ouvrir une page.
-                    VStack(alignment: .leading, spacing: 14) {
-                        if store.today != nil { TodayCard().mmAppear(1) }
-                        if let o = store.scoped {
-                            hero(o).mmAppear(2)
-                            stats(o).mmAppear(3)
-                            if !store.scopedAlerts.isEmpty { alerts.mmAppear(4) }
-                            if let p = store.selectedProject {
-                                ProjectInsights(p: p).mmAppear(5)
-                            } else {
-                                businesses(o).mmAppear(5)
-                            }
-                            Text("Mis à jour \(Date(timeIntervalSince1970: o.generatedAt / 1000).formatted(.relative(presentation: .named)))")
-                                .font(MMFont.system(11)).foregroundStyle(MMColor.ink3).frame(maxWidth: .infinity).padding(.top, 6)
+                    if let o = store.scoped {
+                        let scope = store.activeIds
+                        RevenueCard().mmAppear(1).mmDataSwap(scope)
+                        mrrCard(o).mmAppear(2).mmDataSwap(scope, delay: 0.04)
+                        stats(o).mmAppear(3).mmDataSwap(scope, delay: 0.08)
+                        if !store.scopedAlerts.isEmpty { alerts.mmAppear(4).mmDataSwap(scope, delay: 0.12) }
+                        if let p = store.selectedProject {
+                            ProjectInsights(p: p).mmAppear(5).transition(.opacity.combined(with: .move(edge: .bottom)))
                         } else {
-                            skeleton
+                            businesses(o).mmAppear(5).mmDataSwap(scope, delay: 0.16)
                         }
+                        Text("Mis à jour \(Date(timeIntervalSince1970: o.generatedAt / 1000).formatted(.relative(presentation: .named)))")
+                            .font(MMFont.system(11)).foregroundStyle(MMColor.ink3).frame(maxWidth: .infinity).padding(.top, 6)
+                    } else {
+                        skeleton
                     }
-                    .id(store.selectedProjectId ?? "*")
-                    .transition(.opacity)
                     if let e = store.error {
                         Label(e, systemImage: "exclamationmark.triangle").font(MMFont.system(13)).foregroundStyle(MMColor.red)
                     }
@@ -245,12 +242,12 @@ struct OverviewView: View {
     private var scopeTitle: some View {
         Button { menuOpen = true } label: {
             HStack(spacing: 12) {
-                if let p = store.selectedProject {
-                    ProjectIcon(project: p, size: 38)
+                if store.selectedProjects.count == 1 {
+                    ProjectIcon(project: store.selectedProjects[0], size: 38).transition(.scale.combined(with: .opacity))
                 } else {
-                    ProjectIconStack(projects: store.overview?.projects ?? [], size: 38)
+                    ProjectIconStack(projects: store.selectedProjects, size: 38).transition(.scale.combined(with: .opacity))
                 }
-                Text(store.selectedProject?.name ?? "Tous les business")
+                Text(store.scopeLabel)
                     .font(MMFont.system(30, .bold)).tracking(-0.8).foregroundStyle(.white)
                     .lineLimit(1).minimumScaleFactor(0.6)
                     .contentTransition(.opacity)
@@ -258,32 +255,34 @@ struct OverviewView: View {
                     .font(.system(size: 13, weight: .bold)).foregroundStyle(MMColor.ink3)
                     .padding(.top, 4)
             }
-            .animation(.smooth(duration: 0.35), value: store.selectedProjectId)
+            .animation(.smooth(duration: 0.45), value: store.activeIds)
         }
         .buttonStyle(MMPressStyle(scale: 0.97))
         .padding(.top, 2)
     }
 
-    private func hero(_ o: Overview) -> some View {
-        let pts = dailySeries(o.revenueByDay, days: min(o.periodDays, 90))
-        let point = selected.flatMap { d in pts.min { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) } }
-        return MMCard(padding: 20, glow: MMColor.accent) {
-            VStack(alignment: .leading, spacing: 16) {
-                MMLabel(text: point == nil ? "MRR" : "Revenu du jour",
-                        trailing: point.map { $0.date.formatted(.dateTime.day().month(.abbreviated)) } ?? "ARR \((o.mrrMicros * 12).money(o.currency, compact: true))")
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(point.map { Int($0.value * 1e6).money(o.currency) } ?? o.mrrMicros.money(o.currency))
-                        .font(MMFont.number(52, .light)).tracking(-1.6)
+    /// MRR : la valeur récurrente, sans période — chiffre qui roule quand la sélection change.
+    private func mrrCard(_ o: Overview) -> some View {
+        MMCard(padding: 20) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 6) {
+                    MMLabel(text: "MRR")
+                    Text(o.mrrMicros.money(o.currency))
+                        .font(MMFont.number(40, .light)).tracking(-1.2)
                         .lineLimit(1).minimumScaleFactor(0.5)
-                        .contentTransition(.numericText(value: point?.value ?? Double(o.mrrMicros)))
-                        .animation(.snappy(duration: 0.25), value: point?.value)
-                    if point == nil { MMDelta(value: halfOverHalf(pts)) }
+                        .contentTransition(.numericText(value: Double(o.mrrMicros)))
+                    Text("ARR \((o.mrrMicros * 12).money(o.currency, compact: true)) · \(o.activeSubscriptions) abonnés actifs")
+                        .font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
+                        .contentTransition(.numericText())
                 }
-                MMGlowChart(points: pts, selection: $selected, showsAxis: true)
-                    .frame(height: 170)
-                    .sensoryFeedback(.selection, trigger: point?.date)
-                MMSegmented(options: [(7, "7 J"), (30, "30 J"), (90, "90 J"), (365, "1 AN")], selection: $store.days)
-                    .onChange(of: store.days) { _, _ in Task { await store.refresh() } }
+                Spacer(minLength: 0)
+                MMRing(value: store.mrrGoalProgress(o) ?? 0, color: MMColor.accent, lineWidth: 5)
+                    .frame(width: 54, height: 54)
+                    .overlay {
+                        Text(store.mrrGoalProgress(o).map { "\(Int(min(1, $0) * 100))%" } ?? "—")
+                            .font(MMFont.number(12, .regular)).foregroundStyle(MMColor.ink2)
+                    }
+                    .opacity(store.mrrGoalProgress(o) == nil ? 0 : 1)
             }
         }
     }
@@ -324,7 +323,7 @@ struct OverviewView: View {
                     VStack(spacing: 0) {
                         ForEach(Array(o.projects.enumerated()), id: \.element.id) { i, p in
                             if i > 0 { Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 18) }
-                            Button { store.select(p.projectId) } label: { ProjectRow(p: p) }
+                            Button { store.only(p.projectId) } label: { ProjectRow(p: p) }
                                 .buttonStyle(MMPressStyle(scale: 0.98))
                                 .contextMenu { NavigationLink(value: p) { Label("Voir le détail", systemImage: "chart.bar.doc.horizontal") } }
                         }

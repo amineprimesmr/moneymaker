@@ -111,15 +111,21 @@ struct BusinessSideBar: View {
             Image("Logo").resizable().scaledToFit().frame(height: 30)
                 .shadow(color: .white.opacity(0.15), radius: 8)
                 .padding(.bottom, 14)
-            Text("AFFICHER")
-                .font(MMFont.system(11, .medium)).tracking(2.2).foregroundStyle(MMColor.ink3)
+            HStack {
+                Text("AFFICHER")
+                    .font(MMFont.system(11, .medium)).tracking(2.2).foregroundStyle(MMColor.ink3)
+                Spacer()
+                Text("\(store.activeIds.count) sur \(projects.count)")
+                    .font(MMFont.system(12, .medium)).foregroundStyle(MMColor.ink3)
+                    .contentTransition(.numericText())
+            }
+            Text(summary(projects)).font(MMFont.system(12)).foregroundStyle(MMColor.ink3).lineLimit(1).minimumScaleFactor(0.8)
+                .padding(.top, 2)
 
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Button { pick(nil) } label: { allRow(o, projects) }
-                        .buttonStyle(MMPressStyle(scale: 0.97))
                     ForEach(projects) { p in
-                        Button { pick(p.projectId) } label: { row(p) }
+                        Button { toggle(p.projectId) } label: { row(p) }
                             .buttonStyle(MMPressStyle(scale: 0.97))
                             .contextMenu {
                                 Button { isExpanded = false; open(p) } label: { Label("Voir le détail", systemImage: "chart.bar.doc.horizontal") }
@@ -150,13 +156,21 @@ struct BusinessSideBar: View {
         .padding([.horizontal, .top], 18)
         .task(id: projects.map(\.projectId)) { await setup.load(projects, client: store.client) }
         .onChange(of: isExpanded) { _, open in if open { Task { await setup.load(projects, client: store.client) } } }
-        .sensoryFeedback(.selection, trigger: store.selectedProjectId)
+        .sensoryFeedback(.selection, trigger: store.activeIds)
+        .sensoryFeedback(.error, trigger: refused)
     }
 
-    private func pick(_ id: String?) {
-        store.select(id)
-        // Laisse voir la sélection une fraction de seconde, puis referme sur l'Accueil transformé.
-        Task { try? await Task.sleep(for: .milliseconds(180)); isExpanded = false }
+    @State private var refused = 0
+    @State private var shake: String?
+
+    /// Sélection multiple : le menu reste ouvert, l'Accueil se transforme derrière en direct.
+    /// Le dernier business coché ne peut pas être retiré (vibration d'erreur + petite secousse).
+    private func toggle(_ id: String) {
+        if !store.toggle(id) {
+            refused += 1
+            withAnimation(.spring(response: 0.18, dampingFraction: 0.3)) { shake = id }
+            Task { try? await Task.sleep(for: .milliseconds(260)); withAnimation(.spring) { shake = nil } }
+        }
     }
 
     /// « Connecté » = au moins une source de revenus branchée et validée, ou un achat déjà reçu.
@@ -188,24 +202,6 @@ struct BusinessSideBar: View {
             .animation(.snappy(duration: 0.25), value: selected)
     }
 
-    private func allRow(_ o: Overview?, _ projects: [ProjectSummary]) -> some View {
-        let selected = store.selectedProjectId == nil
-        return card(selected: selected) {
-            HStack(spacing: 12) {
-                ProjectIconStack(projects: projects, size: 40)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Tous les business").font(MMFont.system(16, .semibold)).foregroundStyle(.white)
-                    Text(summary(projects)).font(MMFont.system(12)).foregroundStyle(MMColor.ink3).lineLimit(1).minimumScaleFactor(0.8)
-                }
-                Spacer(minLength: 4)
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(o.map { $0.mrrMicros.money($0.currency, compact: true) } ?? "—").font(MMFont.number(15, .regular)).foregroundStyle(.white)
-                    Text("MRR").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
-                }
-            }
-        }
-    }
-
     private func row(_ p: ProjectSummary) -> some View {
         let status = setup.byProject[p.projectId]
         let channels = Channel.all.filter { c in
@@ -213,11 +209,17 @@ struct BusinessSideBar: View {
             return step.done || step.optional != true
         }
         let progress = status?.progress
-        let selected = store.selectedProjectId == p.projectId
+        let selected = store.activeIds.contains(p.projectId)
         return card(selected: selected) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 12) {
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(selected ? MMColor.accent : Color.white.opacity(0.3))
+                        .contentTransition(.symbolEffect(.replace))
                     ProjectIcon(project: p, size: 40)
+                        .opacity(selected ? 1 : 0.45)
+                        .saturation(selected ? 1 : 0)
                         .overlay(alignment: .bottomTrailing) {
                             if let progress {
                                 Circle().fill(progress >= 1 ? MMColor.accent : MMColor.orange)
@@ -249,10 +251,11 @@ struct BusinessSideBar: View {
                                 .accessibilityLabel("\(c.label) \(done ? "branché" : "à brancher")")
                         }
                     }
-                    .padding(.leading, 52)
+                    .padding(.leading, 84)
                 }
             }
         }
+        .offset(x: shake == p.projectId ? 8 : 0)
     }
 
     private func menuButton(_ icon: String, _ title: String, action: @escaping () -> Void) -> some View {

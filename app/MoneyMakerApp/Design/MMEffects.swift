@@ -250,3 +250,34 @@ struct MMStarfield: View {
         mutating func unit() -> Double { Double(next() >> 11) * (1.0 / 9_007_199_254_740_992.0) }
     }
 }
+
+
+// MARK: - Changement de données
+
+/// Quand le périmètre change : la carte « respire » (léger flou + creux d'opacité) pendant que
+/// chiffres et courbes se transforment en place — rien n'est reconstruit.
+private struct DataSwap<T: Equatable>: ViewModifier {
+    let trigger: T
+    var delay: Double = 0
+    @State private var dip = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: dip ? 5 : 0)
+            .opacity(dip ? 0.55 : 1)
+            .scaleEffect(dip ? 0.985 : 1)
+            .onChange(of: trigger) { _, _ in
+                guard !reduceMotion else { return }
+                Task {
+                    try? await Task.sleep(for: .seconds(delay))
+                    withAnimation(.easeOut(duration: 0.14)) { dip = true }
+                    try? await Task.sleep(for: .milliseconds(150))
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.86)) { dip = false }
+                }
+            }
+    }
+}
+
+extension View {
+    func mmDataSwap<T: Equatable>(_ trigger: T, delay: Double = 0) -> some View { modifier(DataSwap(trigger: trigger, delay: delay)) }
+}

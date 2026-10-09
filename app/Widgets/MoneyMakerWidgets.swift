@@ -45,7 +45,7 @@ struct Provider: AppIntentTimelineProvider {
 
     func timeline(for configuration: MRRWidgetIntent, in context: Context) async -> Timeline<Entry> {
         let client = MoneyMakerClient.stored
-        let fresh = try? await client.overview(days: 30)
+        let fresh = try? await client.overview(days: 28)
         let entry = Entry(date: .now, slice: MRRSlice(fresh ?? MoneyMakerClient.cachedOverview, projectId: configuration.project?.id),
                           goal: configuration.goal ?? MMShared.mrrGoal, signedIn: client.token != nil)
         return Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(15 * 60)))
@@ -88,7 +88,7 @@ struct WidgetBody: View {
         if !entry.signedIn {
             SignedOutView()
         } else if let o = entry.slice {
-            let pts = dailySeries(o.byDay, days: family == .systemLarge ? 30 : 14)
+            let pts = dailySeries(o.byDay, days: family == .systemLarge ? 28 : 14)
             let goalMicros = entry.goal.map { $0 * 1_000_000 }
             let progress = goalMicros.map { Double(o.mrrMicros) / Double(max($0, 1)) }
             switch family {
@@ -130,7 +130,7 @@ struct WidgetBody: View {
                         Spacer()
                         VStack(alignment: .trailing, spacing: 4) {
                             MMDelta(value: halfOverHalf(pts))
-                            Text("30 j · \(o.revenueMicros.money(o.currency, compact: true))").font(MMFont.system(11)).foregroundStyle(MMColor.ink2)
+                            Text("28 j · \(o.revenueMicros.money(o.currency, compact: true))").font(MMFont.system(11)).foregroundStyle(MMColor.ink2)
                             Text("\(o.subscribers) abonnés").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
                         }
                     }

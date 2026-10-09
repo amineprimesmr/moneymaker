@@ -27,42 +27,96 @@ final class Store: ObservableObject {
     @Published var token: String? = MoneyMakerClient.stored.token
     @Published var overview: Overview? = MoneyMakerClient.cachedOverview
     @Published var alerts: [RankingAlert] = MoneyMakerClient.cachedAlerts
-    @Published var days = 30
+    @Published var days = max(7, UserDefaults.standard.object(forKey: "mm.period") as? Int ?? 28)
     @Published var error: String?
     @Published var loading = false
     @Published var today: Today? = MMShared.cachedToday
     @Published var feed: [FeedEvent] = MMShared.cachedFeed
     /// Pulsation déclenchée à chaque nouvel événement reçu en direct.
     @Published var liveTick = 0
-    /// Business affiché sur l'Accueil (nil = tous). Mémorisé entre les lancements.
-    @Published var selectedProjectId: String? = UserDefaults.standard.string(forKey: "mm.selectedProject") {
-        didSet { UserDefaults.standard.set(selectedProjectId, forKey: "mm.selectedProject") }
+    /// Business affichés (sélection multiple, au moins un). Vide = jamais choisi → tous. Mémorisé.
+    @Published var selectedIds: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "mm.selectedProjects") ?? []) {
+        didSet { UserDefaults.standard.set(Array(selectedIds), forKey: "mm.selectedProjects") }
+    }
+    /// Période de l'Accueil : 0 = aujourd'hui, sinon nombre de jours (28 par défaut).
+    @Published var period: Int = UserDefaults.standard.object(forKey: "mm.period") as? Int ?? 28 {
+        didSet { UserDefaults.standard.set(period, forKey: "mm.period") }
     }
 
-    var selectedProject: ProjectSummary? {
-        guard let id = selectedProjectId else { return nil }
-        return overview?.projects.first { $0.projectId == id }
-    }
+    var allProjects: [ProjectSummary] { overview?.projects ?? [] }
 
-    /// L'overview ramené au business sélectionné : les cartes de l'Accueil le lisent sans rien savoir de la sélection.
+    /// Sélection effective : ids encore existants ; si rien de valable, tous.
+    var activeIds: Set<String> {
+        let valid = selectedIds.intersection(allProjects.map(\.projectId))
+        return valid.isEmpty ? Set(allProjects.map(\.projectId)) : valid
+    }
+    var isAll: Bool { activeIds.count == allProjects.count }
+    var selectedProjects: [ProjectSummary] { allProjects.filter { activeIds.contains($0.projectId) } }
+    /// Un seul business choisi (bloc dédié sur l'Accueil).
+    var selectedProject: ProjectSummary? { selectedProjects.count == 1 && allProjects.count > 1 ? selectedProjects.first : (allProjects.count == 1 ? allProjects.first : nil) }
+    /// Ids à transmettre au serveur (nil = tous).
+    var scopeIds: [String]? { isAll ? nil : Array(activeIds).sorted() }
+
+    /// L'overview agrégé sur les business choisis : les cartes de l'Accueil le lisent sans connaître la sélection.
     var scoped: Overview? {
         guard let o = overview else { return nil }
-        guard let p = selectedProject else { return o }
-        return Overview(currency: p.currency, periodDays: o.periodDays, mrrMicros: p.mrrMicros, revenueMicros: p.netRevenueMicros,
-                        activeSubscriptions: p.activeSubscriptions, activeTrials: p.activeTrials, newCustomers: p.newCustomers,
-                        projects: [p], generatedAt: o.generatedAt, payingCustomers: p.payingCustomers, downloads: p.downloads, hasTrials: p.hasTrials)
+        if isAll { return o }
+        let ps = selectedProjects
+        let dl = ps.compactMap(\.downloads)
+        return Overview(currency: ps.first?.currency ?? o.currency, periodDays: o.periodDays,
+                        mrrMicros: ps.reduce(0) { $0 + $1.mrrMicros }, revenueMicros: ps.reduce(0) { $0 + $1.netRevenueMicros },
+                        activeSubscriptions: ps.reduce(0) { $0 + $1.activeSubscriptions }, activeTrials: ps.reduce(0) { $0 + $1.activeTrials },
+                        newCustomers: ps.reduce(0) { $0 + $1.newCustomers }, projects: ps, generatedAt: o.generatedAt,
+                        payingCustomers: ps.reduce(0) { $0 + ($1.payingCustomers ?? 0) },
+                        downloads: dl.isEmpty ? nil : dl.reduce(0, +), hasTrials: ps.contains { $0.hasTrials ?? ($0.activeTrials > 0) })
     }
 
     var scopedAlerts: [RankingAlert] {
-        guard let p = selectedProject else { return alerts }
-        return alerts.filter { $0.projectId == p.projectId || ($0.projectId == nil && $0.projectName == p.name) }
+        guard !isAll else { return alerts }
+        let ids = activeIds, names = Set(selectedProjects.map(\.name))
+        return alerts.filter { a in a.projectId.map(ids.contains) ?? names.contains(a.projectName ?? "") }
     }
 
-    /// Change de business : l'Accueil se transforme, le jour est rechargé pour ce périmètre.
-    func select(_ projectId: String?) {
-        guard projectId != selectedProjectId else { return }
-        withAnimation(.smooth(duration: 0.45)) { selectedProjectId = projectId; today = nil }
+    /// Progression vers l'objectif de MRR (réglé dans Réglages → Widgets), nil s'il n'y en a pas.
+    func mrrGoalProgress(_ o: Overview) -> Double? {
+        guard let g = MMShared.mrrGoal, g > 0 else { return nil }
+        return Double(o.mrrMicros) / Double(g * 1_000_000)
+    }
+
+    /// « Tous les business », « V2 », « V2 + 10K Design », « 3 business ».
+    var scopeLabel: String {
+        if isAll { return allProjects.count > 1 ? "Tous les business" : (allProjects.first?.name ?? "MoneyMaker") }
+        let ps = selectedProjects
+        if ps.count == 1 { return ps[0].name }
+        if ps.count == 2 { return "\(ps[0].name) + \(ps[1].name)" }
+        return "\(ps.count) business"
+    }
+
+    /// Coche / décoche un business. Refuse de retirer le dernier (retourne false).
+    @discardableResult
+    func toggle(_ projectId: String) -> Bool {
+        var next = activeIds
+        if next.contains(projectId) {
+            guard next.count > 1 else { return false }
+            next.remove(projectId)
+        } else {
+            next.insert(projectId)
+        }
+        withAnimation(.smooth(duration: 0.55)) { selectedIds = next }
         Task { await refreshLive() }
+        return true
+    }
+
+    /// Un seul business (raccourcis : liste de l'Accueil, notifications).
+    func only(_ projectId: String) {
+        withAnimation(.smooth(duration: 0.55)) { selectedIds = [projectId] }
+        Task { await refreshLive() }
+    }
+
+    func setPeriod(_ p: Int) {
+        guard p != period else { return }
+        withAnimation(.smooth(duration: 0.5)) { period = p }
+        if p > 0 && p != days { days = p; Task { await refresh() } }
     }
 
     var client: MoneyMakerClient { MoneyMakerClient(token: token) }
@@ -86,9 +140,9 @@ final class Store: ObservableObject {
         let c = client
         async let o = Result.capture { try await c.overview(days: days) }
         async let a = try? c.alerts()
-        let pid = selectedProjectId
-        async let t = try? c.today(projectId: pid)
-        async let f = try? c.feed(projectId: pid)
+        let ids = scopeIds
+        async let t = try? c.today(projectIds: ids)
+        async let f = try? c.feed(projectIds: ids)
         switch await o {
         case .success(let v): overview = v; error = nil
         case .failure(let e): self.error = e.localizedDescription
@@ -100,20 +154,20 @@ final class Store: ObservableObject {
     /// Rafraîchissement léger (jour + flux) après un push ou un retour au premier plan.
     func refreshLive() async {
         let c = client
-        let pid = selectedProjectId
-        async let t = try? c.today(projectId: pid)
-        async let f = try? c.feed(projectId: pid)
+        let ids = scopeIds
+        async let t = try? c.today(projectIds: ids)
+        async let f = try? c.feed(projectIds: ids)
         let before = feed.first?.id
         await applyLive(today: t, feed: f)
         if let id = feed.first?.id, id != before { liveTick += 1 }
     }
 
     private func applyLive(today t: Today?, feed f: [FeedEvent]?) async {
-        withAnimation(.snappy) {
+        withAnimation(.smooth(duration: 0.55)) {
             if let t { today = t }
             if let f { feed = f }
         }
-        if let t, selectedProjectId == nil { await LiveActivityManager.shared.refresh(with: t) }
+        if let t, isAll { await LiveActivityManager.shared.refresh(with: t) }
     }
 }
 

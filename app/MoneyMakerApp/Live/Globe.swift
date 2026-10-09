@@ -218,11 +218,11 @@ extension Store {
     /// Revenu par pays (toutes les apps) + horodatage de la dernière vente vue en direct.
     var globeSpots: [GlobeSpot] {
         var byCountry: [String: Double] = [:]
-        for p in (overview?.projects ?? []) where selectedProjectId == nil || p.projectId == selectedProjectId {
+        for p in selectedProjects {
             for (cc, v) in p.revenueByCountry ?? [:] where cc != "??" { byCountry[cc, default: 0] += Double(v) / 1e6 }
         }
         var last: [String: Date] = [:]
-        for e in feed where e.isRevenue && (selectedProjectId == nil || e.projectId == selectedProjectId) { if let cc = e.country, last[cc] == nil { last[cc] = e.date } }
+        for e in feed where e.isRevenue && activeIds.contains(e.projectId) { if let cc = e.country, last[cc] == nil { last[cc] = e.date } }
         for cc in last.keys where byCountry[cc] == nil { byCountry[cc] = 0.0001 }
         return byCountry.map { GlobeSpot(cc: $0.key, value: $0.value, lastSale: last[$0.key]) }
     }
@@ -280,7 +280,7 @@ struct GlobeScreen: View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Planète").font(MMFont.system(34, .bold)).tracking(-0.8).padding(.top, 8)
-                    Text("\(store.selectedProject?.name ?? "Tous les business") · \(ranked.count) pays · revenu \(store.overview?.periodDays ?? 30) j").font(MMFont.system(13)).foregroundStyle(MMColor.ink3)
+                    Text("\(store.scopeLabel) · \(ranked.count) pays · revenu \(store.overview?.periodDays ?? 30) j").font(MMFont.system(13)).foregroundStyle(MMColor.ink3)
                 }
                 .mmAppear(0)
                 ZStack(alignment: .bottom) {

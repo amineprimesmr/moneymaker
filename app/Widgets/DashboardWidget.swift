@@ -31,7 +31,7 @@ struct DashProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<DashEntry>) -> Void) {
         Task {
             let client = MoneyMakerClient.stored
-            async let o = try? client.overview(days: 30)
+            async let o = try? client.overview(days: 28)
             async let f = try? client.feed(limit: 10)
             let (overview, feed) = await (o, f)
             let last = (feed ?? MMShared.cachedFeed).first(where: \.isRevenue)
@@ -64,7 +64,7 @@ private let violet = MMColor.hex(0x9B7BFF)
 private func tiles(_ o: Overview, last: FeedEvent?, max: Int) -> [DashTile] {
     var t: [DashTile] = [
         DashTile(id: "mrr", icon: "arrow.triangle.2.circlepath", label: "MRR", value: o.mrrMicros.money(o.currency, compact: true), tint: MMColor.accent),
-        DashTile(id: "rev", icon: "eurosign", label: "Revenu 30 j", value: o.revenueMicros.money(o.currency, compact: true), tint: MMColor.accent, highlighted: true),
+        DashTile(id: "rev", icon: "eurosign", label: "Revenu 28 j", value: o.revenueMicros.money(o.currency, compact: true), tint: MMColor.accent, highlighted: true),
         DashTile(id: "pay", icon: "creditcard", label: "Users payants", value: (o.payingCustomers ?? o.activeSubscriptions).formatted(), tint: MMColor.blue),
     ]
     if let dl = o.downloads { t.append(DashTile(id: "dl", icon: "arrow.down.app", label: "Téléchargements", value: dl.formatted(), tint: violet)) }
@@ -112,7 +112,7 @@ struct DashboardWidgetView: View {
 
     var body: some View {
         if !entry.signedIn { SignedOutView().padding() } else if let o = entry.overview {
-            let pts = dailySeries(o.revenueByDay, days: 30)
+            let pts = dailySeries(o.revenueByDay, days: 28)
             switch family {
             case .systemSmall:
                 VStack(alignment: .leading, spacing: 6) {
