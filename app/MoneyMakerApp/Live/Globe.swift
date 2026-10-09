@@ -9,8 +9,8 @@
 //  la planète avec de l'inertie, toucher un faisceau affiche le pays.
 //
 //  Coût : une seule Canvas, projection orthographique faite à la main, points
-//  regroupés en 6 niveaux d'opacité → ~8 remplissages par image quel que soit
-//  le nombre de points (même principe que le champ d'étoiles de V2).
+//  regroupés en 32 paliers d'opacité → ~34 remplissages par image quel que soit
+//  le nombre de points, sans bandeaux visibles.
 //
 
 import SwiftUI
@@ -155,17 +155,22 @@ struct GlobeView: View {
         let r = min(size.width, size.height) / 2 * 0.86
         let c = CGPoint(x: size.width / 2, y: size.height / 2)
 
-        // Terres : 6 niveaux d'opacité selon la profondeur → 6 remplissages.
-        var buckets = [Path](repeating: Path(), count: 6)
+        // Terres : opacité et taille continues selon la profondeur (32 paliers de 1,5 % → aucun bandeau visible),
+        // fondu progressif vers le bord pour que la silhouette ne forme pas d'arc séparé.
+        let levels = 32
+        var buckets = [Path](repeating: Path(), count: levels)
         let dot = max(1.1, r / 150)
         for p in GlobeData.land {
-            guard let q = project(p, size: size), q.z > 0 else { continue }
-            let b = min(5, Int(q.z * 6))
-            let s = dot * (0.55 + 0.45 * q.z)
+            guard let q = project(p, size: size), q.z > 0.02 else { continue }
+            let depth = min(1, q.z)
+            let b = min(levels - 1, Int(depth * Double(levels)))
+            let s = dot * (0.45 + 0.55 * sqrt(depth))
             buckets[b].addEllipse(in: CGRect(x: q.point.x - s, y: q.point.y - s, width: s * 2, height: s * 2))
         }
         for (i, path) in buckets.enumerated() where !path.isEmpty {
-            ctx.fill(path, with: .color(.white.opacity(0.10 + 0.42 * Double(i) / 5)))
+            let depth = (Double(i) + 0.5) / Double(levels)
+            let edge = min(1, depth / 0.22)            // 0 au bord → 1 dès 22 % de profondeur
+            ctx.fill(path, with: .color(.white.opacity((0.10 + 0.40 * depth) * edge * edge)))
         }
 
         // Faisceaux des pays (derrière → devant pour un empilement correct).
