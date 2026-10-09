@@ -98,6 +98,14 @@ function sanitizeConfig(input: any, current: ProjectConfig): ProjectConfig {
     const af = input.integrations?.appsflyer;
     next.integrations = af ? { appsflyer: { appId: cleanId(af.appId, 64), ...(af.androidAppId ? { androidAppId: cleanId(af.androidAppId, 200) } : {}) } } : {};
   }
+  if (input.website !== undefined) {
+    if (input.website === null || input.website === "") delete (next as any).website;
+    else {
+      const w = String(input.website).trim();
+      if (!/^https:\/\/[^\s]+$/.test(w)) throw new HttpError(400, "invalid_website", "URL https:// attendue");
+      (next as any).website = w;
+    }
+  }
   if (input.mode !== undefined) {
     if (!["subscriptions", "rankings"].includes(input.mode)) throw new HttpError(400, "invalid_mode");
     (next as any).mode = input.mode;
@@ -252,7 +260,8 @@ route("GET", "/v1/overview", async req => {
     // Icône du business : la propre app suivie sur l'App Store, sinon l'Apple ID configuré.
     const appId = (pr.config.appStore?.apps ?? []).find(a => a.own !== false)?.appId ?? pr.config.apple?.appAppleId;
     const [m, app] = await Promise.all([projectMetrics(pr, days), appId ? db.doc(`apps/${appId}`).get() : Promise.resolve(null)]);
-    return { ...m, iconUrl: (app?.get("icon") as string | undefined) ?? null };
+    // App Store d'abord ; sinon l'icône résolue et mémorisée (site web, favicon) par icons.ts.
+    return { ...m, iconUrl: (app?.get("icon") as string | undefined) ?? (d.get("iconUrl") as string | undefined) ?? null };
   }));
   const currency = String(req.query.currency ?? projects[0]?.currency ?? "EUR");
   const { convertMicros } = await import("./engine");
@@ -420,7 +429,8 @@ export function setupSteps(project: any, creds: Credentials, counts: { customers
   const steps = [
     { id: "products", group: "Base", title: "Définir l'accès premium et ses produits", done: Object.values(c.entitlements ?? {}).some((v: any) => v.length), tab: "products",
       help: "Liste les identifiants produits (App Store, Play, Stripe) qui débloquent l'accès. Connecter App Store Connect ou Google Play les importe automatiquement." },
-    { id: "sdk", group: "Base", title: "Brancher le SDK dans l'app", done: Boolean(h.sdk?.lastAt), tab: "connect", detail: h.sdk ? `dernier appel ${h.sdk.platform ?? ""}` : null,
+    // Le SDK est la librairie iOS/Android : sans app (business 100 % Stripe sur le web), l'étape ne s'applique pas.
+    { id: "sdk", group: "Base", title: "Brancher le SDK dans l'app", done: Boolean(h.sdk?.lastAt), optional: !apple && !google && stripe, tab: "connect", detail: h.sdk ? `dernier appel ${h.sdk.platform ?? ""}` : null,
       help: "Copie le prompt de l'onglet Connexions dans ton agent (Claude Code, Cursor…). L'étape se valide dès que l'app appelle MoneyMaker." },
     { id: "asc", group: "App Store", title: "Connecter App Store Connect", done: Boolean(creds.appStoreConnect), optional: !apple, tab: "connect",
       help: "Clé API App Store Connect (rôle App Manager) : importe les produits, active les classements et règle l'URL des notifications." },
@@ -680,6 +690,12 @@ route("POST", "/v1/devices/:id/test", async (req, _res, [id]) => {
   });
   if (r.status !== 200) throw new HttpError(502, "apns_failed", r.reason ?? String(r.status));
   return { ok: true };
+});
+
+route("POST", "/v1/projects/:pid/icon/refresh", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const { refreshIcon } = await import("./icons");
+  return refreshIcon(project);
 });
 
 route("GET", "/v1/today", async req => {

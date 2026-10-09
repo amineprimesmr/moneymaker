@@ -75,3 +75,23 @@ test("downloads: sales report parsing keeps first downloads of the app only", ()
   const r = parseSalesReport(tsv, 123);
   assert.equal(r.units, 15); assert.deepEqual(r.byCountry, { FR: 12, US: 3 });
 });
+
+test("setup: SDK optional for Stripe-only web businesses, required with an app", () => {
+  const { setupSteps } = require("../lib/api");
+  const creds = { stripe: { secretKey: "sk", webhookSecret: "wh" } };
+  const web = setupSteps({ config: { entitlements: { pro: ["x"] }, stripe: { enabled: true } } }, creds, { customers: 1, purchases: 1 });
+  assert.equal(web.steps.find(s => s.id === "sdk").optional, true);
+  assert.equal(web.progress, 1);
+  const app = setupSteps({ config: { entitlements: { pro: ["x"] }, apple: { bundleId: "a.b" } } }, creds, { customers: 1, purchases: 1 });
+  assert.equal(app.steps.find(s => s.id === "sdk").optional, false);
+});
+
+test("icons: apple-touch-icon and dark variant win, svg/ico ignored", () => {
+  const { pickIconFromHtml } = require("../lib/icons");
+  const a = `<link rel="icon" href="/favicon.ico" sizes="any"/><link rel="icon" href="/icon-512.png" type="image/png" sizes="512x512"/><link rel="apple-touch-icon" href="/apple-touch-icon.png"/>`;
+  assert.equal(pickIconFromHtml(a, "https://10kdesign.xyz"), "https://10kdesign.xyz/apple-touch-icon.png");
+  const b = `<link rel="icon" type="image/png" href="/assets/light.png" media="(prefers-color-scheme: light)"><link rel="icon" type="image/png" href="/assets/dark.png" media="(prefers-color-scheme: dark)">`;
+  assert.equal(pickIconFromHtml(b, "https://usev2.xyz/"), "https://usev2.xyz/assets/dark.png");
+  const c = `<link rel="shortcut icon" href="/favicon.ico?v=3"/><link rel="icon" href="/favicon.svg?v=3" type="image/svg+xml"/><link rel="icon" href="/favicon-32.png?v=3" sizes="32x32" type="image/png"/>`;
+  assert.equal(pickIconFromHtml(c, "https://scrollshow.io"), "https://scrollshow.io/favicon-32.png?v=3");
+});

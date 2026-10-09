@@ -12,6 +12,7 @@ import { computeEntitlements } from "./engine";
 import { fanOut } from "./integrations";
 import { pushEvent, pushRanking, sendDailySummaries } from "./push";
 import { syncDownloads } from "./downloads";
+import { refreshIcon } from "./icons";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 
 import { importRevenueCat } from "./revenuecat";
@@ -108,6 +109,20 @@ export const downloadsSync = onSchedule({ schedule: "30 17 * * *", timeZone: "UT
   for (const d of projects.docs) {
     try { console.log("downloads", d.id, await syncDownloads(await getProject(d.id))); } catch (e) { console.error("downloads", d.id, e); }
   }
+});
+
+/** Icônes des business : une fois par jour (App Store publié, site modifié…). */
+export const iconsRefresh = onSchedule({ schedule: "15 6 * * *", timeZone: "UTC", timeoutSeconds: 300 }, async () => {
+  for (const d of (await db.collection("projects").select().get()).docs) {
+    try { console.log("icon", d.id, await refreshIcon(await getProject(d.id))); } catch (e) { console.error("icon", d.id, e); }
+  }
+});
+
+/** Icône recalculée dès que l'app, le site ou Stripe du business change. */
+export const iconOnConfigChange = onDocumentUpdated({ document: "projects/{pid}", timeoutSeconds: 60 }, async event => {
+  const pick = (x: any) => JSON.stringify([x?.config?.website, x?.config?.apple?.appAppleId, x?.config?.appStore?.apps, x?.health?.stripe]);
+  if (pick(event.data?.before.data()) === pick(event.data?.after.data())) return;
+  await refreshIcon(await getProject(event.params.pid)).catch(e => console.error("icon", e));
 });
 
 /** First import (30 days) as soon as a vendor number is saved. */
