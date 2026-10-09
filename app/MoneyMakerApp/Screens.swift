@@ -173,6 +173,7 @@ struct OverviewView: View {
                     if let o = store.scoped {
                         let scope = store.viewIds
                         RevenueCard().mmAppear(1).mmDataSwap(scope)
+                        NetCard().mmAppear(2).mmDataSwap(scope, delay: 0.03)
                         mrrCard(o).mmAppear(2).mmDataSwap(scope, delay: 0.04)
                         stats(o).mmAppear(3).mmDataSwap(scope, delay: 0.08)
                         if !store.scopedAlerts.isEmpty { alerts.mmAppear(4).mmDataSwap(scope, delay: 0.12) }

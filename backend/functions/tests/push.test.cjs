@@ -107,3 +107,26 @@ test("icons: normalised to a 256 px PNG from any image", async () => {
   const meta = await sharp(png).metadata();
   assert.equal(meta.format, "png"); assert.equal(meta.width, 256); assert.equal(meta.height, 256);
 });
+
+test("finance: waterfall from gross to pocket", () => {
+  const { computeWaterfall, DEFAULT_FINANCE, sanitizeFinance } = require("../lib/finance");
+  const txs = [
+    { store: "app_store", amountMicros: 12_000_000, currency: "EUR", country: "FR", kind: "purchase", at: 0 },  // 10 HT, 2 TVA, 1,5 Apple
+    { store: "stripe", amountMicros: 100_000_000, currency: "EUR", country: "US", kind: "purchase", at: 0 },     // pas de TVA, 1,75 Stripe
+    { store: "app_store", amountMicros: 50_000_000, currency: "EUR", country: "FR", kind: "purchase", isSandbox: true, at: 0 },
+  ];
+  const w = computeWaterfall(txs, sanitizeFinance({ structure: "micro_services" }), "EUR", 30);
+  assert.equal(w.grossMicros, 112_000_000);
+  assert.equal(w.vatMicros, 2_000_000);
+  assert.equal(w.storeFeesMicros, 1_500_000);
+  assert.equal(w.paymentFeesMicros, 1_750_000);
+  assert.equal(w.netRevenueMicros, 106_750_000);
+  assert.equal(w.socialMicros, Math.round(106_750_000 * 0.229));
+  assert.equal(w.corporateTaxMicros, 0);
+  assert.equal(w.pocketMicros, Math.round(106_750_000 * (1 - 0.229)));
+  const sasu = computeWaterfall(txs, DEFAULT_FINANCE, "EUR", 365);
+  const profit = 106_750_000 * 0.95;
+  assert.equal(sasu.corporateTaxMicros, Math.round(profit * 0.15));
+  assert.equal(sasu.pocketMicros, Math.round(profit * 0.85 * (1 - 0.314)));
+  assert.throws(() => sanitizeFinance({ socialRate: 2 }), /invalid_socialRate/);
+});

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0095B39F4DF4E19D7F6A24E0 /* LiveServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F8C9B2ECD231050E024974A /* LiveServices.swift */; };
+		0E0DF9F55F63CCCFC43BAF97 /* Finance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9CEEAB6A0F6F975061B40D2 /* Finance.swift */; };
 		19BDD03E12EDAD86DDEBBDE9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1097FC8E56F8174FC341976B /* Assets.xcassets */; };
 		24B06FD26A971ACE214EAB40 /* countries.json in Resources */ = {isa = PBXBuildFile; fileRef = F8609E850E6E511A47AC0F87 /* countries.json */; };
 		2AFD4C6B033F517E98B4102C /* NotificationPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */; };
@@ -89,6 +90,7 @@
 		F4C830002B2BC4B3D96025D8 /* MoneyMakerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyMakerApp.swift; sourceTree = "<group>"; };
 		F8609E850E6E511A47AC0F87 /* countries.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = countries.json; sourceTree = "<group>"; };
 		F88B72061DA7660BF3CEB1FD /* Screens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Screens.swift; sourceTree = "<group>"; };
+		F9CEEAB6A0F6F975061B40D2 /* Finance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Finance.swift; sourceTree = "<group>"; };
 		FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMLive.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -153,6 +155,7 @@
 			isa = PBXGroup;
 			children = (
 				2B505E5DB6CC437E02CFFDC2 /* BusinessSideBar.swift */,
+				F9CEEAB6A0F6F975061B40D2 /* Finance.swift */,
 				EA6EDB0BDEE53E198B5CA131 /* Globe.swift */,
 				A82382FF73CC673CD177B62B /* LiveScreens.swift */,
 				7F8C9B2ECD231050E024974A /* LiveServices.swift */,
@@ -284,6 +287,7 @@
 			files = (
 				AF79FEB78C3C31BD156BF1D8 /* BusinessSideBar.swift in Sources */,
 				DD055D734B50B18D7BDBA8A8 /* CachedImage.swift in Sources */,
+				0E0DF9F55F63CCCFC43BAF97 /* Finance.swift in Sources */,
 				9E22F7E452E61C7687F22A70 /* Globe.swift in Sources */,
 				37B9651D3011145AAE87823A /* LaunchSplash.swift in Sources */,
 				7A09B8560251703819AC48BC /* LiveScreens.swift in Sources */,

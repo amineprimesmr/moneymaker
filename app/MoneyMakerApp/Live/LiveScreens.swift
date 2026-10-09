@@ -292,6 +292,7 @@ struct LiveSettingsView: View {
                             }
                         }
                     }
+                    FinanceSettingsSection().mmAppear(6)
                     widgetsCard.mmAppear(6)
                     if embedded { accountCard.mmAppear(7) }
                     if let e = push.lastError {

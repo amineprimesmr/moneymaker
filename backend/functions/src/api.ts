@@ -726,6 +726,24 @@ function projectIdsParam(req: Request): string[] | undefined {
   return ids.length ? ids : undefined;
 }
 
+// ── Finance : du brut au net en poche ───────────────────────────────────────
+route("GET", "/v1/finance", async req => {
+  const uid = requireUser(await authenticate(req));
+  const { waterfallFor, PRESETS } = await import("./finance");
+  const days = Math.min(365, Math.max(1, Number(req.query.days ?? 28)));
+  const w = await waterfallFor(uid, days, projectIdsParam(req));
+  return { ...w, presets: Object.fromEntries(Object.entries(PRESETS).map(([k, v]) => [k, { label: v.label, note: v.note }])) };
+});
+
+route("PUT", "/v1/finance/settings", async req => {
+  const uid = requireUser(await authenticate(req));
+  const { sanitizeFinance, financeSettings } = await import("./finance");
+  let next;
+  try { next = sanitizeFinance(req.body ?? {}, await financeSettings(uid)); } catch (e) { throw new HttpError(400, (e as Error).message); }
+  await db.doc(`users/${uid}/settings/finance`).set(next);
+  return { settings: next };
+});
+
 route("GET", "/v1/today", async req => {
   const uid = requireUser(await authenticate(req));
   const { todayFor, liveActivityState } = await import("./push");
