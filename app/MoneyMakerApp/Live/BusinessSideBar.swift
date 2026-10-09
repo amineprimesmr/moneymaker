@@ -102,7 +102,7 @@ struct LogoFan: View {
     let projects: [ProjectSummary]
     var focusId: String? = nil
     var onTap: (String) -> Void = { _ in }
-    var size: CGFloat = 44
+    var size: CGFloat = 36
     var maxShown = 7
 
     var body: some View {
