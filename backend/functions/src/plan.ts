@@ -1,4 +1,4 @@
-// Pilotage financier : ce qu'il faut mettre de côté, quand l'argent arrive, échéances,
+// Pilotage financier : quand l'argent arrive, échéances,
 // dépenses réelles, objectif de MRR, alertes intelligentes et export comptable.
 //
 // Repères (modifiables dans les réglages finance, indicatifs, pas un conseil fiscal) :
@@ -152,12 +152,6 @@ export async function planFor(uid: string, days: number, projectIds?: string[], 
     },
     waterfall: w,
     expenses: { list: expenses, periodMicros: realExpenses, monthlyMicros: expensesOverPeriod(expenses, 30.44, cur, projectIds) },
-    setAside: {
-      // À mettre de côté sur la période : tout ce qui n'est pas à toi (TVA Stripe à reverser + impôts).
-      totalMicros: Math.round(stripeVat + w.socialMicros + w.corporateTaxMicros + w.dividendTaxMicros),
-      vatMicros: Math.round(stripeVat), socialMicros: w.socialMicros, corporateMicros: w.corporateTaxMicros, dividendMicros: w.dividendTaxMicros,
-      shareOfNet: w.netRevenueMicros > 0 ? (stripeVat + w.socialMicros + w.corporateTaxMicros) / (w.netRevenueMicros + stripeVat) : null,
-    },
     payouts: upcomingPayouts(txs, s, cur).slice(0, 12),
     deadlines: deadlines(s.structure, monthly),
     goal: goalMicros ? { goalMicros, ...goalProjection(mrrHistory, goalMicros) } : null,

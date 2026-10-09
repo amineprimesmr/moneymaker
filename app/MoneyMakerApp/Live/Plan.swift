@@ -1,13 +1,12 @@
 //
 //  Plan.swift
-//  MoneyMaker — pilotage : à mettre de côté, virements à venir, échéances, dépenses réelles,
+//  MoneyMaker — pilotage : virements à venir, échéances, dépenses réelles,
 //  objectif de MRR, alertes intelligentes et export comptable.
 //
 
 import SwiftUI
 
 struct PlanData: Codable, Hashable {
-    struct SetAside: Codable, Hashable { let totalMicros: Int; let vatMicros: Int; let socialMicros: Int; let corporateMicros: Int; let dividendMicros: Int; let shareOfNet: Double? }
     struct Payout: Codable, Hashable { let store: String; let date: Double; let amountMicros: Int; let label: String }
     struct Deadline: Codable, Hashable { let date: Double; let label: String; let amountMicros: Int; let kind: String }
     struct Goal: Codable, Hashable { let goalMicros: Int; let slopePerMonthMicros: Int?; let etaDate: Double?; let reached: Bool }
@@ -17,7 +16,6 @@ struct PlanData: Codable, Hashable {
     let currency: String
     let days: Int
     let vat: Vat?
-    let setAside: SetAside
     let payouts: [Payout]
     let deadlines: [Deadline]
     let goal: Goal?
@@ -122,9 +120,6 @@ struct PlanCard: View {
                             Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold)).foregroundStyle(MMColor.ink3)
                         }
                         HStack(alignment: .top, spacing: 10) {
-                            if finance.waterfall?.settings.showNet == true {
-                                tile("À mettre de côté", p.setAside.totalMicros.money(p.currency, compact: true), MMColor.orange)
-                            }
                             if let next = p.payouts.first {
                                 tile("Prochain virement · \(day(next.date))", next.amountMicros.money(p.currency, compact: true), MMColor.accent)
                             }
@@ -182,7 +177,6 @@ struct PlanScreen: View {
                 }
                 .padding(.top, 8).mmAppear(0)
                 if let p = model.plan {
-                    if finance.waterfall?.settings.showNet == true { setAside(p).mmAppear(1) }
                     payouts(p).mmAppear(2)
                     deadlines(p).mmAppear(3)
                     if let v = p.vat { vatThreshold(v).mmAppear(3) }
@@ -201,24 +195,6 @@ struct PlanScreen: View {
         .task { await model.load(store) }
         .sheet(isPresented: $adding) { ExpenseEditor(expense: nil) { await model.load(store, force: true) }.environmentObject(store) }
         .sheet(item: $editing) { e in ExpenseEditor(expense: e) { await model.load(store, force: true) }.environmentObject(store) }
-    }
-
-    private func setAside(_ p: PlanData) -> some View {
-        MMCard(padding: 20, glow: MMColor.orange) {
-            VStack(alignment: .leading, spacing: 10) {
-                MMLabel(text: "À mettre de côté", trailing: "\(p.days) j")
-                Text(p.setAside.totalMicros.money(p.currency)).font(MMFont.number(40, .light)).tracking(-1.2).foregroundStyle(MMColor.orange)
-                Text("Une partie de l'argent qui arrive sur ton compte ne t'appartient pas : ce sont les impôts et cotisations que tu devras payer plus tard sur ces ventes (URSSAF, impôt sur les sociétés, TVA éventuelle). Si tu le dépenses, tu ne pourras pas payer l'échéance. Le réflexe : mettre ce montant sur un compte à part dès que tu es payé, pour le jour où l'URSSAF ou les impôts prélèvent.")
-                    .font(MMFont.system(12)).foregroundStyle(MMColor.ink3).fixedSize(horizontal: false, vertical: true)
-                VStack(spacing: 6) {
-                    if p.setAside.vatMicros > 0 { line("TVA collectée (Stripe UE) à reverser", p.setAside.vatMicros, p.currency) }
-                    line("Cotisations / impôt micro", p.setAside.socialMicros, p.currency)
-                    line("Impôt sur les sociétés", p.setAside.corporateMicros, p.currency)
-                    line("Impôt sur les dividendes", p.setAside.dividendMicros, p.currency)
-                }
-                .padding(.top, 4)
-            }
-        }
     }
 
     private func payouts(_ p: PlanData) -> some View {
