@@ -744,6 +744,55 @@ route("PUT", "/v1/finance/settings", async req => {
   return { settings: next };
 });
 
+route("GET", "/v1/finance/plan", async req => {
+  const uid = requireUser(await authenticate(req));
+  const { planFor } = await import("./plan");
+  const days = Math.min(365, Math.max(1, Number(req.query.days ?? 28)));
+  const goal = Number(req.query.goal ?? 0);
+  return planFor(uid, days, projectIdsParam(req), goal > 0 ? Math.round(goal * 1e6) : undefined);
+});
+
+route("GET", "/v1/finance/export", async (req, res) => {
+  const uid = requireUser(await authenticate(req));
+  const { accountingCsv } = await import("./plan");
+  const month = String(req.query.month ?? new Date().toISOString().slice(0, 7));
+  let csv;
+  try { csv = await accountingCsv(uid, month, projectIdsParam(req)); } catch (e) { throw new HttpError(400, (e as Error).message); }
+  res.set("Content-Type", "text/csv; charset=utf-8");
+  res.set("Content-Disposition", `attachment; filename="moneymaker-${month}.csv"`);
+  res.status(200).send(csv);
+});
+
+route("GET", "/v1/expenses", async req => {
+  const uid = requireUser(await authenticate(req));
+  const { expensesFor } = await import("./plan");
+  return { expenses: await expensesFor(uid) };
+});
+
+route("PUT", "/v1/expenses/:id", async (req, _res, [id]) => {
+  const uid = requireUser(await authenticate(req));
+  const { sanitizeExpense } = await import("./plan");
+  let e;
+  try { e = sanitizeExpense(cleanId(id, 60), req.body); } catch (err) { throw new HttpError(400, (err as Error).message); }
+  await db.doc(`users/${uid}/expenses/${e.id}`).set(JSON.parse(JSON.stringify(e)));
+  return { expense: e };
+});
+
+route("DELETE", "/v1/expenses/:id", async (req, _res, [id]) => {
+  const uid = requireUser(await authenticate(req));
+  await db.doc(`users/${uid}/expenses/${cleanId(id, 60)}`).delete();
+  return { ok: true };
+});
+
+route("GET", "/v1/insights", async req => {
+  const uid = requireUser(await authenticate(req));
+  const projects = await db.collection("projects").where("members", "array-contains", uid).select().get();
+  const all = (await Promise.all(projects.docs.map(async p =>
+    (await db.collection(`projects/${p.id}/insights`).orderBy("at", "desc").limit(20).get()).docs.map(d => ({ id: d.id, ...d.data() }))))).flat()
+    .sort((a: any, b: any) => b.at - a.at).slice(0, 40);
+  return { insights: all };
+});
+
 route("GET", "/v1/today", async req => {
   const uid = requireUser(await authenticate(req));
   const { todayFor, liveActivityState } = await import("./push");

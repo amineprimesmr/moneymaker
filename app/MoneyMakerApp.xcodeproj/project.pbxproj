@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0095B39F4DF4E19D7F6A24E0 /* LiveServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F8C9B2ECD231050E024974A /* LiveServices.swift */; };
+		062A1D73A76B17A5E576B45A /* Plan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03C62595422A5AAD282765D3 /* Plan.swift */; };
 		0E0DF9F55F63CCCFC43BAF97 /* Finance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9CEEAB6A0F6F975061B40D2 /* Finance.swift */; };
 		19BDD03E12EDAD86DDEBBDE9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1097FC8E56F8174FC341976B /* Assets.xcassets */; };
 		24B06FD26A971ACE214EAB40 /* countries.json in Resources */ = {isa = PBXBuildFile; fileRef = F8609E850E6E511A47AC0F87 /* countries.json */; };
@@ -62,6 +63,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		03C62595422A5AAD282765D3 /* Plan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plan.swift; sourceTree = "<group>"; };
 		1097FC8E56F8174FC341976B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPermissionView.swift; sourceTree = "<group>"; };
 		1C16D5B2A5EFA0E3324011BA /* cash.caf */ = {isa = PBXFileReference; path = cash.caf; sourceTree = "<group>"; };
@@ -160,6 +162,7 @@
 				A82382FF73CC673CD177B62B /* LiveScreens.swift */,
 				7F8C9B2ECD231050E024974A /* LiveServices.swift */,
 				1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */,
+				03C62595422A5AAD282765D3 /* Plan.swift */,
 				A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */,
 			);
 			path = Live;
@@ -299,6 +302,7 @@
 				2F13A1B4CC19D980D0A815C3 /* MoneyMakerApp.swift in Sources */,
 				8EFD41694F6ACF6B5C362766 /* MoneyMakerClient.swift in Sources */,
 				2AFD4C6B033F517E98B4102C /* NotificationPermissionView.swift in Sources */,
+				062A1D73A76B17A5E576B45A /* Plan.swift in Sources */,
 				E41FCBB3965C52B9646B6A79 /* ProjectInsights.swift in Sources */,
 				C15F68906BCC0285C1E981AD /* Screens.swift in Sources */,
 				7811B4F791C9B3EBBC5C17E9 /* SideMenu.swift in Sources */,

@@ -606,7 +606,16 @@ async function renderAccount(main) {
   <div class="card section"><h2>Jeton personnel (app iPhone, widgets, agents, scripts)</h2>
     <p class="muted">Un jeton <code>mm_pat_</code> lit tous tes business. Colle-le dans l'app MoneyMaker sur iPhone pour les widgets, ou donne-le à ton agent pour qu'il crée et configure des projets.</p>
     <div class="row"><input id="label" placeholder="Nom du jeton (ex. iPhone)"><button class="primary" style="flex:0;white-space:nowrap" id="mk">Créer un jeton</button></div><div id="tok" style="margin-top:12px"></div></div>
+  <div class="card section"><h2>Export comptable</h2>
+    <p class="muted">CSV du mois pour ton comptable : chaque transaction avec TVA, HT, commissions stores, frais Stripe et net, plus un récapitulatif par pays (déclaration TVA OSS).</p>
+    <div class="row"><input id="exportMonth" type="month" value="${new Date(Date.now() - 20 * 864e5).toISOString().slice(0, 7)}"><button class="primary" style="flex:0;white-space:nowrap" id="exportCsv">Télécharger le CSV</button></div></div>
   <div class="card"><h2>API</h2><p class="muted">Base URL :</p>${copyRow(location.origin + "/v1")}<p><a href="/guide">Guide pas à pas</a> · <a href="/docs">Référence API</a> · <a href="/llms.txt">llms.txt (pour agents)</a></p></div>`;
+  $("#exportCsv").onclick = async () => {
+    const month = $("#exportMonth").value;
+    const res = await fetch(`/v1/finance/export?month=${encodeURIComponent(month)}`, { headers: { Authorization: `Bearer ${await auth.currentUser.getIdToken()}` } });
+    if (!res.ok) return toast("Export impossible");
+    Object.assign(document.createElement("a"), { href: URL.createObjectURL(await res.blob()), download: `moneymaker-${month}.csv` }).click();
+  };
   $("#mk").onclick = async () => { const r = await api("/v1/tokens", { method: "POST", body: { label: $("#label").value || "token" } }); $("#tok").innerHTML = `<p class="muted">Affiché une seule fois :</p>${copyRow(r.token)}`; };
 }
 

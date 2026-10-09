@@ -23,7 +23,7 @@ extension Notification.Name {
 @MainActor
 final class Router: ObservableObject {
     static let shared = Router()
-    enum Destination: Hashable { case today, feed, globe, project(String) }
+    enum Destination: Hashable { case today, feed, globe, plan, project(String) }
     @Published var pending: Destination?
 
     func open(_ url: URL) {
@@ -32,6 +32,7 @@ final class Router: ObservableObject {
         case "project": if let id = url.pathComponents.dropFirst().first { pending = .project(id) }
         case "feed": pending = .feed
         case "globe": pending = .globe
+        case "plan": pending = .plan
         default: pending = .today
         }
     }

@@ -143,7 +143,7 @@ struct RootTabView: View {
             case .today: tab = 0; homePath = NavigationPath()
             case .feed: tab = 1
             case .globe: tab = 2
-            case .project: tab = 0; homePath = NavigationPath(); homePath.append(d)
+            case .project, .plan: tab = 0; homePath = NavigationPath(); homePath.append(d)
             }
         }
     }
@@ -174,6 +174,7 @@ struct OverviewView: View {
                         let scope = store.viewIds
                         RevenueCard().mmAppear(1).mmDataSwap(scope)
                         NetCard().mmAppear(2).mmDataSwap(scope, delay: 0.03)
+                        PlanCard().mmAppear(2).mmDataSwap(scope, delay: 0.035)
                         mrrCard(o).mmAppear(2).mmDataSwap(scope, delay: 0.04)
                         stats(o).mmAppear(3).mmDataSwap(scope, delay: 0.08)
                         if !store.scopedAlerts.isEmpty { alerts.mmAppear(4).mmDataSwap(scope, delay: 0.12) }
@@ -199,6 +200,7 @@ struct OverviewView: View {
             .navigationDestination(for: ProjectSummary.self) { ProjectView(p: $0) }
             .navigationDestination(for: Router.Destination.self) { d in
                 if case .project(let id) = d, let p = store.overview?.projects.first(where: { $0.projectId == id }) { ProjectView(p: p) }
+                else if case .plan = d { PlanScreen() }
             }
             .toolbar(.hidden, for: .navigationBar)
             .mmPage()

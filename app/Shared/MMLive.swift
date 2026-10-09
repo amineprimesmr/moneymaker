@@ -93,8 +93,32 @@ struct FeedEvent: Codable, Identifiable, Hashable {
 
 struct PushPrefs: Codable, Hashable {
     var sales = true, renewals = true, trials = true, churn = false, billing = true, refunds = true, rankings = true
+    var insights = true
     var dailySummary = true, sandbox = false, sound = true, liveActivityAuto = true
     var mutedProjects: [String] = []
+
+    init() {}
+
+    /// Tolérant : une préférence ajoutée plus tard garde sa valeur par défaut au lieu de tout réinitialiser.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = PushPrefs.defaults
+        sales = try c.decodeIfPresent(Bool.self, forKey: .sales) ?? d.sales
+        renewals = try c.decodeIfPresent(Bool.self, forKey: .renewals) ?? d.renewals
+        trials = try c.decodeIfPresent(Bool.self, forKey: .trials) ?? d.trials
+        churn = try c.decodeIfPresent(Bool.self, forKey: .churn) ?? d.churn
+        billing = try c.decodeIfPresent(Bool.self, forKey: .billing) ?? d.billing
+        refunds = try c.decodeIfPresent(Bool.self, forKey: .refunds) ?? d.refunds
+        rankings = try c.decodeIfPresent(Bool.self, forKey: .rankings) ?? d.rankings
+        insights = try c.decodeIfPresent(Bool.self, forKey: .insights) ?? d.insights
+        dailySummary = try c.decodeIfPresent(Bool.self, forKey: .dailySummary) ?? d.dailySummary
+        sandbox = try c.decodeIfPresent(Bool.self, forKey: .sandbox) ?? d.sandbox
+        sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? d.sound
+        liveActivityAuto = try c.decodeIfPresent(Bool.self, forKey: .liveActivityAuto) ?? d.liveActivityAuto
+        mutedProjects = try c.decodeIfPresent([String].self, forKey: .mutedProjects) ?? d.mutedProjects
+    }
+
+    private static let defaults = PushPrefs()
 }
 
 // MARK: - Préférences locales partagées (trousseau)

@@ -25,6 +25,7 @@ export interface PushPrefs {
   billing: boolean;     // BILLING_ISSUE, BILLING_RECOVERED
   refunds: boolean;     // REFUND, REVOKED
   rankings: boolean;    // App Store ranking alerts
+  insights: boolean;    // alertes intelligentes (baisse, record, remboursements, nouveau pays)
   dailySummary: boolean;
   sandbox: boolean;     // also notify for sandbox purchases (testing)
   sound: boolean;       // cha-ching vs default sound
@@ -33,7 +34,7 @@ export interface PushPrefs {
 }
 
 export const DEFAULT_PREFS: PushPrefs = {
-  sales: true, renewals: true, trials: true, churn: false, billing: true, refunds: true, rankings: true,
+  sales: true, renewals: true, trials: true, churn: false, billing: true, refunds: true, rankings: true, insights: true,
   dailySummary: true, sandbox: false, sound: true, liveActivityAuto: true, mutedProjects: [],
 };
 
@@ -380,6 +381,21 @@ export async function pushRanking(project: Project, a: Record<string, any>): Pro
   let sent = 0;
   await Promise.all(devices.filter(d => d.apnsToken && { ...DEFAULT_PREFS, ...d.prefs }.rankings && !(d.prefs?.mutedProjects ?? []).includes(project.id) && (a.own !== false))
     .map(async d => { const r = await apnsSend(d.env, d.apnsToken!, "alert", rankingNotification(project, a)); if (r.status === 200) sent++; await prune(d, "apnsToken", r); }));
+  return sent;
+}
+
+/** Alerte intelligente (plan.ts) → notification à chaque membre qui l'accepte. */
+export async function pushInsight(project: Project, i: { title: string; body: string; type: string }): Promise<number> {
+  const devices = await devicesFor(project.members);
+  let sent = 0;
+  await Promise.all(devices.filter(d => d.apnsToken && { ...DEFAULT_PREFS, ...d.prefs }.insights && !(d.prefs?.mutedProjects ?? []).includes(project.id)).map(async d => {
+    const r = await apnsSend(d.env, d.apnsToken!, "alert", {
+      aps: { alert: { title: i.title, body: i.body }, "thread-id": `insights-${project.id}`, "interruption-level": i.type === "SALES_SPIKE" || i.type === "FIRST_SALE_COUNTRY" ? "active" : "time-sensitive", category: "EVENT", sound: "default" },
+      projectId: project.id, url: `moneymaker://project/${project.id}`,
+    });
+    if (r.status === 200) sent++;
+    await prune(d, "apnsToken", r);
+  }));
   return sent;
 }
 

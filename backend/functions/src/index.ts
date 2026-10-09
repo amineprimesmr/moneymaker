@@ -10,7 +10,8 @@ import { sendToAppsFlyer } from "./appsflyer";
 import { toRevenueCatEvent } from "./rccompat";
 import { computeEntitlements } from "./engine";
 import { fanOut } from "./integrations";
-import { pushEvent, pushRanking, sendDailySummaries } from "./push";
+import { pushEvent, pushRanking, sendDailySummaries, pushInsight } from "./push";
+import { insightsForProject } from "./plan";
 import { syncDownloads } from "./downloads";
 import { refreshIcon } from "./icons";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
@@ -108,6 +109,21 @@ export const downloadsSync = onSchedule({ schedule: "30 17 * * *", timeZone: "UT
   const projects = await db.collection("projects").where("config.apple.vendorNumber", "!=", null).select().get();
   for (const d of projects.docs) {
     try { console.log("downloads", d.id, await syncDownloads(await getProject(d.id))); } catch (e) { console.error("downloads", d.id, e); }
+  }
+});
+
+/** Alertes intelligentes : chaque matin, la veille comparée aux 28 jours précédents. */
+export const insightsDaily = onSchedule({ schedule: "0 7 * * *", timeZone: "Europe/Paris", timeoutSeconds: 300 }, async () => {
+  for (const d of (await db.collection("projects").select().get()).docs) {
+    try {
+      const project = await getProject(d.id);
+      for (const i of await insightsForProject(d.id)) {
+        const ref = db.doc(`projects/${d.id}/insights/${new Date(i.at).toISOString().slice(0, 10)}-${i.type}`);
+        if ((await ref.get()).exists) continue;
+        await ref.set(i);
+        await pushInsight(project, i).catch(e => console.error("insight push", e));
+      }
+    } catch (e) { console.error("insights", d.id, e); }
   }
 });
 

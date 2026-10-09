@@ -130,3 +130,27 @@ test("finance: waterfall from gross to pocket", () => {
   assert.equal(sasu.pocketMicros, Math.round(profit * 0.85 * (1 - 0.314)));
   assert.throws(() => sanitizeFinance({ socialRate: 2 }), /invalid_socialRate/);
 });
+
+test("plan: payouts, deadlines, goal, insights, expenses", () => {
+  const plan = require("../lib/plan");
+  const { DEFAULT_FINANCE } = require("../lib/finance");
+  const now = Date.UTC(2026, 9, 9);
+  const p = plan.upcomingPayouts([
+    { store: "app_store", amountMicros: 12e6, currency: "EUR", country: "FR", kind: "purchase", at: Date.UTC(2026, 9, 2) },
+    { store: "app_store", amountMicros: 12e6, currency: "EUR", country: "FR", kind: "purchase", at: Date.UTC(2026, 8, 20) },
+    { store: "stripe", amountMicros: 100e6, currency: "EUR", country: "US", kind: "purchase", at: Date.UTC(2026, 9, 8) },
+  ], DEFAULT_FINANCE, "EUR", now);
+  assert.equal(p.length, 3);
+  assert.equal(p[0].store, "stripe"); assert.equal(p[0].date, Date.UTC(2026, 9, 15));
+  assert.equal(p[1].date, Date.UTC(2026, 9, 1) + 33 * 86400000); assert.equal(p[1].amountMicros, 8_500_000);
+  const dl = plan.deadlines("sasu_is", { social: 0, corporate: 100e6, vat: 50e6 }, now);
+  assert.equal(dl[0].kind, "is"); assert.equal(dl.find(d => d.kind === "vat").date, Date.UTC(2027, 0, 31)); // T4 → 31/01
+  assert.equal(dl.find(d => d.kind === "is").date, Date.UTC(2026, 11, 15));
+  const hist = Array.from({ length: 30 }, (_, i) => ({ t: now - (29 - i) * 86400000, mrr: 1000e6 + i * 10e6 }));
+  const g = plan.goalProjection(hist, 1600e6, now);
+  assert.ok(g.etaDate > now); assert.equal(Math.round((g.etaDate - now) / 86400000), 31);
+  const ins = plan.detectInsights({ id: "p", name: "App" }, { revenue: 5e6, refunds: 4, billing: 0, countries: ["JP"] },
+    { revenuePerDay: 40e6, refundsPerDay: 0.5, billingPerDay: 0, knownCountries: new Set(["FR"]) }, "EUR", now);
+  assert.deepEqual(ins.map(i => i.type).sort(), ["FIRST_SALE_COUNTRY", "REFUND_SPIKE", "SALES_DROP"]);
+  assert.equal(plan.expensesOverPeriod([{ id: "a", name: "Serveur", amountMicros: 30.44e6, currency: "EUR", every: "month" }], 30.44, "EUR"), 30_440_000);
+});

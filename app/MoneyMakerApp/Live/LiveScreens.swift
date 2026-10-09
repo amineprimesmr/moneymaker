@@ -270,6 +270,7 @@ struct LiveSettingsView: View {
                     ]).mmAppear(3)
                     group("App Store & récap", [
                         toggle("Classements App Store", "trophy", \.rankings),
+                        toggle("Alertes intelligentes (baisse, record, remboursements)", "sparkles", \.insights),
                         toggle("Récap du soir (21 h)", "moon.stars", \.dailySummary),
                     ]).mmAppear(4)
                     group("Expérience", [
