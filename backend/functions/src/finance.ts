@@ -26,7 +26,13 @@ export const VAT: Record<string, number> = {
 };
 
 export interface FinanceSettings {
-  structure: "micro_services" | "micro_vente" | "sasu_is" | "eurl_is" | "llc_us" | "uae_freezone" | "custom";
+  /** L'utilisateur a choisi d'afficher le net (et rempli son profil). */
+  showNet: boolean;
+  /** Profil : nom de l'entreprise, pays, moyens d'encaissement utilisés. */
+  companyName: string;
+  country: string;
+  processors: { appStore: boolean; googlePlay: boolean; stripe: boolean };
+  structure: "micro_services" | "micro_vente" | "micro_liberal" | "sasu_is" | "eurl_is" | "llc_us" | "uae_freezone" | "custom";
   /** Programme Small Business d'Apple (15 %) — sinon 30 % la 1re année d'abonnement. */
   appleSmallBusiness: boolean;
   googleRate: number;
@@ -51,6 +57,8 @@ export interface FinanceSettings {
 export const PRESETS: Record<FinanceSettings["structure"], Partial<FinanceSettings> & { label: string; note: string }> = {
   micro_services: { label: "Micro-entreprise (services)", note: "Cotisations URSSAF ≈ 21,2 % du CA (24,6 % en libéral BNC). Franchise de TVA. Versement libératoire 1,7 % seulement si tu l'as choisi.",
     vatFranchise: true, socialRate: 0.212, incomeTaxRate: 0, expensesRate: 0, corporateReducedRate: 0, corporateRate: 0, payoutShare: 1, dividendTaxRate: 0 },
+  micro_liberal: { label: "Micro-entreprise (libéral BNC)", note: "Cotisations URSSAF ≈ 24,6 % du CA (professions libérales). Franchise de TVA. Versement libératoire 2,2 % seulement si tu l'as choisi.",
+    vatFranchise: true, socialRate: 0.246, incomeTaxRate: 0, expensesRate: 0, corporateReducedRate: 0, corporateRate: 0, payoutShare: 1, dividendTaxRate: 0 },
   micro_vente: { label: "Micro-entreprise (vente)", note: "Cotisations URSSAF ≈ 12,3 % du CA. Franchise de TVA. Versement libératoire 1 % seulement si tu l'as choisi.",
     vatFranchise: true, socialRate: 0.123, incomeTaxRate: 0, expensesRate: 0, corporateReducedRate: 0, corporateRate: 0, payoutShare: 1, dividendTaxRate: 0 },
   sasu_is: { label: "SASU à l'IS", note: "IS 15 % jusqu'à 42 500 € de bénéfice puis 25 %, dividendes au PFU 31,4 % (2026).",
@@ -65,6 +73,7 @@ export const PRESETS: Record<FinanceSettings["structure"], Partial<FinanceSettin
 };
 
 export const DEFAULT_FINANCE: FinanceSettings = {
+  showNet: false, companyName: "", country: "FR", processors: { appStore: true, googlePlay: false, stripe: true },
   structure: "sasu_is", appleSmallBusiness: true, googleRate: 0.15, stripePercent: 0.015, stripeFixed: 0.25, stripePricesIncludeVat: true, vatFranchise: false,
   socialRate: 0, incomeTaxRate: 0, expensesRate: 0.05, corporateReducedRate: 0.15, corporateReducedCap: 42500, corporateRate: 0.25, payoutShare: 1, dividendTaxRate: 0.314,
 };
@@ -84,7 +93,13 @@ export function sanitizeFinance(input: any, current: FinanceSettings = DEFAULT_F
   };
   for (const k of ["googleRate", "stripePercent", "socialRate", "incomeTaxRate", "expensesRate", "corporateReducedRate", "corporateRate", "payoutShare", "dividendTaxRate"] as const) rate(k);
   rate("stripeFixed", 10); rate("corporateReducedCap", 10_000_000);
-  for (const k of ["appleSmallBusiness", "stripePricesIncludeVat", "vatFranchise"] as const) if (typeof input?.[k] === "boolean") (next as any)[k] = input[k];
+  for (const k of ["appleSmallBusiness", "stripePricesIncludeVat", "vatFranchise", "showNet"] as const) if (typeof input?.[k] === "boolean") (next as any)[k] = input[k];
+  if (typeof input?.companyName === "string") next.companyName = input.companyName.trim().slice(0, 80);
+  if (typeof input?.country === "string" && /^[A-Z]{2}$/.test(input.country)) next.country = input.country;
+  if (input?.processors && typeof input.processors === "object") {
+    next.processors = { ...next.processors };
+    for (const k of ["appStore", "googlePlay", "stripe"] as const) if (typeof input.processors[k] === "boolean") next.processors[k] = input.processors[k];
+  }
   return next;
 }
 

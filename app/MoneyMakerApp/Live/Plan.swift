@@ -110,6 +110,7 @@ private func day(_ ms: Double) -> String {
 struct PlanCard: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var model = PlanModel.shared
+    @ObservedObject private var finance = FinanceModel.shared
 
     var body: some View {
         NavigationLink(value: Router.Destination.plan) {
@@ -121,7 +122,9 @@ struct PlanCard: View {
                             Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold)).foregroundStyle(MMColor.ink3)
                         }
                         HStack(alignment: .top, spacing: 10) {
-                            tile("À mettre de côté", p.setAside.totalMicros.money(p.currency, compact: true), MMColor.orange)
+                            if finance.waterfall?.settings.showNet == true {
+                                tile("À mettre de côté", p.setAside.totalMicros.money(p.currency, compact: true), MMColor.orange)
+                            }
                             if let next = p.payouts.first {
                                 tile("Prochain virement · \(day(next.date))", next.amountMicros.money(p.currency, compact: true), MMColor.accent)
                             }
@@ -163,6 +166,7 @@ struct PlanCard: View {
 struct PlanScreen: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var model = PlanModel.shared
+    @ObservedObject private var finance = FinanceModel.shared
     @State private var editing: Expense?
     @State private var adding = false
     @State private var exportURL: URL?
@@ -178,7 +182,7 @@ struct PlanScreen: View {
                 }
                 .padding(.top, 8).mmAppear(0)
                 if let p = model.plan {
-                    setAside(p).mmAppear(1)
+                    if finance.waterfall?.settings.showNet == true { setAside(p).mmAppear(1) }
                     payouts(p).mmAppear(2)
                     deadlines(p).mmAppear(3)
                     if let v = p.vat { vatThreshold(v).mmAppear(3) }
@@ -204,7 +208,8 @@ struct PlanScreen: View {
             VStack(alignment: .leading, spacing: 10) {
                 MMLabel(text: "À mettre de côté", trailing: "\(p.days) j")
                 Text(p.setAside.totalMicros.money(p.currency)).font(MMFont.number(40, .light)).tracking(-1.2).foregroundStyle(MMColor.orange)
-                Text("Cet argent n'est pas à toi : vire-le sur un compte séparé dès qu'il arrive.").font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
+                Text("Une partie de l'argent qui arrive sur ton compte ne t'appartient pas : ce sont les impôts et cotisations que tu devras payer plus tard sur ces ventes (URSSAF, impôt sur les sociétés, TVA éventuelle). Si tu le dépenses, tu ne pourras pas payer l'échéance. Le réflexe : mettre ce montant sur un compte à part dès que tu es payé, pour le jour où l'URSSAF ou les impôts prélèvent.")
+                    .font(MMFont.system(12)).foregroundStyle(MMColor.ink3).fixedSize(horizontal: false, vertical: true)
                 VStack(spacing: 6) {
                     if p.setAside.vatMicros > 0 { line("TVA collectée (Stripe UE) à reverser", p.setAside.vatMicros, p.currency) }
                     line("Cotisations / impôt micro", p.setAside.socialMicros, p.currency)

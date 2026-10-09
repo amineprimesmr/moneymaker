@@ -10,6 +10,11 @@
 import SwiftUI
 
 struct FinanceSettings: Codable, Hashable {
+    struct Processors: Codable, Hashable { var appStore: Bool; var googlePlay: Bool; var stripe: Bool }
+    var showNet: Bool?
+    var companyName: String?
+    var country: String?
+    var processors: Processors?
     var structure: String
     var appleSmallBusiness: Bool
     var googleRate: Double
@@ -88,6 +93,13 @@ struct NetCard: View {
     @State private var expanded = false
 
     var body: some View {
+        Group {
+            if model.waterfall?.settings.showNet == true { card }
+        }
+        .task(id: "\(store.period)|\(store.scopeIds ?? [])|\(store.overview?.generatedAt ?? 0)") { await model.load(store) }
+    }
+
+    private var card: some View {
         MMCard(padding: 20) {
             if let w = model.waterfall {
                 VStack(alignment: .leading, spacing: 14) {
@@ -128,7 +140,6 @@ struct NetCard: View {
                 .modifier(MMShimmer())
             }
         }
-        .task(id: "\(store.period)|\(store.scopeIds ?? [])|\(store.overview?.generatedAt ?? 0)") { await model.load(store) }
     }
 
     private func lines(_ w: Waterfall) -> some View {
@@ -207,58 +218,70 @@ private struct WaterfallBar: View {
     }
 }
 
-// MARK: - Réglages : montage juridique et taux
+// MARK: - Réglages : afficher le net, profil, taux
 
 struct FinanceSettingsSection: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var model = FinanceModel.shared
     @State private var saving = false
-
-    private let order = ["micro_services", "micro_vente", "sasu_is", "eurl_is", "llc_us", "uae_freezone", "custom"]
+    @State private var showProfile = false
+    @State private var showAdvanced = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            MMLabel(text: "Fiscalité · net en poche").padding(.horizontal, 4).padding(.top, 8)
+            MMLabel(text: "Net en poche").padding(.horizontal, 4).padding(.top, 8)
             MMCard(padding: 0) {
                 if let w = model.waterfall {
                     let s = w.settings
                     VStack(spacing: 0) {
-                        Menu {
-                            ForEach(order, id: \.self) { k in
-                                Button(w.presets?[k]?.label ?? k) { save(["structure": k]) }
-                            }
-                        } label: {
-                            row("Montage", value: w.presets?[s.structure]?.label ?? s.structure, chevron: true)
-                        }
-                        if let note = w.presets?[s.structure]?.note {
-                            Text(note).font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 16).padding(.bottom, 10)
-                        }
-                        divider
-                        Toggle(isOn: Binding(get: { s.vatFranchise ?? s.structure.hasPrefix("micro") }, set: { save(["vatFranchise": $0]) })) {
+                        Toggle(isOn: Binding(get: { s.showNet == true }, set: { on in
+                            if on { showProfile = true } else { save(["showNet": false]) }
+                        })) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Franchise en base de TVA").font(MMFont.system(15))
-                                Text("Tu ne factures pas de TVA (mention « TVA non applicable, art. 293 B du CGI »).").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
+                                Text("Afficher le net en poche").font(MMFont.system(15))
+                                Text("Ce qu'il te reste après TVA, commissions, frais et impôts, selon ton statut.")
+                                    .font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
                             }
                         }
-                        .padding(.horizontal, 16).padding(.vertical, 11)
-                        divider
-                        Toggle(isOn: Binding(get: { s.appleSmallBusiness }, set: { save(["appleSmallBusiness": $0]) })) {
-                            Text("Apple Small Business (15 %)").font(MMFont.system(15))
+                        .padding(.horizontal, 16).padding(.vertical, 12)
+                        if s.showNet == true {
+                            divider
+                            Button { showProfile = true } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "building.2.fill").font(.system(size: 14)).foregroundStyle(MMColor.ink2).frame(width: 22)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text((s.companyName?.isEmpty == false ? s.companyName! : "Mon entreprise")).font(MMFont.system(15, .medium)).foregroundStyle(MMColor.ink)
+                                        Text(profileSummary(w)).font(MMFont.system(12)).foregroundStyle(MMColor.ink3).lineLimit(2)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(MMColor.ink3)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 12)
+                            }
+                            .buttonStyle(.plain)
+                            divider
+                            Button { withAnimation(.smooth) { showAdvanced.toggle() } } label: {
+                                HStack {
+                                    Text("Taux détaillés").font(MMFont.system(14)).foregroundStyle(MMColor.ink2)
+                                    Spacer()
+                                    Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold)).foregroundStyle(MMColor.ink3)
+                                        .rotationEffect(.degrees(showAdvanced ? 180 : 0))
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 12)
+                            }
+                            .buttonStyle(.plain)
+                            if showAdvanced {
+                                percent("Commission Google Play", "googleRate", s.googleRate)
+                                percent("Frais Stripe (%)", "stripePercent", s.stripePercent, step: 0.001)
+                                percent("Cotisations sociales", "socialRate", s.socialRate, step: 0.001)
+                                percent("Versement libératoire", "incomeTaxRate", s.incomeTaxRate, step: 0.001)
+                                percent("Charges estimées", "expensesRate", s.expensesRate)
+                                percent("IS taux réduit", "corporateReducedRate", s.corporateReducedRate)
+                                percent("IS taux normal", "corporateRate", s.corporateRate)
+                                percent("Part distribuée", "payoutShare", s.payoutShare, step: 0.05)
+                                percent("Impôt dividendes", "dividendTaxRate", s.dividendTaxRate, step: 0.001)
+                            }
                         }
-                        .padding(.horizontal, 16).padding(.vertical, 11)
-                        divider
-                        percent("Commission Google Play", "googleRate", s.googleRate)
-                        percent("Frais Stripe (%)", "stripePercent", s.stripePercent, step: 0.001)
-                        divider
-                        percent("Cotisations sociales (micro)", "socialRate", s.socialRate, step: 0.001)
-                        percent("Versement libératoire (si choisi)", "incomeTaxRate", s.incomeTaxRate, step: 0.001)
-                        percent("Charges estimées", "expensesRate", s.expensesRate)
-                        percent("IS taux réduit", "corporateReducedRate", s.corporateReducedRate)
-                        percent("IS taux normal", "corporateRate", s.corporateRate)
-                        percent("Part distribuée", "payoutShare", s.payoutShare, step: 0.05)
-                        percent("Impôt dividendes", "dividendTaxRate", s.dividendTaxRate, step: 0.001)
                     }
                     .tint(MMColor.accent)
                     .disabled(saving)
@@ -266,30 +289,45 @@ struct FinanceSettingsSection: View {
                     Text("Chargement…").font(MMFont.system(14)).foregroundStyle(MMColor.ink3).padding(18)
                 }
             }
-            Text("Repères 2026 indicatifs, à ajuster avec ton expert-comptable — ce n'est pas un conseil fiscal.")
+            Text("Repères 2026 indicatifs, à valider avec ton expert-comptable — ce n'est pas un conseil fiscal.")
                 .font(MMFont.system(11)).foregroundStyle(MMColor.ink3).padding(.horizontal, 4)
         }
         .task { await model.load(store) }
+        .sheet(isPresented: $showProfile) {
+            if let w = model.waterfall {
+                TaxProfileSheet(initial: w.settings, presets: w.presets ?? [:], detected: detectedProcessors) { changes in
+                    var all = changes; all["showNet"] = true
+                    save(all)
+                }
+            }
+        }
+    }
+
+    /// Moyens d'encaissement réellement branchés sur tes business (étapes de mise en route validées).
+    private var detectedProcessors: FinanceSettings.Processors {
+        let steps = SetupCache.shared.byProject.values.flatMap(\.steps).filter(\.done).map(\.id)
+        return .init(appStore: steps.contains("asc") || steps.contains("appleNotifications"),
+                     googlePlay: steps.contains("google"), stripe: steps.contains("stripe"))
+    }
+
+    private func profileSummary(_ w: Waterfall) -> String {
+        let s = w.settings
+        var parts = [w.presets?[s.structure]?.label ?? s.structure]
+        if s.vatFranchise ?? s.structure.hasPrefix("micro") { parts.append("franchise de TVA") }
+        let p = s.processors
+        let procs = [p?.appStore == true ? "App Store" : nil, p?.googlePlay == true ? "Google Play" : nil, p?.stripe == true ? "Stripe" : nil].compactMap { $0 }
+        if !procs.isEmpty { parts.append(procs.joined(separator: ", ")) }
+        return parts.joined(separator: " · ")
     }
 
     private var divider: some View { Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 16) }
-
-    private func row(_ title: String, value: String, chevron: Bool = false) -> some View {
-        HStack {
-            Text(title).font(MMFont.system(15)).foregroundStyle(MMColor.ink)
-            Spacer()
-            Text(value).font(MMFont.system(14, .medium)).foregroundStyle(MMColor.ink2)
-            if chevron { Image(systemName: "chevron.up.chevron.down").font(.system(size: 11, weight: .semibold)).foregroundStyle(MMColor.ink3) }
-        }
-        .padding(.horizontal, 16).padding(.vertical, 13)
-    }
 
     private func percent(_ title: String, _ key: String, _ value: Double, step: Double = 0.01) -> some View {
         Stepper(value: Binding(get: { value }, set: { save([key: (($0 * 1000).rounded() / 1000)]) }), in: 0...1, step: step) {
             HStack {
                 Text(title).font(MMFont.system(14))
                 Spacer()
-                Text((value).formatted(.percent.precision(.fractionLength(0...1)))).font(MMFont.number(14, .regular)).foregroundStyle(MMColor.ink2)
+                Text(value.formatted(.percent.precision(.fractionLength(0...1)))).font(MMFont.number(14, .regular)).foregroundStyle(MMColor.ink2)
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 6)
@@ -300,7 +338,103 @@ struct FinanceSettingsSection: View {
         Task {
             _ = try? await store.client.saveFinance(changes)
             await model.load(store, force: true)
+            await PlanModel.shared.load(store, force: true)
             saving = false
         }
+    }
+}
+
+// MARK: - Profil fiscal (au moment d'activer le net)
+
+struct TaxProfileSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let initial: FinanceSettings
+    let presets: [String: Waterfall.Preset]
+    let detected: FinanceSettings.Processors
+    var onSave: ([String: Any]) -> Void
+
+    @State private var company = ""
+    @State private var country = "FR"
+    @State private var structure = "micro_services"
+    @State private var franchise = true
+    @State private var libératoire = false
+    @State private var appStore = true
+    @State private var smallBusiness = true
+    @State private var googlePlay = false
+    @State private var stripe = true
+
+    private let structures = ["micro_vente", "micro_services", "micro_liberal", "sasu_is", "eurl_is", "llc_us", "uae_freezone", "custom"]
+    private let countries = [("FR", "France"), ("BE", "Belgique"), ("CH", "Suisse"), ("LU", "Luxembourg"), ("CA", "Canada"), ("US", "États-Unis"), ("AE", "Émirats"), ("GB", "Royaume-Uni")]
+    /// Taux du versement libératoire selon l'activité micro.
+    private var vlRate: Double { structure == "micro_vente" ? 0.01 : structure == "micro_liberal" ? 0.022 : 0.017 }
+    private var isMicro: Bool { structure.hasPrefix("micro") }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Entreprise") {
+                    TextField("Nom (ex. Amine Ennasri EI)", text: $company)
+                    Picker("Pays", selection: $country) { ForEach(countries, id: \.0) { Text($0.1).tag($0.0) } }
+                }
+                Section {
+                    Picker("Statut", selection: $structure) {
+                        ForEach(structures, id: \.self) { Text(presets[$0]?.label ?? $0).tag($0) }
+                    }
+                    if let note = presets[structure]?.note { Text(note).font(.footnote).foregroundStyle(.secondary) }
+                } header: { Text("Statut juridique") } footer: {
+                    Text("En micro : « vente » pour des biens physiques, « services » pour la plupart des apps et produits numériques, « libéral » si ton activité est déclarée en BNC. C'est indiqué sur ton attestation URSSAF.")
+                }
+                Section {
+                    Toggle("Franchise en base de TVA", isOn: $franchise)
+                    if isMicro { Toggle("Versement libératoire (\(vlRate.formatted(.percent.precision(.fractionLength(1)))))", isOn: $libératoire) }
+                } header: { Text("TVA et impôt") } footer: {
+                    Text(franchise ? "Tu ne factures pas de TVA (« TVA non applicable, art. 293 B du CGI »)." : "Tu factures la TVA : elle est retirée de ton chiffre d'affaires.")
+                    + Text(isMicro ? " Le versement libératoire paie ton impôt sur le revenu en même temps que l'URSSAF ; sans lui, il est calculé une fois par an." : "")
+                }
+                Section {
+                    Toggle("App Store", isOn: $appStore)
+                    if appStore { Toggle("Programme Small Business (15 %)", isOn: $smallBusiness) }
+                    Toggle("Google Play", isOn: $googlePlay)
+                    Toggle("Stripe", isOn: $stripe)
+                } header: { Text("Moyens d'encaissement") } footer: {
+                    Text("Pré-rempli d'après tes connexions. App Store : 15 % avec le Small Business Program (moins d'1 M$/an), sinon 30 %. Google Play : 15 %. Stripe : ≈ 1,5 % + 0,25 € par paiement.")
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.black)
+            .navigationTitle("Ton profil")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Annuler") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Afficher le net") {
+                        var changes: [String: Any] = [
+                            "structure": structure, "companyName": company, "country": country, "vatFranchise": franchise,
+                            "appleSmallBusiness": smallBusiness,
+                            "processors": ["appStore": appStore, "googlePlay": googlePlay, "stripe": stripe],
+                        ]
+                        if isMicro { changes["incomeTaxRate"] = libératoire ? vlRate : 0 }
+                        onSave(changes)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            .onAppear {
+                company = initial.companyName ?? ""
+                country = initial.country ?? "FR"
+                structure = initial.structure
+                franchise = initial.vatFranchise ?? initial.structure.hasPrefix("micro")
+                libératoire = initial.incomeTaxRate > 0
+                smallBusiness = initial.appleSmallBusiness
+                let p = initial.processors ?? detected
+                appStore = p.appStore || detected.appStore
+                googlePlay = p.googlePlay || detected.googlePlay
+                stripe = p.stripe || detected.stripe
+            }
+        }
+        .tint(MMColor.accent)
+        .presentationBackground(Color.black)
+        .environment(\.colorScheme, .dark)
     }
 }
