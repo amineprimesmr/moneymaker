@@ -177,6 +177,13 @@ struct OverviewView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
+            Image("Logo")
+                .resizable().scaledToFit()
+                .frame(height: 30)
+                .frame(maxWidth: .infinity)
+                .shadow(color: .white.opacity(0.18), radius: 10)
+                .accessibilityLabel("MoneyMaker")
+                .padding(.bottom, 14)
             Text(Date().formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
                 .font(MMFont.system(11, .medium)).tracking(2.2).foregroundStyle(MMColor.ink3)
             Text("Revenus").font(MMFont.system(34, .bold)).tracking(-0.8)
