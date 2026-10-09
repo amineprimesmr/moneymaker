@@ -60,9 +60,11 @@ struct GlobeView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var spin = -0.35          // rad — Europe/Afrique de face au départ
-    @State private var tilt = 0.32           // rad — penché vers le nord, comme vu du ciel
+    private let tilt = 0.32                  // rad — inclinaison fixe, penchée vers le nord
     @State private var velocity = 0.0
-    @State private var dragStart: (spin: Double, tilt: Double)?
+    @State private var dragStart: Double?
+    /// nil = pas encore décidé ; false = geste vertical → laissé au défilement de la page.
+    @State private var horizontalDrag: Bool?
     @State private var lastTick = Date()
     @State private var dragging = false
     @State private var haptics = GlobeHaptics()
@@ -75,7 +77,7 @@ struct GlobeView: View {
             .onChange(of: tl.date) { _, now in advance(to: now) }
         }
         .contentShape(Circle())
-        .gesture(interactive ? drag : nil)
+        .simultaneousGesture(interactive ? drag : nil)
         .simultaneousGesture(interactive ? SpatialTapGesture().onEnded { tap($0.location) } : nil)
         .accessibilityElement()
         .accessibilityLabel("Planète des ventes : \(spots.filter { $0.value > 0 }.count) pays")
@@ -95,18 +97,21 @@ struct GlobeView: View {
         if interactive, abs(velocity) > 0.6 { haptics.rotated(to: spin, speed: abs(velocity)) }
     }
 
+    /// Rotation uniquement autour de l'axe des pôles, sur 360°, sans fin. L'inclinaison reste fixe.
+    /// Un geste plutôt vertical est ignoré pour laisser défiler la page.
     private var drag: some Gesture {
-        DragGesture(minimumDistance: 2)
+        DragGesture(minimumDistance: 6)
             .onChanged { v in
-                if dragStart == nil { dragStart = (spin, tilt); dragging = true; haptics.grab() }
+                if horizontalDrag == nil { horizontalDrag = abs(v.translation.width) > abs(v.translation.height) }
+                guard horizontalDrag == true else { return }
+                if dragStart == nil { dragStart = spin; dragging = true; haptics.grab() }
                 let k = 0.0085
-                spin = dragStart!.spin + v.translation.width * k
-                let newTilt = max(-1.1, min(1.1, dragStart!.tilt + v.translation.height * k))
-                if (newTilt == 1.1 || newTilt == -1.1) && abs(tilt) < 1.1 { haptics.edge() } // butée nord/sud
-                tilt = newTilt
-                haptics.rotated(to: spin + tilt, speed: max(abs(v.velocity.width), abs(v.velocity.height)) * k)
+                spin = dragStart! + v.translation.width * k
+                haptics.rotated(to: spin, speed: abs(v.velocity.width) * k)
             }
             .onEnded { v in
+                defer { horizontalDrag = nil }
+                guard horizontalDrag == true else { return }
                 velocity = max(-6, min(6, v.velocity.width * 0.0085))
                 dragStart = nil; dragging = false; lastTick = .now
                 haptics.release(speed: abs(velocity))
@@ -364,8 +369,6 @@ final class GlobeHaptics {
         if speed > 2.5 { rigid.impactOccurred(intensity: min(1, 0.35 + speed / 12)) } else { tick.selectionChanged() }
         tick.prepare()
     }
-
-    func edge() { rigid.impactOccurred(intensity: 0.8) }
 
     func release(speed: Double) {
         if speed > 1 { soft.impactOccurred(intensity: min(1, 0.4 + speed / 8)) }
