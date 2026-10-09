@@ -39,9 +39,8 @@ extension View {
     /// Les éléments se posent en douceur quand ils entrent dans le scroll.
     func mmScrollReveal() -> some View {
         scrollTransition(.interactive, axis: .vertical) { c, phase in
-            c.opacity(phase.isIdentity ? 1 : 0.35)
-                .scaleEffect(phase.isIdentity ? 1 : 0.96)
-                .blur(radius: phase.isIdentity ? 0 : 2)
+            c.opacity(phase.isIdentity ? 1 : 0.4)
+                .scaleEffect(phase.isIdentity ? 1 : 0.97)
         }
     }
 
@@ -70,7 +69,6 @@ private struct AppearModifier: ViewModifier {
         content
             .opacity(shown ? 1 : 0)
             .offset(y: shown || reduceMotion ? 0 : 22)
-            .blur(radius: shown || reduceMotion ? 0 : 6)
             .onAppear { if launch.revealed && tabVisible { show() } }
             .onChange(of: launch.revealed) { _, r in if r && tabVisible { show() } }
             .onChange(of: tabVisible) { _, v in if v && launch.revealed { show() } }
@@ -177,7 +175,6 @@ struct MMRing: View {
             Circle().trim(from: 0, to: shown)
                 .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .shadow(color: color.opacity(0.6), radius: 6)
         }
         .onAppear { withAnimation(.easeOut(duration: 1.1).delay(0.2)) { shown = max(0, min(1, value)) } }
         .onChange(of: value) { _, v in withAnimation(.easeOut(duration: 0.6)) { shown = max(0, min(1, v)) } }
@@ -263,8 +260,7 @@ private struct DataSwap<T: Equatable>: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
         content
-            .blur(radius: dip ? 5 : 0)
-            .opacity(dip ? 0.55 : 1)
+            .opacity(dip ? 0.5 : 1)
             .scaleEffect(dip ? 0.985 : 1)
             .onChange(of: trigger) { _, _ in
                 guard !reduceMotion else { return }

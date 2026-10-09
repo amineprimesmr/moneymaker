@@ -17,6 +17,9 @@ struct SideMenu<MenuContent: View, Content: View>: View {
     var isEnabled: Bool = true
     var sideBarWidth: CGFloat = 300
     @Binding var isExpanded: Bool
+    /// Change quand le contenu doit vraiment être reconstruit (onglet, navigation…). Pendant le
+    /// glissé, seul `progress` bouge : le contenu n'est pas recalculé à chaque image.
+    var contentKey: AnyHashable = 0
     @ViewBuilder var menuContent: (_ progress: CGFloat) -> MenuContent
     @ViewBuilder var content: (_ progress: CGFloat) -> Content
 
@@ -32,7 +35,8 @@ struct SideMenu<MenuContent: View, Content: View>: View {
                 .opacity(progress)
                 .scaleEffect(0.95 + (0.05 * progress))
 
-            content(progress)
+            StableContent(key: contentKey, content: content(0))
+                .equatable()
                 .containerRelativeFrame(.horizontal)
                 .frame(maxHeight: .infinity)
                 .background { backgroundShape.fill(Color.black).ignoresSafeArea() }
@@ -151,4 +155,12 @@ private struct SideMenuGesture: UIGestureRecognizerRepresentable {
             return false
         }
     }
+}
+
+/// Contenu qui ne se redessine que si sa clé change (ses vues internes restent réactives à leurs propres données).
+private struct StableContent<C: View>: View, Equatable {
+    let key: AnyHashable
+    let content: C
+    var body: some View { content }
+    static func == (a: Self, b: Self) -> Bool { a.key == b.key }
 }

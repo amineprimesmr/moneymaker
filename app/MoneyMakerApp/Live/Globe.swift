@@ -63,22 +63,22 @@ struct GlobeView: View {
     var onSelect: ((String?) -> Void)? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var spin = -0.35          // rad — Europe/Afrique de face au départ
+    /// Moteur de rotation hors SwiftUI : le faire tourner ne recalcule pas la vue, seule la Canvas se redessine.
+    @State private var motion = GlobeMotion()
+    private var spin: Double { motion.spin }
     private let tilt = 0.32                  // rad — inclinaison fixe, penchée vers le nord
-    @State private var velocity = 0.0
     @State private var dragStart: Double?
     /// nil = pas encore décidé ; false = geste vertical → laissé au défilement de la page.
     @State private var horizontalDrag: Bool?
-    @State private var lastTick = Date()
     @State private var dragging = false
     @State private var haptics = GlobeHaptics()
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: reduceMotion && !dragging)) { tl in
+        // 60 i/s quand on la manipule ou qu'elle file sur sa lancée, 30 i/s en croisière lente.
+        TimelineView(.animation(minimumInterval: dragging || abs(motion.velocity) > 0.3 ? 1.0 / 60 : 1.0 / 30, paused: reduceMotion && !dragging)) { tl in
             Canvas(rendersAsynchronously: true) { ctx, size in
                 draw(&ctx, size: size, now: tl.date)
             }
-            .onChange(of: tl.date) { _, now in advance(to: now) }
         }
         .contentShape(Circle())
         .simultaneousGesture(interactive ? drag : nil)
@@ -89,16 +89,17 @@ struct GlobeView: View {
 
     // MARK: Mouvement
 
+    /// Avance la rotation — appelé depuis le dessin, sans toucher à l'état SwiftUI.
     private func advance(to now: Date) {
-        let dt = min(0.05, now.timeIntervalSince(lastTick))
-        lastTick = now
+        let dt = min(0.05, now.timeIntervalSince(motion.lastTick))
+        motion.lastTick = now
         guard !dragging else { return }
         // Rotation automatique douce + inertie qui retombe vers elle.
         let cruise = reduceMotion ? 0 : -0.09   // d'ouest en est, comme la Terre
-        velocity += (cruise - velocity) * min(1, dt * 1.6)
-        spin += velocity * dt
+        motion.velocity += (cruise - motion.velocity) * min(1, dt * 1.6)
+        motion.spin += motion.velocity * dt
         // Crans pendant l'inertie, qui s'estompent avec la vitesse (rien pendant la croisière).
-        if interactive, abs(velocity) > 0.6 { haptics.rotated(to: spin, speed: abs(velocity)) }
+        if interactive, abs(motion.velocity) > 0.6 { haptics.rotated(to: motion.spin, speed: abs(motion.velocity)) }
     }
 
     /// Rotation uniquement autour de l'axe des pôles, sur 360°, sans fin. L'inclinaison reste fixe.
@@ -110,15 +111,15 @@ struct GlobeView: View {
                 guard horizontalDrag == true else { return }
                 if dragStart == nil { dragStart = spin; dragging = true; haptics.grab() }
                 let k = 0.0085
-                spin = dragStart! - v.translation.width * k   // la surface suit le doigt
+                motion.spin = dragStart! - v.translation.width * k   // la surface suit le doigt
                 haptics.rotated(to: spin, speed: abs(v.velocity.width) * k)
             }
             .onEnded { v in
                 defer { horizontalDrag = nil }
                 guard horizontalDrag == true else { return }
-                velocity = max(-6, min(6, -v.velocity.width * 0.0085))
-                dragStart = nil; dragging = false; lastTick = .now
-                haptics.release(speed: abs(velocity))
+                motion.velocity = max(-6, min(6, -v.velocity.width * 0.0085))
+                dragStart = nil; dragging = false; motion.lastTick = .now
+                haptics.release(speed: abs(motion.velocity))
             }
     }
 
@@ -151,6 +152,7 @@ struct GlobeView: View {
     // MARK: Dessin
 
     private func draw(_ ctx: inout GraphicsContext, size: CGSize, now: Date) {
+        advance(to: now)
         if tapSize != size { DispatchQueue.main.async { tapSize = size } }
         let r = min(size.width, size.height) / 2 * 0.86
         let c = CGPoint(x: size.width / 2, y: size.height / 2)
@@ -347,6 +349,15 @@ struct GlobeScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .mmPage()
     }
+}
+
+// MARK: - Moteur de rotation
+
+/// État de rotation mutable hors du système de mise à jour de SwiftUI.
+final class GlobeMotion {
+    var spin = -0.35          // rad — Europe/Afrique de face au départ
+    var velocity = 0.0
+    var lastTick = Date()
 }
 
 // MARK: - Retours haptiques

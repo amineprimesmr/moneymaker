@@ -68,12 +68,7 @@ struct Overview: Codable, Hashable {
 
     /// Daily revenue across every business, oldest first, for the last `days` days.
     func dailyRevenue(days: Int = 30) -> [(date: Date, micros: Int)] {
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")
-        return (0..<days).reversed().map { i in
-            let d = Date().addingTimeInterval(Double(-i) * 86400)
-            let key = f.string(from: d)
-            return (d, projects.reduce(0) { $0 + ($1.revenueByDay[key] ?? 0) })
-        }
+        DayKeys.last(days).map { key, d in (d, projects.reduce(0) { $0 + ($1.revenueByDay[key] ?? 0) }) }
     }
 }
 

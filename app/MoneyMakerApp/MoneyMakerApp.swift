@@ -49,11 +49,8 @@ final class Store: ObservableObject {
     @Published var focusId: String?
 
     /// Périmètre réellement affiché : le business mis en avant, sinon la sélection.
-    var viewIds: Set<String> {
-        if let f = focusId, activeIds.contains(f) { return [f] }
-        return activeIds
-    }
-    var viewProjects: [ProjectSummary] { allProjects.filter { viewIds.contains($0.projectId) } }
+    var viewIds: Set<String> { memo.view }
+    var viewProjects: [ProjectSummary] { memo.viewProjects }
 
     /// Touche un logo : met ce business en avant ; re-toucher revient à toute la sélection.
     func focus(_ projectId: String) {
@@ -79,35 +76,62 @@ final class Store: ObservableObject {
     }
 
     /// Sélection effective : ids encore existants ; si rien de valable, tous.
-    var activeIds: Set<String> {
-        let valid = selectedIds.intersection(allProjects.map(\.projectId))
-        return valid.isEmpty ? Set(allProjects.map(\.projectId)) : valid
-    }
-    var isAll: Bool { viewIds.count == allProjects.count }
-    var selectedProjects: [ProjectSummary] { allProjects.filter { activeIds.contains($0.projectId) } }
+    var activeIds: Set<String> { memo.active }
+    var isAll: Bool { memo.view.count == allProjects.count }
+    var selectedProjects: [ProjectSummary] { memo.selectedProjects }
     /// Un seul business choisi (bloc dédié sur l'Accueil).
     var selectedProject: ProjectSummary? { viewProjects.count == 1 ? viewProjects.first : nil }
     /// Ids à transmettre au serveur (nil = tous).
     var scopeIds: [String]? { isAll ? nil : Array(viewIds).sorted() }
 
-    /// L'overview agrégé sur les business choisis : les cartes de l'Accueil le lisent sans connaître la sélection.
-    var scoped: Overview? {
-        guard let o = overview else { return nil }
-        if isAll { return o }
-        let ps = viewProjects
-        let dl = ps.compactMap(\.downloads)
-        return Overview(currency: ps.first?.currency ?? o.currency, periodDays: o.periodDays,
-                        mrrMicros: ps.reduce(0) { $0 + $1.mrrMicros }, revenueMicros: ps.reduce(0) { $0 + $1.netRevenueMicros },
-                        activeSubscriptions: ps.reduce(0) { $0 + $1.activeSubscriptions }, activeTrials: ps.reduce(0) { $0 + $1.activeTrials },
-                        newCustomers: ps.reduce(0) { $0 + $1.newCustomers }, projects: ps, generatedAt: o.generatedAt,
-                        payingCustomers: ps.reduce(0) { $0 + ($1.payingCustomers ?? 0) },
-                        downloads: dl.isEmpty ? nil : dl.reduce(0, +), hasTrials: ps.contains { $0.hasTrials ?? ($0.activeTrials > 0) })
-    }
+    /// L'overview agrégé sur les business affichés : les cartes de l'Accueil le lisent sans connaître la sélection.
+    var scoped: Overview? { memo.scoped }
+    var scopedAlerts: [RankingAlert] { memo.alerts }
 
-    var scopedAlerts: [RankingAlert] {
-        guard !isAll else { return alerts }
-        let ids = viewIds, names = Set(viewProjects.map(\.name))
-        return alerts.filter { a in a.projectId.map(ids.contains) ?? names.contains(a.projectName ?? "") }
+    // MARK: Mémo du périmètre
+    // Ces valeurs étaient recalculées à chaque accès (des dizaines de fois par image) ; elles ne
+    // changent qu'avec l'overview, les alertes, la sélection ou le business mis en avant.
+
+    private struct ScopeMemo {
+        var key = ""
+        var active: Set<String> = []
+        var view: Set<String> = []
+        var selectedProjects: [ProjectSummary] = []
+        var viewProjects: [ProjectSummary] = []
+        var scoped: Overview?
+        var alerts: [RankingAlert] = []
+    }
+    private var memoStore = ScopeMemo()
+
+    private var memo: ScopeMemo {
+        let key = "\(overview?.generatedAt ?? 0)|\(overview?.projects.count ?? 0)|\(selectedIds.sorted())|\(focusId ?? "")|\(alerts.count)|\(alerts.first?.id ?? "")"
+        if memoStore.key == key { return memoStore }
+        var m = ScopeMemo(key: key)
+        let all = allProjects, allIds = Set(all.map(\.projectId))
+        let valid = selectedIds.intersection(allIds)
+        m.active = valid.isEmpty ? allIds : valid
+        if let f = focusId, m.active.contains(f) { m.view = [f] } else { m.view = m.active }
+        m.selectedProjects = all.filter { m.active.contains($0.projectId) }
+        m.viewProjects = all.filter { m.view.contains($0.projectId) }
+        if let o = overview {
+            if m.view.count == all.count {
+                m.scoped = o
+            } else {
+                let ps = m.viewProjects, dl = ps.compactMap(\.downloads)
+                m.scoped = Overview(currency: ps.first?.currency ?? o.currency, periodDays: o.periodDays,
+                                    mrrMicros: ps.reduce(0) { $0 + $1.mrrMicros }, revenueMicros: ps.reduce(0) { $0 + $1.netRevenueMicros },
+                                    activeSubscriptions: ps.reduce(0) { $0 + $1.activeSubscriptions }, activeTrials: ps.reduce(0) { $0 + $1.activeTrials },
+                                    newCustomers: ps.reduce(0) { $0 + $1.newCustomers }, projects: ps, generatedAt: o.generatedAt,
+                                    payingCustomers: ps.reduce(0) { $0 + ($1.payingCustomers ?? 0) },
+                                    downloads: dl.isEmpty ? nil : dl.reduce(0, +), hasTrials: ps.contains { $0.hasTrials ?? ($0.activeTrials > 0) })
+            }
+        }
+        if m.view.count == all.count { m.alerts = alerts } else {
+            let names = Set(m.viewProjects.map(\.name))
+            m.alerts = alerts.filter { a in a.projectId.map(m.view.contains) ?? names.contains(a.projectName ?? "") }
+        }
+        memoStore = m
+        return m
     }
 
     /// Progression vers l'objectif de MRR (réglé dans Réglages → Widgets), nil s'il n'y en a pas.

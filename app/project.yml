@@ -5,6 +5,10 @@ options:
   createIntermediateGroups: true
 settings:
   base:
+    # Builds installés sur l'iPhone : optimisés comme en production (la planète et les
+    # graphiques sont plusieurs fois plus lents en -Onone).
+    SWIFT_OPTIMIZATION_LEVEL: "-O"
+    SWIFT_COMPILATION_MODE: wholemodule
     DEVELOPMENT_TEAM: F2CJGJ69XU
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: Apple Development

@@ -29,6 +29,7 @@
 		AEBAE27FA6C291041BA9B259 /* MMTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B41F707AED2D8405F6A5A /* MMTheme.swift */; };
 		AF79FEB78C3C31BD156BF1D8 /* BusinessSideBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B505E5DB6CC437E02CFFDC2 /* BusinessSideBar.swift */; };
 		C15F68906BCC0285C1E981AD /* Screens.swift in Sources */ = {isa = PBXBuildFile; fileRef = F88B72061DA7660BF3CEB1FD /* Screens.swift */; };
+		DD055D734B50B18D7BDBA8A8 /* CachedImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98A641DEF15038E8304BEEE0 /* CachedImage.swift */; };
 		E41FCBB3965C52B9646B6A79 /* ProjectInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */; };
 		ED2ECE641415901FA314EA93 /* DashboardWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 911E11FF37AB7E13CD4D68BF /* DashboardWidget.swift */; };
 		F8CBAA134547ECEA85DA0F72 /* LiveWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1097A42E4D78F9B3FE75803 /* LiveWidgets.swift */; };
@@ -71,6 +72,7 @@
 		7F8C9B2ECD231050E024974A /* LiveServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveServices.swift; sourceTree = "<group>"; };
 		8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyMakerClient.swift; sourceTree = "<group>"; };
 		911E11FF37AB7E13CD4D68BF /* DashboardWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardWidget.swift; sourceTree = "<group>"; };
+		98A641DEF15038E8304BEEE0 /* CachedImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedImage.swift; sourceTree = "<group>"; };
 		A33B41F707AED2D8405F6A5A /* MMTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMTheme.swift; sourceTree = "<group>"; };
 		A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectInsights.swift; sourceTree = "<group>"; };
 		A82382FF73CC673CD177B62B /* LiveScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveScreens.swift; sourceTree = "<group>"; };
@@ -163,6 +165,7 @@
 		D80749C58DA4B8FAB7CE44D2 /* Design */ = {
 			isa = PBXGroup;
 			children = (
+				98A641DEF15038E8304BEEE0 /* CachedImage.swift */,
 				F4144027ADBE57BF8FB2AC8F /* LaunchSplash.swift */,
 				DF8864A5BC74A1FB07813601 /* MMEffects.swift */,
 				DDD82E7144DFCD2E9CEB2649 /* MMTabBar.swift */,
@@ -280,6 +283,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AF79FEB78C3C31BD156BF1D8 /* BusinessSideBar.swift in Sources */,
+				DD055D734B50B18D7BDBA8A8 /* CachedImage.swift in Sources */,
 				9E22F7E452E61C7687F22A70 /* Globe.swift in Sources */,
 				37B9651D3011145AAE87823A /* LaunchSplash.swift in Sources */,
 				7A09B8560251703819AC48BC /* LiveScreens.swift in Sources */,
@@ -540,7 +544,8 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
 			};
 			name = Debug;

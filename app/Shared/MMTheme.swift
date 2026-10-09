@@ -94,7 +94,12 @@ struct MMCard<Content: View>: View {
                             LinearGradient(colors: [Color.white.opacity(0.16), MMColor.cardBorder, Color.white.opacity(0.04)],
                                            startPoint: .top, endPoint: .bottom), lineWidth: 1)
                     }
-                    .shadow(color: glow?.opacity(0.22) ?? .clear, radius: glow == nil ? 0 : 28, y: 8)
+                    .overlay {
+                        // « Lueur » sans ombre floue : un liseré teinté en haut de la carte (gratuit à dessiner).
+                        if let glow {
+                            shape.strokeBorder(LinearGradient(colors: [glow.opacity(0.35), .clear], startPoint: .top, endPoint: .center), lineWidth: 1)
+                        }
+                    }
             }
             .clipShape(shape)
     }
@@ -149,12 +154,9 @@ struct MMGlowChart: View {
 
     var body: some View {
         let maxY = max(points.map(\.value).max() ?? 1, 0.0001) * 1.12
-        ZStack {
-            // Halo : la même ligne, floutée, sous la vraie.
-            line(maxY: maxY, area: false).blur(radius: 7).opacity(0.85)
-            line(maxY: maxY, area: true)
-                .modifier(SelectionModifier(selection: selection))
-        }
+        // Un seul graphique : l'aire en dégradé tient lieu de halo (l'ancien double flouté coûtait cher).
+        line(maxY: maxY, area: true)
+            .modifier(SelectionModifier(selection: selection))
     }
 
     private var selected: MMPoint? {
@@ -213,31 +215,55 @@ private struct SelectionModifier: ViewModifier {
     }
 }
 
-/// Mini-courbe pour les lignes de liste.
+/// Mini-courbe pour les lignes de liste : un simple tracé (pas de Swift Charts).
 struct MMSparkline: View {
     let values: [Double]
     var body: some View {
-        let maxV = max(values.max() ?? 1, 0.0001)
-        Chart(Array(values.enumerated()), id: \.offset) { i, v in
-            LineMark(x: .value("i", i), y: .value("v", v))
-                .interpolationMethod(.catmullRom)
-                .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                .foregroundStyle(MMColor.chartGradient)
+        SparkShape(values: values)
+            .stroke(MMColor.chartGradient, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+    }
+}
+
+private struct SparkShape: Shape {
+    let values: [Double]
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        guard values.count > 1 else { return p }
+        let maxV = max(values.max() ?? 1, 0.0001) * 1.1
+        for (i, v) in values.enumerated() {
+            let pt = CGPoint(x: r.minX + r.width * CGFloat(i) / CGFloat(values.count - 1), y: r.maxY - r.height * CGFloat(v / maxV))
+            i == 0 ? p.move(to: pt) : p.addLine(to: pt)
         }
-        .chartYScale(domain: 0...maxV * 1.1)
-        .chartXAxis(.hidden).chartYAxis(.hidden).chartLegend(.hidden)
+        return p
     }
 }
 
 // MARK: - Séries
 
+/// Clés `yyyy-MM-dd` (UTC) des `days` derniers jours, du plus ancien au plus récent — calculées une fois par jour.
+enum DayKeys {
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC"); f.locale = Locale(identifier: "en_US_POSIX"); return f
+    }()
+    private static var cache: [Int: (day: Int, keys: [(String, Date)])] = [:]
+    private static let lock = NSLock()
+
+    static func last(_ days: Int) -> [(String, Date)] {
+        let now = Date(), today = Int(now.timeIntervalSince1970 / 86400)
+        lock.lock(); defer { lock.unlock() }
+        if let c = cache[days], c.day == today { return c.keys }
+        let keys = (0..<max(days, 1)).reversed().map { i -> (String, Date) in
+            let d = now.addingTimeInterval(Double(-i) * 86400)
+            return (formatter.string(from: d), d)
+        }
+        cache[days] = (today, keys)
+        return keys
+    }
+}
+
 /// Revenu par jour (clé `yyyy-MM-dd` UTC), du plus ancien au plus récent.
 func dailySeries(_ byDay: [String: Int], days: Int) -> [MMPoint] {
-    let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")
-    return (0..<max(days, 1)).reversed().map { i in
-        let d = Date().addingTimeInterval(Double(-i) * 86400)
-        return MMPoint(date: d, value: Double(byDay[f.string(from: d)] ?? 0) / 1e6)
-    }
+    DayKeys.last(days).map { MMPoint(date: $0.1, value: Double(byDay[$0.0] ?? 0) / 1e6) }
 }
 
 /// Variation de la seconde moitié de la série par rapport à la première.

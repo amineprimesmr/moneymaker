@@ -99,7 +99,7 @@ struct RootTabView: View {
     ]
 
     var body: some View {
-        SideMenu(isEnabled: tab == 0 && homePath.isEmpty, isExpanded: $menuOpen) { _ in
+        SideMenu(isEnabled: tab == 0 && homePath.isEmpty, isExpanded: $menuOpen, contentKey: "\(tab)|\(homePath.count)") { _ in
             BusinessSideBar(isExpanded: $menuOpen) { p in
                 homePath = NavigationPath(); homePath.append(p)
             } openSettings: {
@@ -125,9 +125,10 @@ struct RootTabView: View {
             // Accueil, Ventes et Réglages restent montés (scroll et état conservés) ;
             // la planète n'est rendue que visible : elle anime 60 i/s.
             OverviewView(path: $homePath, menuOpen: $menuOpen).tabLayer(tab == 0)
-            NavigationStack { FeedScreen().toolbar(.hidden, for: .navigationBar) }.tabLayer(tab == 1)
+            // Onglets secondaires : rendus seulement quand ils sont visibles (rien ne tourne en arrière-plan).
+            if tab == 1 { NavigationStack { FeedScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
             if tab == 2 { NavigationStack { GlobeScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
-            NavigationStack { LiveSettingsView(embedded: true).toolbar(.hidden, for: .navigationBar) }.tabLayer(tab == 3)
+            if tab == 3 { NavigationStack { LiveSettingsView(embedded: true).toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
             MMTabBar(selection: $tab, items: items) { t in if t == 0 { withAnimation { homePath = NavigationPath() } } }
                 .padding(.bottom, 4)
                 .ignoresSafeArea(.keyboard)
@@ -548,7 +549,7 @@ struct TrackedAppCard: View {
         MMCard(padding: 16, radius: 22) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
-                    AsyncImage(url: app.icon.flatMap(URL.init(string:))) { $0.resizable() } placeholder: { MMColor.cardFill }
+                    CachedImage(url: app.icon.flatMap(URL.init(string:))) { MMColor.cardFill }
                         .frame(width: 46, height: 46).clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                         .overlay { RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(MMColor.hairline) }
                     VStack(alignment: .leading, spacing: 3) {

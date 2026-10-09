@@ -55,9 +55,7 @@ struct ProjectIcon: View {
         let shape = RoundedRectangle(cornerRadius: size * 0.2237, style: .continuous)
         Group {
             if let s = project?.iconUrl, let url = URL(string: s) {
-                AsyncImage(url: url, transaction: Transaction(animation: .easeOut(duration: 0.25))) { phase in
-                    if let img = phase.image { img.resizable().scaledToFill() } else { fallback }
-                }
+                CachedImage(url: url) { fallback }
             } else { fallback }
         }
         .frame(width: size, height: size)

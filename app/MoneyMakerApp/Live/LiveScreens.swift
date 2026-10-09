@@ -30,8 +30,7 @@ struct RevenueCard: View {
                 HStack {
                     HStack(spacing: 7) {
                         Circle().fill(MMColor.accent).frame(width: 7, height: 7)
-                            .shadow(color: MMColor.accent, radius: pulse ? 7 : 2)
-                            .scaleEffect(pulse ? 1.25 : 0.9)
+                            .opacity(pulse ? 1 : 0.35)
                         Text(point == nil ? "REVENU" : point!.date.formatted(isToday ? .dateTime.hour() : .dateTime.day().month(.abbreviated)).uppercased())
                             .font(MMFont.system(11, .medium)).tracking(2.2).foregroundStyle(MMColor.ink3)
                     }
