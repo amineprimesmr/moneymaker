@@ -88,6 +88,7 @@ struct RootTabView: View {
     @Environment(\.scenePhase) private var phase
     @State private var tab = 0
     @State private var homePath = NavigationPath()
+    @ObservedObject private var prompt = NotificationPrompt.shared
 
     private let items: [MMTabBar.Item] = [
         .init(tag: 0, title: "Accueil", icon: "square.grid.2x2.fill"),
@@ -110,6 +111,10 @@ struct RootTabView: View {
                 .ignoresSafeArea(.keyboard)
         }
         .task { await store.refresh() }
+        .task { await prompt.presentIfNeeded() }
+        .sheet(isPresented: $prompt.isPresented) {
+            NotificationPermissionView { prompt.enable() } secondaryAction: { prompt.later() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .mmLiveEvent)) { _ in Task { await store.refreshLive() } }
         .onChange(of: phase) { _, p in if p == .active { Task { await store.refreshLive() } } }
         .onChange(of: router.pending) { _, d in route(d) }

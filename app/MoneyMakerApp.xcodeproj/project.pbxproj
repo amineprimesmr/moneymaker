@@ -10,6 +10,7 @@
 		0095B39F4DF4E19D7F6A24E0 /* LiveServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F8C9B2ECD231050E024974A /* LiveServices.swift */; };
 		19BDD03E12EDAD86DDEBBDE9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1097FC8E56F8174FC341976B /* Assets.xcassets */; };
 		24B06FD26A971ACE214EAB40 /* countries.json in Resources */ = {isa = PBXBuildFile; fileRef = F8609E850E6E511A47AC0F87 /* countries.json */; };
+		2AFD4C6B033F517E98B4102C /* NotificationPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */; };
 		2F13A1B4CC19D980D0A815C3 /* MoneyMakerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4C830002B2BC4B3D96025D8 /* MoneyMakerApp.swift */; };
 		37B9651D3011145AAE87823A /* LaunchSplash.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4144027ADBE57BF8FB2AC8F /* LaunchSplash.swift */; };
 		3D6DAEE438D7AD2116843369 /* MoneyMakerWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5A389B5ED64940A8BC40C6A3 /* MoneyMakerWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -57,6 +58,7 @@
 
 /* Begin PBXFileReference section */
 		1097FC8E56F8174FC341976B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPermissionView.swift; sourceTree = "<group>"; };
 		1C16D5B2A5EFA0E3324011BA /* cash.caf */ = {isa = PBXFileReference; path = cash.caf; sourceTree = "<group>"; };
 		21F9030100E848B1A39A4B16 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		45EBE436171160AF8EA3DF70 /* MoneyMaker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MoneyMaker.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -145,6 +147,7 @@
 				EA6EDB0BDEE53E198B5CA131 /* Globe.swift */,
 				A82382FF73CC673CD177B62B /* LiveScreens.swift */,
 				7F8C9B2ECD231050E024974A /* LiveServices.swift */,
+				1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */,
 			);
 			path = Live;
 			sourceTree = "<group>";
@@ -277,6 +280,7 @@
 				FF6CF15644F82D3C4793F7B6 /* MMTheme.swift in Sources */,
 				2F13A1B4CC19D980D0A815C3 /* MoneyMakerApp.swift in Sources */,
 				8EFD41694F6ACF6B5C362766 /* MoneyMakerClient.swift in Sources */,
+				2AFD4C6B033F517E98B4102C /* NotificationPermissionView.swift in Sources */,
 				C15F68906BCC0285C1E981AD /* Screens.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -97,7 +97,7 @@ struct EnableAlertsCard: View {
                     }
                     Spacer(minLength: 0)
                 }
-                Button("Activer") { Task { await push.requestAuthorization() } }
+                Button("Activer") { NotificationPrompt.shared.show() }
                     .font(MMFont.system(14, .medium)).foregroundStyle(.black)
                     .frame(maxWidth: .infinity).padding(.vertical, 12)
                     .background(MMColor.accent, in: Capsule())
@@ -331,7 +331,7 @@ struct LiveSettingsView: View {
                     if push.status == .denied {
                         pill("Ouvrir Réglages", filled: true) { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }
                     } else if push.status != .authorized {
-                        pill("Activer", filled: true) { Task { await push.requestAuthorization() } }
+                        pill("Activer", filled: true) { NotificationPrompt.shared.show() }
                     } else {
                         pill(push.testing ? "Envoi…" : "Envoyer un test", filled: true) { Task { await push.sendTest() } }
                     }

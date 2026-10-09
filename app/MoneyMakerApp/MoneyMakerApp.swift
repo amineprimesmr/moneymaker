@@ -8,7 +8,7 @@ struct MoneyMakerApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
-                .overlay { if showsSplash { LaunchSplashView { showsSplash = false } } }
+                .overlay { if showsSplash { LaunchSplashView { showsSplash = false; NotificationPrompt.shared.splashFinished = true } } }
                 .onOpenURL { Router.shared.open($0) }
                 // fixed-scheme: the whole product (dashboard, widgets) is dark-only.
                 .preferredColorScheme(.dark)
