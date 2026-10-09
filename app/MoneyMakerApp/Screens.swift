@@ -240,7 +240,6 @@ struct OverviewView: View {
     private var scopeTitle: some View {
         Button { menuOpen = true } label: {
             LogoFan(projects: store.selectedProjects)
-                .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
         }
         .buttonStyle(MMPressStyle(scale: 0.96))

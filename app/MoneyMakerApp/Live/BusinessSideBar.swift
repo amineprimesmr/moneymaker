@@ -97,62 +97,70 @@ struct ProjectIconStack: View {
 
 // MARK: - Éventail 3D des business affichés
 
-/// Les logos des business choisis, côte à côte, inclinés et légèrement superposés, en perspective.
-/// Le logo du centre est au premier plan ; chacun flotte doucement avec un décalage de phase.
-/// Entrées/sorties en ressort quand la sélection change. Toucher ouvre le sélecteur.
+/// Les logos des business choisis, alignés à gauche comme des cartes posées en éventail :
+/// le premier devant, les suivants glissés derrière, tous pivotés en perspective.
+/// Relief réel : tranche extrudée (couches décalées), biseau clair en haut, ombre de contact.
+/// Statique — seules les entrées/sorties sont animées quand la sélection change.
 struct LogoFan: View {
     let projects: [ProjectSummary]
-    var size: CGFloat = 62
-    var maxShown = 6
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var size: CGFloat = 44
+    var maxShown = 7
 
     var body: some View {
         let shown = Array(projects.prefix(maxShown))
         let extra = projects.count - shown.count
-        let n = shown.count
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { tl in
-            let t = reduceMotion ? 0 : tl.date.timeIntervalSinceReferenceDate
-            HStack(spacing: n > 1 ? -size * 0.3 : 0) {
-                ForEach(Array(shown.enumerated()), id: \.element.id) { i, p in
-                    let c = Double(i) - Double(n - 1) / 2            // position par rapport au centre
-                    let float = sin(t * 1.3 + Double(i) * 1.1) * 2.5
-                    tile(p)
-                        .rotation3DEffect(.degrees(-c * 16), axis: (x: 0, y: 1, z: 0), perspective: 0.55)
-                        .rotationEffect(.degrees(c * 6))
-                        .offset(y: abs(c) * 7 + float)
-                        .zIndex(10 - abs(c))
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.3).combined(with: .opacity).combined(with: .offset(y: 18)),
-                            removal: .scale(scale: 0.5).combined(with: .opacity)))
-                }
-                if extra > 0 {
-                    Text("+\(extra)")
-                        .font(MMFont.number(16, .regular)).foregroundStyle(.white)
-                        .frame(width: size * 0.62, height: size * 0.62)
-                        .background(Color.white.opacity(0.1), in: Circle())
-                        .overlay(Circle().strokeBorder(Color.white.opacity(0.15)))
-                        .padding(.leading, size * 0.42)
-                        .transition(.scale.combined(with: .opacity))
-                }
+        HStack(spacing: shown.count > 1 ? -size * 0.36 : 0) {
+            ForEach(Array(shown.enumerated()), id: \.element.id) { i, p in
+                tile(p)
+                    .rotation3DEffect(.degrees(-28), axis: (x: 0.15, y: 1, z: 0), anchor: .leading, perspective: 0.5)
+                    .rotationEffect(.degrees(Double(i) * 2.5), anchor: .bottomLeading)
+                    .zIndex(Double(100 - i))
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.4, anchor: .leading).combined(with: .opacity),
+                        removal: .scale(scale: 0.6, anchor: .leading).combined(with: .opacity)))
+            }
+            if extra > 0 {
+                Text("+\(extra)")
+                    .font(MMFont.number(14, .regular)).foregroundStyle(.white)
+                    .frame(width: size * 0.7, height: size * 0.7)
+                    .background(Color.white.opacity(0.1), in: Circle())
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.15)))
+                    .padding(.leading, size * 0.45)
+                    .transition(.scale.combined(with: .opacity))
             }
         }
-        .frame(height: size * 1.35)
-        .animation(.spring(response: 0.5, dampingFraction: 0.72), value: projects.map(\.projectId))
+        .padding(.leading, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: size * 1.25)
+        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: projects.map(\.projectId))
         .accessibilityElement()
         .accessibilityLabel(projects.map(\.name).joined(separator: ", "))
     }
 
     private func tile(_ p: ProjectSummary) -> some View {
         let shape = RoundedRectangle(cornerRadius: size * 0.2237, style: .continuous)
-        return ProjectIcon(project: p, size: size)
-            .overlay {
-                // Reflet : lumière venant du haut, comme une vraie icône vitrée.
-                shape.fill(LinearGradient(colors: [Color.white.opacity(0.22), .clear, .clear], startPoint: .top, endPoint: .bottom))
-                    .blendMode(.plusLighter)
+        return ZStack {
+            // Tranche : 5 couches de plus en plus sombres, décalées vers le bas-droite.
+            ForEach((1...5).reversed(), id: \.self) { k in
+                shape.fill(Color(white: 0.20 - Double(k) * 0.03))
+                    .offset(x: CGFloat(k) * 0.7, y: CGFloat(k) * 0.9)
             }
-            .overlay(shape.strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75))
-            .shadow(color: .black.opacity(0.65), radius: 12, y: 8)
-            .shadow(color: .white.opacity(0.05), radius: 1)
+            ProjectIcon(project: p, size: size)
+                .overlay {
+                    // Biseau : lumière en haut, ombre en bas → la face paraît bombée.
+                    shape.fill(LinearGradient(stops: [
+                        .init(color: .white.opacity(0.30), location: 0),
+                        .init(color: .white.opacity(0.0), location: 0.35),
+                        .init(color: .black.opacity(0.0), location: 0.65),
+                        .init(color: .black.opacity(0.28), location: 1)], startPoint: .top, endPoint: .bottom))
+                        .blendMode(.overlay)
+                }
+                .overlay(shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.8))
+        }
+        .frame(width: size, height: size)
+        .compositingGroup()
+        .shadow(color: .black.opacity(0.8), radius: 6, x: 3, y: 6)
+        .shadow(color: .black.opacity(0.35), radius: 14, x: 6, y: 12)
     }
 }
 
