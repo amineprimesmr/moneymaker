@@ -159,8 +159,23 @@ struct BusinessSideBar: View {
         Task { try? await Task.sleep(for: .milliseconds(180)); isExpanded = false }
     }
 
-    private func connectedCount(_ projects: [ProjectSummary]) -> Int {
-        projects.filter { (setup.byProject[$0.projectId]?.progress ?? 0) >= 1 }.count
+    /// « Connecté » = au moins une source de revenus branchée et validée, ou un achat déjà reçu.
+    /// (La mise en route à 100 % est une autre notion : elle est affichée sur chaque ligne.)
+    private static let sources: Set<String> = ["sdk", "asc", "google", "stripe", "firstPurchase"]
+
+    private func isConnected(_ p: ProjectSummary) -> Bool? {
+        guard let status = setup.byProject[p.projectId] else { return nil }
+        return status.steps.contains { Self.sources.contains($0.id) && $0.done } || p.mrrMicros > 0 || p.netRevenueMicros > 0
+    }
+
+    private func summary(_ projects: [ProjectSummary]) -> String {
+        let known = projects.compactMap(isConnected)
+        guard known.count == projects.count else { return "\(projects.count) business · vérification…" }
+        let connected = known.filter { $0 }.count
+        let toFinish = projects.filter { (setup.byProject[$0.projectId]?.progress ?? 1) < 1 }.count
+        var parts = ["\(projects.count) business", connected == projects.count ? "tous connectés" : "\(connected) connecté\(connected > 1 ? "s" : "")"]
+        if toFinish > 0 { parts.append("\(toFinish) à finir") }
+        return parts.joined(separator: " · ")
     }
 
     private func card<C: View>(selected: Bool, @ViewBuilder _ content: () -> C) -> some View {
@@ -180,7 +195,7 @@ struct BusinessSideBar: View {
                 ProjectIconStack(projects: projects, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Tous les business").font(MMFont.system(16, .semibold)).foregroundStyle(.white)
-                    Text("\(projects.count) business · \(connectedCount(projects)) connectés").font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
+                    Text(summary(projects)).font(MMFont.system(12)).foregroundStyle(MMColor.ink3).lineLimit(1).minimumScaleFactor(0.8)
                 }
                 Spacer(minLength: 4)
                 VStack(alignment: .trailing, spacing: 2) {
