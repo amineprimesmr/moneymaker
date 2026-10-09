@@ -213,11 +213,26 @@ struct LiveSettingsView: View {
     @ObservedObject private var push = PushManager.shared
     @ObservedObject private var live = LiveActivityManager.shared
     @State private var goal = MMShared.mrrGoal.map(String.init) ?? ""
+    var embedded = false
 
     var body: some View {
-        NavigationStack {
+        if embedded { content } else {
+            NavigationStack {
+                content
+                    .navigationTitle("Notifications")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("OK") { dismiss() } } }
+            }
+            .presentationBackground(Color.black)
+        }
+    }
+
+    private var content: some View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    if embedded {
+                        Text("Réglages").font(MMFont.system(34, .bold)).tracking(-0.8).padding(.top, 8)
+                    }
                     statusCard
                     group("Ventes", [
                         toggle("Nouveaux abonnés & achats", "arrow.up.right", \.sales),
@@ -254,6 +269,7 @@ struct LiveSettingsView: View {
                         }
                     }
                     widgetsCard
+                    if embedded { accountCard }
                     if let e = push.lastError {
                         Text(e).font(MMFont.system(12)).foregroundStyle(MMColor.red).padding(.horizontal, 4)
                     }
@@ -262,13 +278,38 @@ struct LiveSettingsView: View {
                 .tint(MMColor.accent)
             }
             .scrollIndicators(.hidden)
-            .navigationTitle("Notifications")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("OK") { dismiss() } } }
-            .mmPage(stars: false)
+            .mmPage()
             .task { await push.refreshAuthorization() }
+    }
+
+    private var accountCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            MMLabel(text: "Compte").padding(.horizontal, 4).padding(.top, 8)
+            MMCard(padding: 0) {
+                VStack(spacing: 0) {
+                    Link(destination: URL(string: "https://moneymaker-io.web.app")!) {
+                        HStack(spacing: 14) {
+                            Image(systemName: "safari").font(.system(size: 13, weight: .semibold)).foregroundStyle(MMColor.ink2).frame(width: 20)
+                            Text("Ouvrir le dashboard web").font(MMFont.system(15))
+                            Spacer()
+                            Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(MMColor.ink3)
+                        }
+                        .foregroundStyle(MMColor.ink)
+                        .padding(.horizontal, 16).padding(.vertical, 14)
+                    }
+                    Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 52)
+                    Button(role: .destructive) { store.signOut() } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "rectangle.portrait.and.arrow.right").font(.system(size: 13, weight: .semibold)).frame(width: 20)
+                            Text("Déconnexion").font(MMFont.system(15))
+                            Spacer()
+                        }
+                        .foregroundStyle(MMColor.red)
+                        .padding(.horizontal, 16).padding(.vertical, 14)
+                    }
+                }
+            }
         }
-        .presentationBackground(MMColor.edge)
     }
 
     private var statusCard: some View {

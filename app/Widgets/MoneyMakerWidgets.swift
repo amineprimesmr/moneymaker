@@ -54,14 +54,10 @@ struct Provider: AppIntentTimelineProvider {
 
 private let green = MMColor.accent
 
-/// Fond des widgets : le puits charbon de l'app, sans étoiles (pas d'animation en widget).
+/// Fond des widgets : noir pur, comme l'app.
 struct WidgetBackdrop: View {
     var body: some View {
-        ZStack {
-            MMColor.edge
-            RadialGradient(colors: [MMColor.well, MMColor.edge], center: .topLeading, startRadius: 0, endRadius: 260)
-            RadialGradient(colors: [MMColor.accent.opacity(0.10), .clear], center: .bottomTrailing, startRadius: 0, endRadius: 200)
-        }
+        Color.black
     }
 }
 

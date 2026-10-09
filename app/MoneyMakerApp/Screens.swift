@@ -10,7 +10,7 @@ struct RootView: View {
             if store.token == nil {
                 SignInView().transition(.opacity.combined(with: .scale(scale: 1.04)))
             } else {
-                OverviewView().transition(.opacity)
+                RootTabView().transition(.opacity)
             }
         }
         .animation(.easeInOut(duration: 0.45), value: store.token == nil)
@@ -82,13 +82,64 @@ struct SignInView: View {
 
 // MARK: - Vue d'ensemble
 
-struct OverviewView: View {
+struct RootTabView: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var router = Router.shared
     @Environment(\.scenePhase) private var phase
+    @State private var tab = 0
+    @State private var homePath = NavigationPath()
+
+    private let items: [MMTabBar.Item] = [
+        .init(tag: 0, title: "Accueil", icon: "square.grid.2x2.fill"),
+        .init(tag: 1, title: "Ventes", icon: "bolt.fill"),
+        .init(tag: 2, title: "Planète", icon: "globe.europe.africa.fill"),
+        .init(tag: 3, title: "Réglages", icon: "gearshape.fill"),
+    ]
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.black.ignoresSafeArea()
+            // Accueil, Ventes et Réglages restent montés (scroll et état conservés) ;
+            // la planète n'est rendue que visible : elle anime 60 i/s.
+            OverviewView(path: $homePath).tabLayer(tab == 0)
+            NavigationStack { FeedScreen().toolbar(.hidden, for: .navigationBar) }.tabLayer(tab == 1)
+            if tab == 2 { NavigationStack { GlobeScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
+            NavigationStack { LiveSettingsView(embedded: true).toolbar(.hidden, for: .navigationBar) }.tabLayer(tab == 3)
+            MMTabBar(selection: $tab, items: items) { t in if t == 0 { withAnimation { homePath = NavigationPath() } } }
+                .padding(.bottom, 4)
+                .ignoresSafeArea(.keyboard)
+        }
+        .task { await store.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: .mmLiveEvent)) { _ in Task { await store.refreshLive() } }
+        .onChange(of: phase) { _, p in if p == .active { Task { await store.refreshLive() } } }
+        .onChange(of: router.pending) { _, d in route(d) }
+        .onAppear { route(router.pending) }
+    }
+
+    private func route(_ d: Router.Destination?) {
+        guard let d else { return }
+        router.pending = nil
+        withAnimation(.snappy) {
+            switch d {
+            case .today: tab = 0; homePath = NavigationPath()
+            case .feed: tab = 1
+            case .globe: tab = 2
+            case .project: tab = 0; homePath = NavigationPath(); homePath.append(d)
+            }
+        }
+    }
+}
+
+private extension View {
+    func tabLayer(_ visible: Bool) -> some View {
+        opacity(visible ? 1 : 0).allowsHitTesting(visible).accessibilityHidden(!visible)
+    }
+}
+
+struct OverviewView: View {
+    @EnvironmentObject var store: Store
+    @Binding var path: NavigationPath
     @State private var selected: Date?
-    @State private var path = NavigationPath()
-    @State private var showSettings = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -100,10 +151,8 @@ struct OverviewView: View {
                     if let o = store.overview {
                         hero(o).mmAppear(2)
                         stats(o).mmAppear(3)
-                        GlobeCard().mmAppear(4)
-                        LiveFeedSection().mmAppear(4)
-                        if !store.alerts.isEmpty { alerts.mmAppear(5) }
-                        businesses(o).mmAppear(6)
+                        if !store.alerts.isEmpty { alerts.mmAppear(4) }
+                        businesses(o).mmAppear(5)
                         Text("Mis à jour \(Date(timeIntervalSince1970: o.generatedAt / 1000).formatted(.relative(presentation: .named)))")
                             .font(MMFont.system(11)).foregroundStyle(MMColor.ink3).frame(maxWidth: .infinity).padding(.top, 6)
                     } else {
@@ -113,60 +162,26 @@ struct OverviewView: View {
                         Label(e, systemImage: "exclamationmark.triangle").font(MMFont.system(13)).foregroundStyle(MMColor.red)
                     }
                 }
-                .padding(.horizontal, 16).padding(.bottom, 40)
+                .padding(.horizontal, 16).padding(.bottom, 24)
             }
             .scrollIndicators(.hidden)
             .refreshable { await store.refresh() }
             .navigationDestination(for: ProjectSummary.self) { ProjectView(p: $0) }
             .navigationDestination(for: Router.Destination.self) { d in
-                switch d {
-                case .feed: FeedScreen()
-                case .globe: GlobeScreen()
-                case .project(let id):
-                    if let p = store.overview?.projects.first(where: { $0.projectId == id }) { ProjectView(p: p) } else { FeedScreen() }
-                case .today: FeedScreen()
-                }
+                if case .project(let id) = d, let p = store.overview?.projects.first(where: { $0.projectId == id }) { ProjectView(p: p) }
             }
             .toolbar(.hidden, for: .navigationBar)
             .mmPage()
-            .task { await store.refresh() }
-            .sheet(isPresented: $showSettings) { LiveSettingsView().environmentObject(store) }
-            .onReceive(NotificationCenter.default.publisher(for: .mmLiveEvent)) { _ in Task { await store.refreshLive() } }
-            .onChange(of: phase) { _, p in if p == .active { Task { await store.refreshLive() } } }
-            .onChange(of: router.pending) { _, d in route(d) }
-            .onAppear { route(router.pending) }
         }
-    }
-
-    private func route(_ d: Router.Destination?) {
-        guard let d else { return }
-        router.pending = nil
-        path = NavigationPath()
-        if d != .today { path.append(d) }
     }
 
     private var header: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(Date().formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
-                    .font(MMFont.system(11, .medium)).tracking(2.2).foregroundStyle(MMColor.ink3)
-                Text("Revenus").font(MMFont.system(34, .bold)).tracking(-0.8)
-            }
-            Spacer()
-            Button { showSettings = true } label: {
-                Image(systemName: "bell").font(.system(size: 15, weight: .semibold)).foregroundStyle(MMColor.ink)
-                    .frame(width: 42, height: 42).mmGlass(in: Circle(), interactive: true)
-            }
-            .buttonStyle(MMPressStyle(scale: 0.92))
-            Menu {
-                Button { showSettings = true } label: { Label("Notifications & widgets", systemImage: "bell.badge") }
-                Link(destination: dashboardURL) { Label("Ouvrir le dashboard", systemImage: "safari") }
-                Button(role: .destructive) { store.signOut() } label: { Label("Déconnexion", systemImage: "rectangle.portrait.and.arrow.right") }
-            } label: {
-                Image(systemName: "ellipsis").font(.system(size: 15, weight: .semibold)).foregroundStyle(MMColor.ink)
-                    .frame(width: 42, height: 42).mmGlass(in: Circle(), interactive: true)
-            }
+        VStack(alignment: .leading, spacing: 4) {
+            Text(Date().formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
+                .font(MMFont.system(11, .medium)).tracking(2.2).foregroundStyle(MMColor.ink3)
+            Text("Revenus").font(MMFont.system(34, .bold)).tracking(-0.8)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 8)
     }
 

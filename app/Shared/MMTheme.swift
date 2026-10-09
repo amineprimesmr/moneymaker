@@ -67,27 +67,10 @@ enum MMFont {
 
 // MARK: - Fond de page
 
-/// `AppPageBackdrop` de V2 : puits sombre au centre, gouttières plus noires.
+/// Fond de page : noir pur, de A à Z.
 struct MMBackdrop: View {
     var body: some View {
-        ZStack {
-            MMColor.edge
-            EllipticalGradient(
-                stops: [.init(color: MMColor.well, location: 0), .init(color: MMColor.mid, location: 0.38),
-                        .init(color: MMColor.edge, location: 0.78), .init(color: MMColor.edge, location: 1)],
-                center: UnitPoint(x: 0.5, y: 0.30), startRadiusFraction: 0.06, endRadiusFraction: 0.82)
-            LinearGradient(
-                stops: [.init(color: .black.opacity(0.70), location: 0), .init(color: .black.opacity(0.08), location: 0.24),
-                        .init(color: .clear, location: 0.36), .init(color: .clear, location: 0.64),
-                        .init(color: .black.opacity(0.08), location: 0.76), .init(color: .black.opacity(0.70), location: 1)],
-                startPoint: .leading, endPoint: .trailing)
-            // Halo d'accent très discret derrière le héros.
-            RadialGradient(colors: [MMColor.accent.opacity(0.07), .clear], center: UnitPoint(x: 0.5, y: 0.12),
-                           startRadius: 0, endRadius: 320)
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        Color.black.ignoresSafeArea().allowsHitTesting(false).accessibilityHidden(true)
     }
 }
 

@@ -12,8 +12,8 @@ import SwiftUI
 // MARK: - Page
 
 extension View {
-    /// Fond V2 + étoiles, barre de navigation transparente.
-    func mmPage(stars: Bool = true) -> some View {
+    /// Fond noir pur, barre de navigation transparente, place réservée sous la tab bar.
+    func mmPage(stars: Bool = false) -> some View {
         frame(maxWidth: .infinity, maxHeight: .infinity)
             .background {
                 ZStack {
@@ -22,6 +22,7 @@ extension View {
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
+            .contentMargins(.bottom, MMTabBarMetrics.clearance, for: .scrollContent)
     }
 
     /// Glass natif iOS 26, matériau sinon.
