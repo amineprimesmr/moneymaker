@@ -89,6 +89,7 @@ struct RootTabView: View {
     @State private var tab = 0
     @State private var homePath = NavigationPath()
     @ObservedObject private var prompt = NotificationPrompt.shared
+    @State private var menuOpen = false
 
     private let items: [MMTabBar.Item] = [
         .init(tag: 0, title: "Accueil", icon: "square.grid.2x2.fill"),
@@ -98,17 +99,14 @@ struct RootTabView: View {
     ]
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Color.black.ignoresSafeArea()
-            // Accueil, Ventes et Réglages restent montés (scroll et état conservés) ;
-            // la planète n'est rendue que visible : elle anime 60 i/s.
-            OverviewView(path: $homePath).tabLayer(tab == 0)
-            NavigationStack { FeedScreen().toolbar(.hidden, for: .navigationBar) }.tabLayer(tab == 1)
-            if tab == 2 { NavigationStack { GlobeScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
-            NavigationStack { LiveSettingsView(embedded: true).toolbar(.hidden, for: .navigationBar) }.tabLayer(tab == 3)
-            MMTabBar(selection: $tab, items: items) { t in if t == 0 { withAnimation { homePath = NavigationPath() } } }
-                .padding(.bottom, 4)
-                .ignoresSafeArea(.keyboard)
+        SideMenu(isEnabled: tab == 0 && homePath.isEmpty, isExpanded: $menuOpen) { _ in
+            BusinessSideBar(isExpanded: $menuOpen) { p in
+                homePath = NavigationPath(); homePath.append(p)
+            } openSettings: {
+                withAnimation(.snappy) { tab = 3 }
+            }
+        } content: { _ in
+            tabs
         }
         .task { await store.refresh() }
         .task { await prompt.presentIfNeeded() }
@@ -119,6 +117,21 @@ struct RootTabView: View {
         .onChange(of: phase) { _, p in if p == .active { Task { await store.refreshLive() } } }
         .onChange(of: router.pending) { _, d in route(d) }
         .onAppear { route(router.pending) }
+    }
+
+    private var tabs: some View {
+        ZStack(alignment: .bottom) {
+            Color.black.ignoresSafeArea()
+            // Accueil, Ventes et Réglages restent montés (scroll et état conservés) ;
+            // la planète n'est rendue que visible : elle anime 60 i/s.
+            OverviewView(path: $homePath, menuOpen: $menuOpen).tabLayer(tab == 0)
+            NavigationStack { FeedScreen().toolbar(.hidden, for: .navigationBar) }.tabLayer(tab == 1)
+            if tab == 2 { NavigationStack { GlobeScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
+            NavigationStack { LiveSettingsView(embedded: true).toolbar(.hidden, for: .navigationBar) }.tabLayer(tab == 3)
+            MMTabBar(selection: $tab, items: items) { t in if t == 0 { withAnimation { homePath = NavigationPath() } } }
+                .padding(.bottom, 4)
+                .ignoresSafeArea(.keyboard)
+        }
     }
 
     private func route(_ d: Router.Destination?) {
@@ -145,6 +158,7 @@ struct OverviewView: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var launch = LaunchCoordinator.shared
     @Binding var path: NavigationPath
+    @Binding var menuOpen: Bool
     @State private var selected: Date?
 
     var body: some View {
@@ -196,6 +210,16 @@ struct OverviewView: View {
                 }
                 .opacity(launch.logoLanded ? 1 : 0)
                 .frame(maxWidth: .infinity)
+                .overlay(alignment: .leading) {
+                    Button { menuOpen = true } label: {
+                        Image(systemName: "square.stack.3d.up.fill")
+                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                            .frame(width: 42, height: 42).mmGlass(in: Circle(), interactive: true)
+                    }
+                    .buttonStyle(MMPressStyle(scale: 0.92))
+                    .accessibilityLabel("Business connectés")
+                    .mmAppear(0)
+                }
                 .accessibilityLabel("MoneyMaker")
                 .padding(.bottom, 14)
             Text(Date().formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
