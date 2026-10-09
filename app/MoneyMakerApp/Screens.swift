@@ -100,6 +100,7 @@ struct OverviewView: View {
                     if let o = store.overview {
                         hero(o).mmAppear(2)
                         stats(o).mmAppear(3)
+                        GlobeCard().mmAppear(4)
                         LiveFeedSection().mmAppear(4)
                         if !store.alerts.isEmpty { alerts.mmAppear(5) }
                         businesses(o).mmAppear(6)
@@ -120,6 +121,7 @@ struct OverviewView: View {
             .navigationDestination(for: Router.Destination.self) { d in
                 switch d {
                 case .feed: FeedScreen()
+                case .globe: GlobeScreen()
                 case .project(let id):
                     if let p = store.overview?.projects.first(where: { $0.projectId == id }) { ProjectView(p: p) } else { FeedScreen() }
                 case .today: FeedScreen()
@@ -195,9 +197,11 @@ struct OverviewView: View {
     private func stats(_ o: Overview) -> some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
             StatTile(icon: "eurosign", title: "Revenu \(o.periodDays) j", value: o.revenueMicros.money(o.currency, compact: true))
-            StatTile(icon: "person.2", title: "Abonnés", value: o.activeSubscriptions.formatted())
-            StatTile(icon: "hourglass", title: "Essais", value: o.activeTrials.formatted())
-            StatTile(icon: "sparkle", title: "Nouveaux", value: o.newCustomers.formatted())
+            StatTile(icon: "creditcard", title: "Users payants", value: (o.payingCustomers ?? o.activeSubscriptions).formatted())
+            if let dl = o.downloads { StatTile(icon: "arrow.down.app", title: "Téléchargements", value: dl.formatted()) }
+            if o.hasTrials ?? (o.activeTrials > 0) { StatTile(icon: "hourglass", title: "Essais", value: o.activeTrials.formatted()) }
+            StatTile(icon: "arrow.triangle.2.circlepath", title: "Abonnés actifs", value: o.activeSubscriptions.formatted())
+            if o.downloads == nil && !(o.hasTrials ?? (o.activeTrials > 0)) { StatTile(icon: "sparkle", title: "Nouveaux", value: o.newCustomers.formatted()) }
         }
     }
 

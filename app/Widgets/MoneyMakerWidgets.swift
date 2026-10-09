@@ -278,10 +278,12 @@ struct MoneyMakerRankingsWidget: Widget {
 struct MoneyMakerWidgetBundle: WidgetBundle {
     var body: some Widget {
         if #available(iOS 26.0, *) {
+            MoneyMakerDashboardWidgetPush()
             MoneyMakerTodayWidgetPush()
             MoneyMakerWidgetPush()
             MoneyMakerFeedWidgetPush()
         }
+        MoneyMakerDashboardWidget()
         MoneyMakerTodayWidget()
         MoneyMakerWidget()
         MoneyMakerFeedWidget()

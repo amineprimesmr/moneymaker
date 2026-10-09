@@ -91,7 +91,8 @@ function sanitizeConfig(input: any, current: ProjectConfig): ProjectConfig {
   if (input.apple !== undefined) next.apple = {
     bundleId: input.apple.bundleId ? cleanId(input.apple.bundleId, 200) : undefined,
     appAppleId: input.apple.appAppleId ? Number(input.apple.appAppleId) : undefined,
-  };
+    ...(input.apple.vendorNumber ? { vendorNumber: (() => { const v = String(input.apple.vendorNumber).trim(); if (!/^\d{6,12}$/.test(v)) throw new HttpError(400, "invalid_vendor_number"); return v; })() } : {}),
+  } as any;
   if (input.google !== undefined) next.google = { packageName: input.google.packageName ? cleanId(input.google.packageName, 200) : undefined };
   if (input.integrations !== undefined) {
     const af = input.integrations?.appsflyer;
@@ -256,7 +257,15 @@ route("GET", "/v1/overview", async req => {
     activeSubscriptions: projects.reduce((a, p) => a + p.activeSubscriptions, 0),
     activeTrials: projects.reduce((a, p) => a + p.activeTrials, 0),
     newCustomers: projects.reduce((a, p) => a + p.newCustomers, 0),
-    projects: projects.map(({ history, revenueByDay, ...p }) => ({ ...p, revenueByDay })),
+    payingCustomers: projects.reduce((a, p) => a + p.payingCustomers, 0),
+    downloads: projects.some(p => p.downloads !== null) ? projects.reduce((a, p) => a + (p.downloads ?? 0), 0) : null,
+    hasTrials: projects.some(p => p.hasTrials),
+    projects: projects.map(({ history, revenueByDay, downloadsByDay, ...p }) => ({
+      projectId: p.projectId, name: p.name, currency: p.currency, mrrMicros: p.mrrMicros, netRevenueMicros: p.netRevenueMicros,
+      activeSubscriptions: p.activeSubscriptions, activeTrials: p.activeTrials, newCustomers: p.newCustomers, trialConversionRate: p.trialConversionRate,
+      churnRate: p.churnRate, billingIssues: p.billingIssues, payingCustomers: p.payingCustomers, downloads: p.downloads,
+      hasTrials: p.hasTrials, revenueByCountry: p.revenueByCountry, downloadsByDay, revenueByDay,
+    })),
     generatedAt: Date.now(),
   };
 });

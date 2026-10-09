@@ -95,7 +95,7 @@ export async function importStripeHistory(project: Project, stripe: Stripe) {
 
 // ── App Store Connect API (ES256 JWT) ───────────────────────────────────────
 
-function ascToken(c: { issuerId: string; keyId: string; privateKey: string }) {
+export function ascToken(c: { issuerId: string; keyId: string; privateKey: string }) {
   const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
   const now = Math.floor(Date.now() / 1000);
   const head = `${enc({ alg: "ES256", kid: c.keyId, typ: "JWT" })}.${enc({ iss: c.issuerId, iat: now, exp: now + 1100, aud: "appstoreconnect-v1" })}`;

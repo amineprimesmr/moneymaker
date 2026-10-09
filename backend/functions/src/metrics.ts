@@ -1,5 +1,6 @@
 import { computeMetrics, convertMicros, Purchase } from "./engine";
 import { Project, db } from "./store";
+import { downloadsFor } from "./downloads";
 
 const DAY = 86400000;
 export const dayKey = (t: number) => new Date(t).toISOString().slice(0, 10);
@@ -67,6 +68,7 @@ export async function projectMetrics(project: Project, days = 30) {
     db.collection(`projects/${pid}/customers`).count().get(),
     db.collection(`projects/${pid}/daily`).orderBy("date", "desc").limit(Math.min(days, 400)).get(),
   ]);
+  const dl = await downloadsFor(pid, since).catch(() => ({ total: 0, byDay: {}, byCountry: {}, available: false }));
   const purchases = [...purchasesSnap.docs, ...lifetime.docs].map(d => ({ ...(d.data() as Purchase), appUserId: d.get("appUserId") as string }));
   const current = computeMetrics(purchases, p => (p as any).appUserId, project.config.currency, now);
 
@@ -110,6 +112,11 @@ export async function projectMetrics(project: Project, days = 30) {
       newSubscriptions: (prev.eventCounts.INITIAL_PURCHASE ?? 0) + (prev.eventCounts.TRIAL_CONVERTED ?? 0),
       trialsStarted: prev.eventCounts.TRIAL_STARTED ?? 0, payingCustomers: prev.payingCustomers,
     },
+    downloads: dl.available ? dl.total : null,
+    downloadsByDay: dl.byDay,
+    downloadsByCountry: dl.byCountry,
+    /** Trials exist for this project (offer has a free trial or trials happened recently). */
+    hasTrials: current.activeTrials > 0 || started > 0 || (prev.eventCounts.TRIAL_STARTED ?? 0) > 0,
     history: dailySnap.docs.map(d => d.data()).reverse(),
     generatedAt: now,
   };

@@ -67,3 +67,11 @@ test("today: local day start, hourly cumulative, refunds, sandbox ignored", () =
   const s = liveActivityState(t);
   assert.equal(s.revenueMicros, 5e6); assert.equal(s.sales, 2); assert.equal(s.hourly.length, 24); assert.equal(s.hourly[3], 15);
 });
+
+test("downloads: sales report parsing keeps first downloads of the app only", () => {
+  const { parseSalesReport } = require("../lib/downloads");
+  const tsv = ["Provider\tSKU\tUnits\tProduct Type Identifier\tCountry Code\tApple Identifier",
+    "APPLE\tx\t12\t1F\tFR\t123", "APPLE\tx\t3\t1F\tUS\t123", "APPLE\tx\t40\t7F\tFR\t123", "APPLE\tx\t5\tIA1\tFR\t123", "APPLE\tx\t9\t1F\tFR\t999"].join("\n");
+  const r = parseSalesReport(tsv, 123);
+  assert.equal(r.units, 15); assert.deepEqual(r.byCountry, { FR: 12, US: 3 });
+});

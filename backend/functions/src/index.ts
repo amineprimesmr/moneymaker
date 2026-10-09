@@ -11,6 +11,8 @@ import { toRevenueCatEvent } from "./rccompat";
 import { computeEntitlements } from "./engine";
 import { fanOut } from "./integrations";
 import { pushEvent, pushRanking, sendDailySummaries } from "./push";
+import { syncDownloads } from "./downloads";
+import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 
 import { importRevenueCat } from "./revenuecat";
 import { FieldValue } from "firebase-admin/firestore";
@@ -98,6 +100,21 @@ export const deliverAlert = onDocumentCreated({ document: "projects/{pid}/alerts
 /** 21:00 local recap — runs hourly, each device fires in its own timezone. */
 export const dailySummaryPush = onSchedule({ schedule: "0 * * * *", timeZone: "UTC" }, async () => {
   console.log("daily summaries", await sendDailySummaries());
+});
+
+/** Apple publishes yesterday's Sales report around 08:00 PT; fill the gaps every morning. */
+export const downloadsSync = onSchedule({ schedule: "30 17 * * *", timeZone: "UTC", timeoutSeconds: 540 }, async () => {
+  const projects = await db.collection("projects").where("config.apple.vendorNumber", "!=", null).select().get();
+  for (const d of projects.docs) {
+    try { console.log("downloads", d.id, await syncDownloads(await getProject(d.id))); } catch (e) { console.error("downloads", d.id, e); }
+  }
+});
+
+/** First import (30 days) as soon as a vendor number is saved. */
+export const downloadsBackfill = onDocumentUpdated({ document: "projects/{pid}", timeoutSeconds: 540 }, async event => {
+  const before = event.data?.before.get("config.apple.vendorNumber"), after = event.data?.after.get("config.apple.vendorNumber");
+  if (!after || before === after) return;
+  console.log("downloads backfill", event.params.pid, await syncDownloads(await getProject(event.params.pid), 30));
 });
 
 const heavy = { timeoutSeconds: 540, memory: "1GiB" as const };

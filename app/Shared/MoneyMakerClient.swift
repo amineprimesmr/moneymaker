@@ -39,6 +39,11 @@ struct ProjectSummary: Codable, Identifiable, Hashable {
     let churnRate: Double?
     let billingIssues: Int
     let revenueByDay: [String: Int]
+    var payingCustomers: Int? = nil
+    /// nil = téléchargements non disponibles (numéro de fournisseur Apple non renseigné).
+    var downloads: Int? = nil
+    var hasTrials: Bool? = nil
+    var revenueByCountry: [String: Int]? = nil
     var id: String { projectId }
 }
 
@@ -52,6 +57,9 @@ struct Overview: Codable, Hashable {
     let newCustomers: Int
     let projects: [ProjectSummary]
     let generatedAt: Double
+    var payingCustomers: Int? = nil
+    var downloads: Int? = nil
+    var hasTrials: Bool? = nil
 
     static let placeholder = Overview(currency: "EUR", periodDays: 30, mrrMicros: 4_280_000_000, revenueMicros: 4_910_000_000,
         activeSubscriptions: 612, activeTrials: 48, newCustomers: 1_204, projects: [], generatedAt: Date().timeIntervalSince1970 * 1000)

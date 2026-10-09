@@ -561,6 +561,7 @@ async function tabSettings(el) {
     <div class="field"><label>Devise de reporting</label><input id="currency" value="${esc(c.currency)}" maxlength="3"></div>
     <div class="field"><label>Bundle ID iOS</label><input id="bundle" value="${esc(c.apple?.bundleId ?? "")}" placeholder="com.example.app"></div>
     <div class="field"><label>Apple ID de l'app (numérique, requis en production)</label><input id="appleId" value="${esc(c.apple?.appAppleId ?? "")}" placeholder="6123456789"></div>
+    <div class="field"><label>Numéro de fournisseur App Store (téléchargements) — App Store Connect → Paiements et rapports financiers, en haut à gauche</label><input id="vendor" inputmode="numeric" value="${esc(c.apple?.vendorNumber ?? "")}" placeholder="87654321"></div>
     <div class="field"><label>Package Android</label><input id="pkg" value="${esc(c.google?.packageName ?? "")}" placeholder="com.example.app"></div>
     <div class="field"><label>Webhooks sortants (une URL https par ligne)</label><textarea id="hooks" style="min-height:70px">${esc(c.webhooks.map(w => w.url).join("\n"))}</textarea></div>
     <div class="row"><button class="primary" id="saveS">Enregistrer</button><button id="testHook">Tester les webhooks</button></div></div>
@@ -575,7 +576,7 @@ async function tabSettings(el) {
   $("#saveS").onclick = async () => {
     try {
       await api(`/v1/projects/${state.projectId}`, { method: "PATCH", body: { name: $("#name").value, config: {
-        currency: $("#currency").value.toUpperCase(), apple: { bundleId: $("#bundle").value || undefined, appAppleId: $("#appleId").value || undefined },
+        currency: $("#currency").value.toUpperCase(), apple: { bundleId: $("#bundle").value || undefined, appAppleId: $("#appleId").value || undefined, vendorNumber: $("#vendor").value.trim() || undefined },
         google: { packageName: $("#pkg").value || undefined },
         webhooks: $("#hooks").value.split("\n").map(s => s.trim()).filter(Boolean).map((url, i) => ({ id: `wh_${i}`, url })) } } });
       await loadProjects(); toast("Enregistré");
