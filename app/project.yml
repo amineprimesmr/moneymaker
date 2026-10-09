@@ -23,11 +23,19 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: MoneyMaker
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: MoneyMakerApp/MoneyMaker.entitlements
-        PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Dev 20261009
+      configs:
+        Debug:
+          PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Dev 20261009
+          APS_ENVIRONMENT: development
+        Release:
+          PROVISIONING_PROFILE_SPECIFIER: MoneyMaker AppStore 20261009
+          CODE_SIGN_IDENTITY: Apple Distribution
+          APS_ENVIRONMENT: production
     info:
       path: MoneyMakerApp/Info.plist
       properties:
@@ -50,7 +58,14 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: MoneyMaker
         CODE_SIGN_ENTITLEMENTS: Widgets/Widgets.entitlements
-        PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Widgets Dev 20261009
+      configs:
+        Debug:
+          PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Widgets Dev 20261009
+          APS_ENVIRONMENT: development
+        Release:
+          PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Widgets AppStore 20261009
+          CODE_SIGN_IDENTITY: Apple Distribution
+          APS_ENVIRONMENT: production
     info:
       path: Widgets/Info.plist
       properties:
