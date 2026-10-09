@@ -95,6 +95,67 @@ struct ProjectIconStack: View {
     }
 }
 
+// MARK: - Éventail 3D des business affichés
+
+/// Les logos des business choisis, côte à côte, inclinés et légèrement superposés, en perspective.
+/// Le logo du centre est au premier plan ; chacun flotte doucement avec un décalage de phase.
+/// Entrées/sorties en ressort quand la sélection change. Toucher ouvre le sélecteur.
+struct LogoFan: View {
+    let projects: [ProjectSummary]
+    var size: CGFloat = 62
+    var maxShown = 6
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let shown = Array(projects.prefix(maxShown))
+        let extra = projects.count - shown.count
+        let n = shown.count
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { tl in
+            let t = reduceMotion ? 0 : tl.date.timeIntervalSinceReferenceDate
+            HStack(spacing: n > 1 ? -size * 0.3 : 0) {
+                ForEach(Array(shown.enumerated()), id: \.element.id) { i, p in
+                    let c = Double(i) - Double(n - 1) / 2            // position par rapport au centre
+                    let float = sin(t * 1.3 + Double(i) * 1.1) * 2.5
+                    tile(p)
+                        .rotation3DEffect(.degrees(-c * 16), axis: (x: 0, y: 1, z: 0), perspective: 0.55)
+                        .rotationEffect(.degrees(c * 6))
+                        .offset(y: abs(c) * 7 + float)
+                        .zIndex(10 - abs(c))
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: 0.3).combined(with: .opacity).combined(with: .offset(y: 18)),
+                            removal: .scale(scale: 0.5).combined(with: .opacity)))
+                }
+                if extra > 0 {
+                    Text("+\(extra)")
+                        .font(MMFont.number(16, .regular)).foregroundStyle(.white)
+                        .frame(width: size * 0.62, height: size * 0.62)
+                        .background(Color.white.opacity(0.1), in: Circle())
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.15)))
+                        .padding(.leading, size * 0.42)
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
+        }
+        .frame(height: size * 1.35)
+        .animation(.spring(response: 0.5, dampingFraction: 0.72), value: projects.map(\.projectId))
+        .accessibilityElement()
+        .accessibilityLabel(projects.map(\.name).joined(separator: ", "))
+    }
+
+    private func tile(_ p: ProjectSummary) -> some View {
+        let shape = RoundedRectangle(cornerRadius: size * 0.2237, style: .continuous)
+        return ProjectIcon(project: p, size: size)
+            .overlay {
+                // Reflet : lumière venant du haut, comme une vraie icône vitrée.
+                shape.fill(LinearGradient(colors: [Color.white.opacity(0.22), .clear, .clear], startPoint: .top, endPoint: .bottom))
+                    .blendMode(.plusLighter)
+            }
+            .overlay(shape.strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75))
+            .shadow(color: .black.opacity(0.65), radius: 12, y: 8)
+            .shadow(color: .white.opacity(0.05), radius: 1)
+    }
+}
+
 // MARK: - Panneau
 
 struct BusinessSideBar: View {

@@ -229,9 +229,6 @@ struct OverviewView: View {
                 }
                 .accessibilityLabel("MoneyMaker")
                 .padding(.bottom, 14)
-            Text(Date().formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
-                .font(MMFont.system(11, .medium)).tracking(2.2).foregroundStyle(MMColor.ink3)
-                .mmAppear(0)
             scopeTitle.mmAppear(0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -239,26 +236,17 @@ struct OverviewView: View {
     }
 
     /// Titre = périmètre affiché. Toucher ouvre le sélecteur.
+    /// Le périmètre affiché, sans texte : l'éventail 3D des logos choisis. Toucher ouvre le sélecteur.
     private var scopeTitle: some View {
         Button { menuOpen = true } label: {
-            HStack(spacing: 12) {
-                if store.selectedProjects.count == 1 {
-                    ProjectIcon(project: store.selectedProjects[0], size: 38).transition(.scale.combined(with: .opacity))
-                } else {
-                    ProjectIconStack(projects: store.selectedProjects, size: 38).transition(.scale.combined(with: .opacity))
-                }
-                Text(store.scopeLabel)
-                    .font(MMFont.system(30, .bold)).tracking(-0.8).foregroundStyle(.white)
-                    .lineLimit(1).minimumScaleFactor(0.6)
-                    .contentTransition(.opacity)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 13, weight: .bold)).foregroundStyle(MMColor.ink3)
-                    .padding(.top, 4)
-            }
-            .animation(.smooth(duration: 0.45), value: store.activeIds)
+            LogoFan(projects: store.selectedProjects)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(MMPressStyle(scale: 0.97))
-        .padding(.top, 2)
+        .buttonStyle(MMPressStyle(scale: 0.96))
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        .accessibilityHint("Choisir les business affichés")
     }
 
     /// MRR : la valeur récurrente, sans période — chiffre qui roule quand la sélection change.
