@@ -170,7 +170,7 @@ struct OverviewView: View {
                     // Tout ce qui suit dépend du business choisi : changer d'identité rejoue la cascade
                     // avec les nouvelles données — l'Accueil se transforme au lieu d'ouvrir une page.
                     if let o = store.scoped {
-                        let scope = store.activeIds
+                        let scope = store.viewIds
                         RevenueCard().mmAppear(1).mmDataSwap(scope)
                         mrrCard(o).mmAppear(2).mmDataSwap(scope, delay: 0.04)
                         stats(o).mmAppear(3).mmDataSwap(scope, delay: 0.08)
@@ -238,14 +238,9 @@ struct OverviewView: View {
     /// Titre = périmètre affiché. Toucher ouvre le sélecteur.
     /// Le périmètre affiché, sans texte : l'éventail 3D des logos choisis. Toucher ouvre le sélecteur.
     private var scopeTitle: some View {
-        Button { menuOpen = true } label: {
-            LogoFan(projects: store.selectedProjects)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(MMPressStyle(scale: 0.96))
-        .padding(.top, 6)
-        .padding(.bottom, 4)
-        .accessibilityHint("Choisir les business affichés")
+        LogoFan(projects: store.selectedProjects, focusId: store.focusId) { store.focus($0) }
+            .padding(.top, 6)
+            .padding(.bottom, 4)
     }
 
     /// MRR : la valeur récurrente, sans période — chiffre qui roule quand la sélection change.

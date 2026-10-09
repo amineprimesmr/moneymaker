@@ -214,7 +214,7 @@ struct FeedScreen: View {
         .refreshable { await load() }
         .task { events = store.feed; await load() }
         .onReceive(NotificationCenter.default.publisher(for: .mmLiveEvent)) { _ in Task { await load() } }
-        .onChange(of: store.activeIds) { _, _ in Task { await load() } }
+        .onChange(of: store.viewIds) { _, _ in Task { await load() } }
     }
 
     private var groups: [(String, [FeedEvent])] {

@@ -103,18 +103,31 @@ struct ProjectIconStack: View {
 /// Statique — seules les entrées/sorties sont animées quand la sélection change.
 struct LogoFan: View {
     let projects: [ProjectSummary]
+    var focusId: String? = nil
+    var onTap: (String) -> Void = { _ in }
     var size: CGFloat = 44
     var maxShown = 7
 
     var body: some View {
         let shown = Array(projects.prefix(maxShown))
         let extra = projects.count - shown.count
-        HStack(spacing: shown.count > 1 ? -size * 0.36 : 0) {
+        HStack(spacing: shown.count > 1 ? -size * 0.12 : 0) {
             ForEach(Array(shown.enumerated()), id: \.element.id) { i, p in
-                tile(p)
-                    .rotation3DEffect(.degrees(-28), axis: (x: 0.15, y: 1, z: 0), anchor: .leading, perspective: 0.5)
-                    .rotationEffect(.degrees(Double(i) * 2.5), anchor: .bottomLeading)
-                    .zIndex(Double(100 - i))
+                let focused = focusId == p.projectId
+                let dimmed = focusId != nil && !focused
+                Button { onTap(p.projectId) } label: {
+                    tile(p)
+                        .rotation3DEffect(.degrees(focused ? -10 : -28), axis: (x: 0.15, y: 1, z: 0), anchor: .leading, perspective: 0.5)
+                        .rotationEffect(.degrees(focused ? 0 : Double(i) * 2.5), anchor: .bottomLeading)
+                        .scaleEffect(focused ? 1.12 : 1, anchor: .bottom)
+                        .offset(y: focused ? -4 : 0)
+                        .opacity(dimmed ? 0.4 : 1)
+                        .saturation(dimmed ? 0.2 : 1)
+                }
+                .buttonStyle(MMPressStyle(scale: 0.92))
+                .accessibilityLabel(p.name)
+                .accessibilityAddTraits(focused ? .isSelected : [])
+                .zIndex(focused ? 200 : Double(100 - i))
                     .transition(.asymmetric(
                         insertion: .scale(scale: 0.4, anchor: .leading).combined(with: .opacity),
                         removal: .scale(scale: 0.6, anchor: .leading).combined(with: .opacity)))
@@ -133,8 +146,8 @@ struct LogoFan: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: size * 1.25)
         .animation(.spring(response: 0.45, dampingFraction: 0.8), value: projects.map(\.projectId))
-        .accessibilityElement()
-        .accessibilityLabel(projects.map(\.name).joined(separator: ", "))
+        .animation(.spring(response: 0.4, dampingFraction: 0.75), value: focusId)
+        .sensoryFeedback(.selection, trigger: focusId)
     }
 
     private func tile(_ p: ProjectSummary) -> some View {

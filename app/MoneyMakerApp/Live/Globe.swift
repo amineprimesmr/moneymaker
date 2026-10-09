@@ -218,11 +218,11 @@ extension Store {
     /// Revenu par pays (toutes les apps) + horodatage de la dernière vente vue en direct.
     var globeSpots: [GlobeSpot] {
         var byCountry: [String: Double] = [:]
-        for p in selectedProjects {
+        for p in viewProjects {
             for (cc, v) in p.revenueByCountry ?? [:] where cc != "??" { byCountry[cc, default: 0] += Double(v) / 1e6 }
         }
         var last: [String: Date] = [:]
-        for e in feed where e.isRevenue && activeIds.contains(e.projectId) { if let cc = e.country, last[cc] == nil { last[cc] = e.date } }
+        for e in feed where e.isRevenue && viewIds.contains(e.projectId) { if let cc = e.country, last[cc] == nil { last[cc] = e.date } }
         for cc in last.keys where byCountry[cc] == nil { byCountry[cc] = 0.0001 }
         return byCountry.map { GlobeSpot(cc: $0.key, value: $0.value, lastSale: last[$0.key]) }
     }

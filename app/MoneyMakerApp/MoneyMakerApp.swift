@@ -45,23 +45,39 @@ final class Store: ObservableObject {
 
     var allProjects: [ProjectSummary] { overview?.projects ?? [] }
 
+    /// Logo touché sur l'Accueil : on ne regarde que ce business, sans changer la sélection.
+    @Published var focusId: String?
+
+    /// Périmètre réellement affiché : le business mis en avant, sinon la sélection.
+    var viewIds: Set<String> {
+        if let f = focusId, activeIds.contains(f) { return [f] }
+        return activeIds
+    }
+    var viewProjects: [ProjectSummary] { allProjects.filter { viewIds.contains($0.projectId) } }
+
+    /// Touche un logo : met ce business en avant ; re-toucher revient à toute la sélection.
+    func focus(_ projectId: String) {
+        withAnimation(.smooth(duration: 0.55)) { focusId = focusId == projectId ? nil : projectId }
+        Task { await refreshLive() }
+    }
+
     /// Sélection effective : ids encore existants ; si rien de valable, tous.
     var activeIds: Set<String> {
         let valid = selectedIds.intersection(allProjects.map(\.projectId))
         return valid.isEmpty ? Set(allProjects.map(\.projectId)) : valid
     }
-    var isAll: Bool { activeIds.count == allProjects.count }
+    var isAll: Bool { viewIds.count == allProjects.count }
     var selectedProjects: [ProjectSummary] { allProjects.filter { activeIds.contains($0.projectId) } }
     /// Un seul business choisi (bloc dédié sur l'Accueil).
-    var selectedProject: ProjectSummary? { selectedProjects.count == 1 && allProjects.count > 1 ? selectedProjects.first : (allProjects.count == 1 ? allProjects.first : nil) }
+    var selectedProject: ProjectSummary? { viewProjects.count == 1 ? viewProjects.first : nil }
     /// Ids à transmettre au serveur (nil = tous).
-    var scopeIds: [String]? { isAll ? nil : Array(activeIds).sorted() }
+    var scopeIds: [String]? { isAll ? nil : Array(viewIds).sorted() }
 
     /// L'overview agrégé sur les business choisis : les cartes de l'Accueil le lisent sans connaître la sélection.
     var scoped: Overview? {
         guard let o = overview else { return nil }
         if isAll { return o }
-        let ps = selectedProjects
+        let ps = viewProjects
         let dl = ps.compactMap(\.downloads)
         return Overview(currency: ps.first?.currency ?? o.currency, periodDays: o.periodDays,
                         mrrMicros: ps.reduce(0) { $0 + $1.mrrMicros }, revenueMicros: ps.reduce(0) { $0 + $1.netRevenueMicros },
@@ -73,7 +89,7 @@ final class Store: ObservableObject {
 
     var scopedAlerts: [RankingAlert] {
         guard !isAll else { return alerts }
-        let ids = activeIds, names = Set(selectedProjects.map(\.name))
+        let ids = viewIds, names = Set(viewProjects.map(\.name))
         return alerts.filter { a in a.projectId.map(ids.contains) ?? names.contains(a.projectName ?? "") }
     }
 
@@ -86,7 +102,7 @@ final class Store: ObservableObject {
     /// « Tous les business », « V2 », « V2 + 10K Design », « 3 business ».
     var scopeLabel: String {
         if isAll { return allProjects.count > 1 ? "Tous les business" : (allProjects.first?.name ?? "MoneyMaker") }
-        let ps = selectedProjects
+        let ps = viewProjects
         if ps.count == 1 { return ps[0].name }
         if ps.count == 2 { return "\(ps[0].name) + \(ps[1].name)" }
         return "\(ps.count) business"
@@ -102,14 +118,14 @@ final class Store: ObservableObject {
         } else {
             next.insert(projectId)
         }
-        withAnimation(.smooth(duration: 0.55)) { selectedIds = next }
+        withAnimation(.smooth(duration: 0.55)) { selectedIds = next; focusId = nil }
         Task { await refreshLive() }
         return true
     }
 
     /// Un seul business (raccourcis : liste de l'Accueil, notifications).
     func only(_ projectId: String) {
-        withAnimation(.smooth(duration: 0.55)) { selectedIds = [projectId] }
+        withAnimation(.smooth(duration: 0.55)) { selectedIds = [projectId]; focusId = nil }
         Task { await refreshLive() }
     }
 
