@@ -33,6 +33,9 @@ export interface FinanceSettings {
   stripePercent: number;   // ex. 0.015
   stripeFixed: number;     // en unités de la devise de reporting, ex. 0.25
   stripePricesIncludeVat: boolean;
+  /** Franchise en base de TVA (micro-entreprise sous les seuils) : aucune TVA facturée sur tes ventes directes (Stripe).
+   *  Apple et Google collectent quand même la TVA du client avant de te payer. */
+  vatFranchise: boolean;
   /** Micro : cotisations sociales sur le CA ; IS : charges/salaire ≈ 0 par défaut. */
   socialRate: number;
   /** Micro : versement libératoire de l'impôt sur le revenu (sur le CA). */
@@ -46,23 +49,23 @@ export interface FinanceSettings {
 }
 
 export const PRESETS: Record<FinanceSettings["structure"], Partial<FinanceSettings> & { label: string; note: string }> = {
-  micro_services: { label: "Micro-entreprise (services)", note: "Cotisations ≈ 21,2 % du CA + versement libératoire 1,7 %. Pas d'IS ni de dividendes.",
-    socialRate: 0.212, incomeTaxRate: 0.017, expensesRate: 0, corporateReducedRate: 0, corporateRate: 0, payoutShare: 1, dividendTaxRate: 0 },
-  micro_vente: { label: "Micro-entreprise (vente)", note: "Cotisations ≈ 12,3 % du CA + versement libératoire 1 %.",
-    socialRate: 0.123, incomeTaxRate: 0.01, expensesRate: 0, corporateReducedRate: 0, corporateRate: 0, payoutShare: 1, dividendTaxRate: 0 },
+  micro_services: { label: "Micro-entreprise (services)", note: "Cotisations URSSAF ≈ 21,2 % du CA (24,6 % en libéral BNC). Franchise de TVA. Versement libératoire 1,7 % seulement si tu l'as choisi.",
+    vatFranchise: true, socialRate: 0.212, incomeTaxRate: 0, expensesRate: 0, corporateReducedRate: 0, corporateRate: 0, payoutShare: 1, dividendTaxRate: 0 },
+  micro_vente: { label: "Micro-entreprise (vente)", note: "Cotisations URSSAF ≈ 12,3 % du CA. Franchise de TVA. Versement libératoire 1 % seulement si tu l'as choisi.",
+    vatFranchise: true, socialRate: 0.123, incomeTaxRate: 0, expensesRate: 0, corporateReducedRate: 0, corporateRate: 0, payoutShare: 1, dividendTaxRate: 0 },
   sasu_is: { label: "SASU à l'IS", note: "IS 15 % jusqu'à 42 500 € de bénéfice puis 25 %, dividendes au PFU 31,4 % (2026).",
-    socialRate: 0, incomeTaxRate: 0, expensesRate: 0.05, corporateReducedRate: 0.15, corporateReducedCap: 42500, corporateRate: 0.25, payoutShare: 1, dividendTaxRate: 0.314 },
+    vatFranchise: false, socialRate: 0, incomeTaxRate: 0, expensesRate: 0.05, corporateReducedRate: 0.15, corporateReducedCap: 42500, corporateRate: 0.25, payoutShare: 1, dividendTaxRate: 0.314 },
   eurl_is: { label: "EURL à l'IS", note: "Comme la SASU ; dividendes au-delà de 10 % du capital soumis aux cotisations TNS (non modélisé).",
-    socialRate: 0, incomeTaxRate: 0, expensesRate: 0.05, corporateReducedRate: 0.15, corporateReducedCap: 42500, corporateRate: 0.25, payoutShare: 1, dividendTaxRate: 0.314 },
+    vatFranchise: false, socialRate: 0, incomeTaxRate: 0, expensesRate: 0.05, corporateReducedRate: 0.15, corporateReducedCap: 42500, corporateRate: 0.25, payoutShare: 1, dividendTaxRate: 0.314 },
   llc_us: { label: "LLC américaine (non-résident)", note: "0 % d'impôt fédéral sans activité aux USA ; l'imposition se fait dans ton pays de résidence — règle les taux.",
-    socialRate: 0, incomeTaxRate: 0, expensesRate: 0.05, corporateReducedRate: 0, corporateRate: 0, payoutShare: 1, dividendTaxRate: 0 },
+    vatFranchise: false, socialRate: 0, incomeTaxRate: 0, expensesRate: 0.05, corporateReducedRate: 0, corporateRate: 0, payoutShare: 1, dividendTaxRate: 0 },
   uae_freezone: { label: "Free Zone aux Émirats", note: "0 % sur le revenu qualifiant, 9 % au-delà de 375 000 AED (≈ 94 000 €) sinon.",
-    socialRate: 0, incomeTaxRate: 0, expensesRate: 0.05, corporateReducedRate: 0, corporateReducedCap: 94000, corporateRate: 0.09, payoutShare: 1, dividendTaxRate: 0 },
+    vatFranchise: false, socialRate: 0, incomeTaxRate: 0, expensesRate: 0.05, corporateReducedRate: 0, corporateReducedCap: 94000, corporateRate: 0.09, payoutShare: 1, dividendTaxRate: 0 },
   custom: { label: "Personnalisé", note: "Renseigne tes propres taux." },
 };
 
 export const DEFAULT_FINANCE: FinanceSettings = {
-  structure: "sasu_is", appleSmallBusiness: true, googleRate: 0.15, stripePercent: 0.015, stripeFixed: 0.25, stripePricesIncludeVat: true,
+  structure: "sasu_is", appleSmallBusiness: true, googleRate: 0.15, stripePercent: 0.015, stripeFixed: 0.25, stripePricesIncludeVat: true, vatFranchise: false,
   socialRate: 0, incomeTaxRate: 0, expensesRate: 0.05, corporateReducedRate: 0.15, corporateReducedCap: 42500, corporateRate: 0.25, payoutShare: 1, dividendTaxRate: 0.314,
 };
 
@@ -81,7 +84,7 @@ export function sanitizeFinance(input: any, current: FinanceSettings = DEFAULT_F
   };
   for (const k of ["googleRate", "stripePercent", "socialRate", "incomeTaxRate", "expensesRate", "corporateReducedRate", "corporateRate", "payoutShare", "dividendTaxRate"] as const) rate(k);
   rate("stripeFixed", 10); rate("corporateReducedCap", 10_000_000);
-  for (const k of ["appleSmallBusiness", "stripePricesIncludeVat"] as const) if (typeof input?.[k] === "boolean") (next as any)[k] = input[k];
+  for (const k of ["appleSmallBusiness", "stripePricesIncludeVat", "vatFranchise"] as const) if (typeof input?.[k] === "boolean") (next as any)[k] = input[k];
   return next;
 }
 
@@ -109,7 +112,9 @@ export function computeWaterfall(txs: Tx[], s: FinanceSettings, currency: string
     if (t.isSandbox) continue;
     const gross = convertMicros(t.amountMicros, t.currency, currency);
     const vatRate = VAT[(t.country ?? "").toUpperCase()] ?? 0;
-    const storeVat = t.store === "stripe" ? (s.stripePricesIncludeVat ? vatRate : 0) : vatRate;
+    // Stripe = vente directe : TVA seulement si tu en factures (pas en franchise, prix TTC).
+    // Stores : Apple / Google collectent la TVA du client quoi qu'il arrive.
+    const storeVat = t.store === "stripe" ? (!s.vatFranchise && s.stripePricesIncludeVat ? vatRate : 0) : vatRate;
     const vat = gross - gross / (1 + storeVat);
     const ht = gross - vat;
     let fee = 0, pay = 0;
@@ -143,8 +148,11 @@ export function computeWaterfall(txs: Tx[], s: FinanceSettings, currency: string
 }
 
 export async function financeSettings(uid: string): Promise<FinanceSettings> {
-  const d = await db.doc(`users/${uid}/settings/finance`).get();
-  return { ...DEFAULT_FINANCE, ...(d.data() ?? {}) } as FinanceSettings;
+  const d = (await db.doc(`users/${uid}/settings/finance`).get()).data() ?? {};
+  const s = { ...DEFAULT_FINANCE, ...d } as FinanceSettings;
+  // Réglages enregistrés avant l'option : une micro-entreprise est en franchise par défaut.
+  if (d.vatFranchise === undefined) s.vatFranchise = String(s.structure).startsWith("micro");
+  return s;
 }
 
 export async function waterfallFor(uid: string, days: number, projectIds?: string[], currency?: string) {

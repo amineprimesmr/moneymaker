@@ -13,8 +13,10 @@ struct PlanData: Codable, Hashable {
     struct Goal: Codable, Hashable { let goalMicros: Int; let slopePerMonthMicros: Int?; let etaDate: Double?; let reached: Bool }
     struct Expenses: Codable, Hashable { let list: [Expense]; let periodMicros: Int; let monthlyMicros: Int }
     struct Point: Codable, Hashable { let t: Double; let mrr: Double }
+    struct Vat: Codable, Hashable { let franchise: Bool; let euDistanceSalesYtdMicros: Int; let euThresholdMicros: Int; let euThresholdExceeded: Bool }
     let currency: String
     let days: Int
+    let vat: Vat?
     let setAside: SetAside
     let payouts: [Payout]
     let deadlines: [Deadline]
@@ -179,6 +181,7 @@ struct PlanScreen: View {
                     setAside(p).mmAppear(1)
                     payouts(p).mmAppear(2)
                     deadlines(p).mmAppear(3)
+                    if let v = p.vat { vatThreshold(v).mmAppear(3) }
                     goal(p).mmAppear(4)
                     expenses(p).mmAppear(5)
                 }
@@ -203,7 +206,7 @@ struct PlanScreen: View {
                 Text(p.setAside.totalMicros.money(p.currency)).font(MMFont.number(40, .light)).tracking(-1.2).foregroundStyle(MMColor.orange)
                 Text("Cet argent n'est pas à toi : vire-le sur un compte séparé dès qu'il arrive.").font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
                 VStack(spacing: 6) {
-                    line("TVA collectée (Stripe UE) à reverser", p.setAside.vatMicros, p.currency)
+                    if p.setAside.vatMicros > 0 { line("TVA collectée (Stripe UE) à reverser", p.setAside.vatMicros, p.currency) }
                     line("Cotisations / impôt micro", p.setAside.socialMicros, p.currency)
                     line("Impôt sur les sociétés", p.setAside.corporateMicros, p.currency)
                     line("Impôt sur les dividendes", p.setAside.dividendMicros, p.currency)
@@ -251,6 +254,33 @@ struct PlanScreen: View {
                 }
                 .padding(.horizontal, 16).padding(.vertical, 10)
             }
+        }
+    }
+
+    /// Seuil européen de 10 000 € de ventes directes à des particuliers d'autres pays de l'UE.
+    private func vatThreshold(_ v: PlanData.Vat) -> some View {
+        let progress = min(1, Double(v.euDistanceSalesYtdMicros) / Double(max(v.euThresholdMicros, 1)))
+        return section("TVA · seuil européen") {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(v.euDistanceSalesYtdMicros.money("EUR", compact: true)).font(MMFont.number(22, .regular))
+                    Text("sur 10 000 € cette année").font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
+                }
+                GeometryReader { g in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.08))
+                        Capsule().fill(progress > 0.8 ? MMColor.orange : MMColor.accent).frame(width: max(4, g.size.width * progress))
+                    }
+                }
+                .frame(height: 6)
+                Text(v.euThresholdExceeded
+                     ? "Seuil dépassé : la TVA du pays de chaque client européen est due sur tes ventes Stripe (guichet OSS), même en franchise."
+                     : v.franchise
+                        ? "Ventes Stripe à des particuliers d'autres pays de l'UE. Sous 10 000 €/an, ta franchise s'applique : pas de TVA à facturer."
+                        : "Ventes Stripe à des particuliers d'autres pays de l'UE (hors France).")
+                    .font(MMFont.system(12)).foregroundStyle(v.euThresholdExceeded ? MMColor.orange : MMColor.ink3)
+            }
+            .padding(16)
         }
     }
 

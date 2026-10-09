@@ -16,6 +16,7 @@ struct FinanceSettings: Codable, Hashable {
     var stripePercent: Double
     var stripeFixed: Double
     var stripePricesIncludeVat: Bool
+    var vatFranchise: Bool?
     var socialRate: Double
     var incomeTaxRate: Double
     var expensesRate: Double
@@ -131,28 +132,36 @@ struct NetCard: View {
     }
 
     private func lines(_ w: Waterfall) -> some View {
-        let rows: [(String, Int, Color, Bool)] = [
-            ("Brut payé par les clients", w.grossMicros, MMColor.ink, false),
-            ("TVA et taxes reversées", -w.vatMicros, MMColor.ink3, true),
-            ("Commission App Store / Google Play", -w.storeFeesMicros, MMColor.orange, true),
-            ("Frais de paiement Stripe", -w.paymentFeesMicros, MMColor.orange, true),
-            ("CA net HT encaissé", w.netRevenueMicros, MMColor.blue, false),
-            ("Charges estimées", -w.expensesMicros, MMColor.ink3, true),
-            ("Cotisations / impôt micro", -w.socialMicros, MMColor.red, true),
-            ("Impôt sur les sociétés", -w.corporateTaxMicros, MMColor.red, true),
-            ("Impôt sur les dividendes", -w.dividendTaxMicros, MMColor.red, true),
-            ("Net en poche", w.pocketMicros, MMColor.accent, false),
+        let franchise = w.settings.vatFranchise ?? w.settings.structure.hasPrefix("micro")
+        let micro = w.settings.structure.hasPrefix("micro")
+        let rows: [(String, Int, Color, Bool, String)] = [
+            ("Brut payé par les clients", w.grossMicros, MMColor.ink, false, "Ce que tes clients ont payé, toutes ventes confondues."),
+            (franchise ? "TVA collectée par Apple / Google" : "TVA et taxes", -w.vatMicros, MMColor.ink3, true,
+             franchise ? "Les stores prélèvent la TVA du pays du client avant de te payer. Sur Stripe, en franchise, tu n'en factures pas."
+                       : "TVA comprise dans tes prix : collectée par les stores, à reverser toi-même pour Stripe."),
+            ("Commission App Store / Google Play", -w.storeFeesMicros, MMColor.orange, true, "15 % (Small Business / Google) ou 30 %."),
+            ("Frais de paiement Stripe", -w.paymentFeesMicros, MMColor.orange, true, "≈ 1,5 % + 0,25 € par paiement (carte européenne)."),
+            ("CA net encaissé", w.netRevenueMicros, MMColor.blue, false, micro ? "Base de calcul de tes cotisations URSSAF." : "Ce qui arrive réellement sur ton compte, hors TVA."),
+            ("Charges", -w.expensesMicros, MMColor.ink3, true, "Tes dépenses (Pilotage) ou l'estimation en %."),
+            (micro ? "Cotisations URSSAF" : "Cotisations", -w.socialMicros, MMColor.red, true,
+             micro ? "Pourcentage de ton CA payé à l'URSSAF chaque mois ou trimestre (+ versement libératoire si tu l'as choisi)." : "Cotisations sociales."),
+            ("Impôt sur les sociétés", -w.corporateTaxMicros, MMColor.red, true, "15 % jusqu'à 42 500 € de bénéfice, puis 25 %."),
+            ("Impôt sur les dividendes", -w.dividendTaxMicros, MMColor.red, true, "Flat tax sur ce que tu te verses."),
+            ("Net en poche", w.pocketMicros, MMColor.accent, false, micro ? "Avant ton impôt sur le revenu annuel (sauf versement libératoire)." : "Ce qui te revient personnellement."),
         ].filter { !$0.3 || $0.1 != 0 }
         return VStack(spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.offset) { i, r in
                 if i > 0 { Rectangle().fill(MMColor.hairline).frame(height: 1) }
-                HStack {
-                    Circle().fill(r.2).frame(width: 6, height: 6)
-                    Text(r.0).font(MMFont.system(13, r.3 ? .regular : .medium)).foregroundStyle(r.3 ? MMColor.ink2 : MMColor.ink)
-                    Spacer()
-                    Text(r.1.money(w.currency)).font(MMFont.number(13, r.3 ? .regular : .medium)).foregroundStyle(r.3 ? MMColor.ink2 : r.2)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Circle().fill(r.2).frame(width: 6, height: 6)
+                        Text(r.0).font(MMFont.system(13, r.3 ? .regular : .medium)).foregroundStyle(r.3 ? MMColor.ink2 : MMColor.ink)
+                        Spacer()
+                        Text(r.1.money(w.currency)).font(MMFont.number(13, r.3 ? .regular : .medium)).foregroundStyle(r.3 ? MMColor.ink2 : r.2)
+                    }
+                    Text(r.4).font(MMFont.system(11)).foregroundStyle(MMColor.ink3).padding(.leading, 14)
                 }
-                .padding(.vertical, 9)
+                .padding(.vertical, 8)
             }
             if !w.byStore.isEmpty {
                 HStack(spacing: 8) {
@@ -227,6 +236,14 @@ struct FinanceSettingsSection: View {
                                 .padding(.horizontal, 16).padding(.bottom, 10)
                         }
                         divider
+                        Toggle(isOn: Binding(get: { s.vatFranchise ?? s.structure.hasPrefix("micro") }, set: { save(["vatFranchise": $0]) })) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Franchise en base de TVA").font(MMFont.system(15))
+                                Text("Tu ne factures pas de TVA (mention « TVA non applicable, art. 293 B du CGI »).").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
+                            }
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 11)
+                        divider
                         Toggle(isOn: Binding(get: { s.appleSmallBusiness }, set: { save(["appleSmallBusiness": $0]) })) {
                             Text("Apple Small Business (15 %)").font(MMFont.system(15))
                         }
@@ -236,7 +253,7 @@ struct FinanceSettingsSection: View {
                         percent("Frais Stripe (%)", "stripePercent", s.stripePercent, step: 0.001)
                         divider
                         percent("Cotisations sociales (micro)", "socialRate", s.socialRate, step: 0.001)
-                        percent("Versement libératoire", "incomeTaxRate", s.incomeTaxRate, step: 0.001)
+                        percent("Versement libératoire (si choisi)", "incomeTaxRate", s.incomeTaxRate, step: 0.001)
                         percent("Charges estimées", "expensesRate", s.expensesRate)
                         percent("IS taux réduit", "corporateReducedRate", s.corporateReducedRate)
                         percent("IS taux normal", "corporateRate", s.corporateRate)

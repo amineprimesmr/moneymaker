@@ -128,15 +128,28 @@ export async function planFor(uid: string, days: number, projectIds?: string[], 
     Object.assign(w, adjusted, { settings: s });
   }
   const perMonth = (v: number) => v * 30.44 / Math.max(1, days);
-  const stripeVat = periodTx.filter(t => t.store === "stripe" && !t.isSandbox && (VAT[(t.country ?? "").toUpperCase()] ?? 0) > 0 && ["AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IE","IT","LV","LT","LU","MT","NL","PL","PT","RO","SK","SI","ES","SE"].includes((t.country ?? "").toUpperCase()))
+  const EU = ["AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IE","IT","LV","LT","LU","MT","NL","PL","PT","RO","SK","SI","ES","SE"];
+  const stripeVat = s.vatFranchise ? 0 : periodTx.filter(t => t.store === "stripe" && !t.isSandbox && (VAT[(t.country ?? "").toUpperCase()] ?? 0) > 0 && ["AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IE","IT","LV","LT","LU","MT","NL","PL","PT","RO","SK","SI","ES","SE"].includes((t.country ?? "").toUpperCase()))
     .reduce((a, t) => { const g = convertMicros(t.amountMicros, t.currency, cur); const r = VAT[(t.country ?? "").toUpperCase()]; return a + (s.stripePricesIncludeVat ? g - g / (1 + r) : g * r); }, 0);
   const monthly = { social: perMonth(w.socialMicros), corporate: perMonth(w.corporateTaxMicros), vat: perMonth(stripeVat) };
   // Historique de MRR agrégé par date.
   const byDate = new Map<string, number>();
   for (const h of history) if (h.date) byDate.set(h.date, (byDate.get(h.date) ?? 0) + convertMicros(h.mrrMicros ?? 0, h.currency ?? cur, cur));
   const mrrHistory = [...byDate.entries()].map(([d, mrr]) => ({ t: Date.parse(d + "T00:00:00Z"), mrr }));
+  // Seuil UE de 10 000 € : ventes directes (Stripe) à des particuliers d'autres pays de l'UE sur l'année civile.
+  // Au-delà, la TVA du pays du client est due (guichet OSS), même en franchise en base.
+  const yearStart = Date.UTC(new Date().getUTCFullYear(), 0, 1);
+  const ytdTx = yearStart >= since ? txs : txs.concat(await Promise.all(docs.map(async p => (await db.collection(`projects/${p.id}/transactions`)
+    .where("at", ">=", yearStart).where("at", "<", since).select("store", "amountMicros", "currency", "country", "isSandbox", "at").get()).docs.map(d => d.data() as Tx))).then(a => a.flat()));
+  const euDistance = Math.round(ytdTx.filter(t => t.store === "stripe" && !t.isSandbox && t.at >= yearStart && EU.includes((t.country ?? "").toUpperCase()) && (t.country ?? "").toUpperCase() !== "FR")
+    .reduce((a, t) => a + convertMicros(t.amountMicros, t.currency, "EUR"), 0));
   return {
     currency: cur, days,
+    vat: {
+      franchise: s.vatFranchise,
+      euDistanceSalesYtdMicros: euDistance, euThresholdMicros: 10_000_000_000,
+      euThresholdExceeded: euDistance > 10_000_000_000,
+    },
     waterfall: w,
     expenses: { list: expenses, periodMicros: realExpenses, monthlyMicros: expensesOverPeriod(expenses, 30.44, cur, projectIds) },
     setAside: {

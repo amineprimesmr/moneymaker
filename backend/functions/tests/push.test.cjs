@@ -115,7 +115,7 @@ test("finance: waterfall from gross to pocket", () => {
     { store: "stripe", amountMicros: 100_000_000, currency: "EUR", country: "US", kind: "purchase", at: 0 },     // pas de TVA, 1,75 Stripe
     { store: "app_store", amountMicros: 50_000_000, currency: "EUR", country: "FR", kind: "purchase", isSandbox: true, at: 0 },
   ];
-  const w = computeWaterfall(txs, sanitizeFinance({ structure: "micro_services" }), "EUR", 30);
+  const w = computeWaterfall(txs, sanitizeFinance({ structure: "micro_services", vatFranchise: false, incomeTaxRate: 0.017 }), "EUR", 30);
   assert.equal(w.grossMicros, 112_000_000);
   assert.equal(w.vatMicros, 2_000_000);
   assert.equal(w.storeFeesMicros, 1_500_000);
@@ -153,4 +153,16 @@ test("plan: payouts, deadlines, goal, insights, expenses", () => {
     { revenuePerDay: 40e6, refundsPerDay: 0.5, billingPerDay: 0, knownCountries: new Set(["FR"]) }, "EUR", now);
   assert.deepEqual(ins.map(i => i.type).sort(), ["FIRST_SALE_COUNTRY", "REFUND_SPIKE", "SALES_DROP"]);
   assert.equal(plan.expensesOverPeriod([{ id: "a", name: "Serveur", amountMicros: 30.44e6, currency: "EUR", every: "month" }], 30.44, "EUR"), 30_440_000);
+});
+
+test("finance: franchise en base — no VAT on Stripe, stores still net of VAT", () => {
+  const { computeWaterfall, sanitizeFinance } = require("../lib/finance");
+  const s = sanitizeFinance({ structure: "micro_services" });
+  assert.equal(s.vatFranchise, true); assert.equal(s.incomeTaxRate, 0);
+  const w = computeWaterfall([
+    { store: "stripe", amountMicros: 59e6, currency: "EUR", country: "DE", kind: "purchase", at: 0 },
+    { store: "app_store", amountMicros: 12e6, currency: "EUR", country: "FR", kind: "purchase", at: 0 },
+  ], s, "EUR", 30);
+  assert.equal(w.vatMicros, 2_000_000); // seulement la TVA collectée par Apple
+  assert.equal(w.socialMicros, Math.round(w.netRevenueMicros * 0.212));
 });
