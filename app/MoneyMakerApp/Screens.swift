@@ -179,7 +179,7 @@ struct OverviewView: View {
         VStack(alignment: .leading, spacing: 4) {
             Image("Logo")
                 .resizable().scaledToFit()
-                .frame(height: 30)
+                .frame(height: 40)
                 .frame(maxWidth: .infinity)
                 .shadow(color: .white.opacity(0.18), radius: 10)
                 .accessibilityLabel("MoneyMaker")

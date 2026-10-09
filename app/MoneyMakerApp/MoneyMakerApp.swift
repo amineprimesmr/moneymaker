@@ -4,9 +4,11 @@ import Charts
 @main
 struct MoneyMakerApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @State private var showsSplash = true
     var body: some Scene {
         WindowGroup {
             RootView()
+                .overlay { if showsSplash { LaunchSplashView { showsSplash = false } } }
                 .onOpenURL { Router.shared.open($0) }
                 // fixed-scheme: the whole product (dashboard, widgets) is dark-only.
                 .preferredColorScheme(.dark)
