@@ -14,6 +14,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 // MARK: - Données statiques
 
@@ -64,6 +65,7 @@ struct GlobeView: View {
     @State private var dragStart: (spin: Double, tilt: Double)?
     @State private var lastTick = Date()
     @State private var dragging = false
+    @State private var haptics = GlobeHaptics()
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 60, paused: reduceMotion && !dragging)) { tl in
@@ -89,19 +91,25 @@ struct GlobeView: View {
         let cruise = reduceMotion ? 0 : 0.09
         velocity += (cruise - velocity) * min(1, dt * 1.6)
         spin += velocity * dt
+        // Crans pendant l'inertie, qui s'estompent avec la vitesse (rien pendant la croisière).
+        if interactive, abs(velocity) > 0.6 { haptics.rotated(to: spin, speed: abs(velocity)) }
     }
 
     private var drag: some Gesture {
         DragGesture(minimumDistance: 2)
             .onChanged { v in
-                if dragStart == nil { dragStart = (spin, tilt); dragging = true }
+                if dragStart == nil { dragStart = (spin, tilt); dragging = true; haptics.grab() }
                 let k = 0.0085
                 spin = dragStart!.spin + v.translation.width * k
-                tilt = max(-1.1, min(1.1, dragStart!.tilt + v.translation.height * k))
+                let newTilt = max(-1.1, min(1.1, dragStart!.tilt + v.translation.height * k))
+                if (newTilt == 1.1 || newTilt == -1.1) && abs(tilt) < 1.1 { haptics.edge() } // butée nord/sud
+                tilt = newTilt
+                haptics.rotated(to: spin + tilt, speed: max(abs(v.velocity.width), abs(v.velocity.height)) * k)
             }
             .onEnded { v in
                 velocity = max(-6, min(6, v.velocity.width * 0.0085))
                 dragStart = nil; dragging = false; lastTick = .now
+                haptics.release(speed: abs(velocity))
             }
     }
 
@@ -139,18 +147,10 @@ struct GlobeView: View {
         let c = CGPoint(x: size.width / 2, y: size.height / 2)
         let disc = Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2))
 
-        // Atmosphère : halo d'accent qui déborde de la sphère.
-        ctx.fill(Path(ellipseIn: CGRect(x: c.x - r * 1.32, y: c.y - r * 1.32, width: r * 2.64, height: r * 2.64)),
-                 with: .radialGradient(Gradient(stops: [
-                    .init(color: MMColor.accent.opacity(0.0), location: 0.62),
-                    .init(color: MMColor.accent.opacity(0.16), location: 0.76),
-                    .init(color: MMColor.blue.opacity(0.06), location: 0.88),
-                    .init(color: .clear, location: 1)]), center: c, startRadius: 0, endRadius: r * 1.32))
         // Corps de la planète : sombre, éclairé en haut à gauche.
         ctx.fill(disc, with: .radialGradient(Gradient(colors: [Color(white: 0.13), Color(white: 0.04), .black]),
                                              center: CGPoint(x: c.x - r * 0.35, y: c.y - r * 0.4), startRadius: 0, endRadius: r * 1.5))
-        ctx.stroke(disc, with: .linearGradient(Gradient(colors: [Color.white.opacity(0.22), MMColor.accent.opacity(0.18), .clear]),
-                                               startPoint: CGPoint(x: c.x, y: c.y - r), endPoint: CGPoint(x: c.x, y: c.y + r)), lineWidth: 1)
+        ctx.stroke(disc, with: .color(.white.opacity(0.07)), lineWidth: 0.5)
 
         // Terres : 6 niveaux d'opacité selon la profondeur → 6 remplissages.
         var buckets = [Path](repeating: Path(), count: 6)
@@ -333,5 +333,42 @@ struct GlobeScreen: View {
         .scrollIndicators(.hidden)
         .navigationBarTitleDisplayMode(.inline)
         .mmPage()
+    }
+}
+
+// MARK: - Retours haptiques
+
+/// Crans façon molette : un tick tous les 10° de rotation, plus net quand on tourne vite,
+/// limité à ~28 par seconde pour rester précis sans bourdonner.
+final class GlobeHaptics {
+    private let tick = UISelectionFeedbackGenerator()
+    private let soft = UIImpactFeedbackGenerator(style: .soft)
+    private let rigid = UIImpactFeedbackGenerator(style: .rigid)
+    private var lastDetent: Int?
+    private var lastAt = Date.distantPast
+    private let step = 10.0 * .pi / 180
+
+    func grab() {
+        soft.prepare(); tick.prepare(); rigid.prepare()
+        soft.impactOccurred(intensity: 0.55)
+        lastDetent = nil
+    }
+
+    func rotated(to angle: Double, speed: Double) {
+        let detent = Int((angle / step).rounded(.down))
+        defer { lastDetent = detent }
+        guard let last = lastDetent, last != detent else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastAt) > 0.035 else { return }
+        lastAt = now
+        if speed > 2.5 { rigid.impactOccurred(intensity: min(1, 0.35 + speed / 12)) } else { tick.selectionChanged() }
+        tick.prepare()
+    }
+
+    func edge() { rigid.impactOccurred(intensity: 0.8) }
+
+    func release(speed: Double) {
+        if speed > 1 { soft.impactOccurred(intensity: min(1, 0.4 + speed / 8)) }
+        lastDetent = nil
     }
 }
