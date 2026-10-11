@@ -1,7 +1,6 @@
 import SwiftUI
 import Charts
 
-private let dashboardURL = URL(string: "https://moneymaker-io.web.app")!
 
 struct RootView: View {
     @StateObject private var store = Store()
@@ -23,60 +22,63 @@ struct RootView: View {
 struct SignInView: View {
     @EnvironmentObject var store: Store
     @State private var token = ""
-    @State private var pulse = false
+    @State private var showToken = false
+    @State private var authError: String?
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
-            ZStack {
-                Circle().fill(MMColor.accent.opacity(0.18)).frame(width: 190, height: 190).blur(radius: 50)
-                    .scaleEffect(pulse ? 1.12 : 0.9)
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(LinearGradient(colors: [MMColor.accent, MMColor.accent.opacity(0.75)], startPoint: .top, endPoint: .bottom))
-                    .frame(width: 84, height: 84)
-                    .overlay { Image(systemName: "dollarsign").font(.system(size: 38, weight: .bold)).foregroundStyle(.black) }
-                    .shadow(color: MMColor.accent.opacity(0.5), radius: 30, y: 10)
-            }
-            .mmAppear(0)
-            .onAppear { withAnimation(.easeInOut(duration: 3).repeatForever()) { pulse = true } }
-
-            VStack(spacing: 10) {
-                Text("MoneyMaker").font(MMFont.system(36, .bold)).tracking(-0.9)
-                Text("TOUS TES REVENUS, EN DIRECT").font(MMFont.system(11, .medium)).tracking(2.4).foregroundStyle(MMColor.ink3)
-            }
-            .padding(.top, 28).mmAppear(1)
-
+            Image("Logo").resizable().scaledToFit().frame(width: 250)
+                .mmAppear(0)
+            Text("Tous tes revenus App Store, Google Play et Stripe, en direct.")
+                .font(MMFont.system(15)).foregroundStyle(MMColor.ink2).multilineTextAlignment(.center)
+                .padding(.top, 22).padding(.horizontal, 12).mmAppear(1)
             Spacer()
 
             VStack(spacing: 14) {
-                HStack(spacing: 12) {
-                    Image(systemName: "key.horizontal").foregroundStyle(focused ? MMColor.accent : MMColor.ink3)
-                    SecureField("", text: $token, prompt: Text("mm_pat_…").foregroundStyle(MMColor.ink3))
-                        .font(MMFont.system(16)).focused($focused)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                }
-                .padding(.horizontal, 20).padding(.vertical, 17)
-                .mmGlass(in: Capsule())
-                .overlay { Capsule().strokeBorder(focused ? MMColor.accent.opacity(0.5) : .clear, lineWidth: 1) }
-                .animation(.easeOut(duration: 0.2), value: focused)
+                MMPrimaryButton(title: "Se connecter ou créer un compte", loading: store.loading) { WebSignIn.shared.start { result in
+                    switch result {
+                    case .success(let t): Task { await store.signIn(t) }
+                    case .failure(let e): authError = e.localizedDescription
+                    case .none: break
+                    }
+                } }
+                .disabled(store.loading)
 
-                MMPrimaryButton(title: "Connexion", loading: store.loading) { Task { await store.signIn(token) } }
-                    .disabled(token.isEmpty || store.loading)
-                    .opacity(token.isEmpty ? 0.45 : 1)
-
-                if let e = store.error {
-                    Text(e).font(MMFont.system(13)).foregroundStyle(MMColor.red).transition(.opacity)
+                if showToken {
+                    HStack(spacing: 12) {
+                        Image(systemName: "key.horizontal").foregroundStyle(focused ? MMColor.accent : MMColor.ink3)
+                        SecureField("", text: $token, prompt: Text("Jeton mm_pat_…").foregroundStyle(MMColor.ink3))
+                            .font(MMFont.system(16)).focused($focused)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .submitLabel(.go)
+                            .onSubmit { Task { await store.signIn(token) } }
+                    }
+                    .padding(.horizontal, 20).padding(.vertical, 15)
+                    .mmGlass(in: Capsule())
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                } else {
+                    Button("J'ai un jeton personnel") { withAnimation(.smooth) { showToken = true } }
+                        .font(MMFont.system(13, .medium)).foregroundStyle(MMColor.ink3)
                 }
-                Text("Crée un jeton sur le dashboard → Compte & accès.")
-                    .font(MMFont.system(12)).foregroundStyle(MMColor.ink3).multilineTextAlignment(.center)
-                Link("Ouvrir le dashboard", destination: dashboardURL).font(MMFont.system(13, .medium)).foregroundStyle(MMColor.ink2)
+
+                if let e = store.error ?? authError {
+                    Text(e).font(MMFont.system(13)).foregroundStyle(MMColor.red).multilineTextAlignment(.center).transition(.opacity)
+                }
+                HStack(spacing: 14) {
+                    Link("Confidentialité", destination: URL(string: "https://moneymaker-io.web.app/privacy")!)
+                    Link("Conditions", destination: URL(string: "https://moneymaker-io.web.app/terms")!)
+                    Link("Aide", destination: URL(string: "https://moneymaker-io.web.app/support")!)
+                }
+                .font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
+                .padding(.top, 4)
             }
             .mmAppear(2)
         }
         .padding(.horizontal, 24).padding(.bottom, 20)
         .mmPage()
-        .sensoryFeedback(.error, trigger: store.error)
+        .sensoryFeedback(.error, trigger: store.error ?? authError)
     }
 }
 

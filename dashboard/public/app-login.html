@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Connexion · MoneyMaker</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="stylesheet" href="/app.css">
+<style>
+  .wl-hero { padding-top: 56px; }
+  .tabs-auth { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: rgba(255,255,255,.05); border: 1px solid var(--line); }
+  .tabs-auth button { flex: 1; border: 0; background: transparent; color: var(--muted); }
+  .tabs-auth button.on { background: rgba(255,255,255,.13); color: #fff; }
+  .done { text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wl-screen">
+  <section class="wl-hero">
+    <h1 class="wl-title wl-logo"><img src="/logo.png" alt="MoneyMaker" width="720" height="249"></h1>
+    <p class="wl-sub" id="sub">Connecte-toi pour ouvrir MoneyMaker sur ton iPhone.</p>
+    <div class="wl-card-shell">
+      <span class="spin"></span><span class="spin blur"></span>
+      <div class="wl-card" id="card">
+        <span class="wl-card-glow"></span><span class="wl-card-edge"></span>
+        <div class="tabs-auth"><button type="button" class="on" data-mode="login">Connexion</button><button type="button" data-mode="signup">Créer un compte</button></div>
+        <button id="google" class="wl-google wide" type="button">
+          <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+          Continuer avec Google
+        </button>
+        <div class="sep">ou</div>
+        <form id="form" class="stack">
+          <div class="wl-field"><span class="spin"></span><input id="email" type="email" placeholder="ton@email.com" autocomplete="email" required></div>
+          <div class="wl-field"><span class="spin"></span><input id="password" type="password" placeholder="Mot de passe (8+ caractères)" autocomplete="current-password" minlength="8" required></div>
+          <button class="primary wide wl-submit" type="submit" id="submit">Connexion</button>
+        </form>
+        <p id="err" class="error" role="status"></p>
+        <p class="muted" style="font-size:12px;margin:0">En continuant, tu acceptes les <a href="/terms" target="_blank">conditions</a> et la <a href="/privacy" target="_blank">politique de confidentialité</a>.</p>
+      </div>
+    </div>
+  </section>
+</div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signInWithEmailAndPassword,
+  createUserWithEmailAndPassword, browserLocalPersistence, setPersistence } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+
+// Seul retour autorisé : l'app MoneyMaker (jamais une URL fournie par un tiers).
+const RETURN = "moneymaker://auth";
+const $ = s => document.querySelector(s);
+const config = await fetch("/__/firebase/init.json").then(r => r.json());
+const auth = getAuth(initializeApp(config));
+await setPersistence(auth, browserLocalPersistence);
+let mode = "login", handing = false;
+
+document.querySelectorAll("[data-mode]").forEach(b => b.onclick = () => {
+  mode = b.dataset.mode;
+  document.querySelectorAll("[data-mode]").forEach(x => x.classList.toggle("on", x === b));
+  $("#submit").textContent = mode === "login" ? "Connexion" : "Créer mon compte";
+  $("#password").autocomplete = mode === "login" ? "current-password" : "new-password";
+});
+
+const fail = e => {
+  const map = { "auth/invalid-credential": "E-mail ou mot de passe incorrect.", "auth/email-already-in-use": "Un compte existe déjà avec cet e-mail : connecte-toi.",
+    "auth/weak-password": "Mot de passe trop court (8 caractères minimum).", "auth/too-many-requests": "Trop d'essais, réessaie dans un instant." };
+  $("#err").textContent = map[e.code] ?? e.message;
+};
+
+$("#google").onclick = () => signInWithRedirect(auth, new GoogleAuthProvider()).catch(fail);
+$("#form").onsubmit = e => {
+  e.preventDefault(); $("#err").textContent = "";
+  const go = mode === "login" ? signInWithEmailAndPassword : createUserWithEmailAndPassword;
+  go(auth, $("#email").value.trim(), $("#password").value).catch(fail);
+};
+getRedirectResult(auth).catch(fail);
+
+// Connecté : un jeton personnel est créé pour cet iPhone puis renvoyé à l'app.
+onAuthStateChanged(auth, async user => {
+  if (!user || handing) return;
+  handing = true;
+  $("#card").innerHTML = `<div class="done"><div class="logo" style="margin-bottom:14px">$</div><p>Connexion de ton iPhone…</p></div>`;
+  try {
+    const res = await fetch("/v1/tokens", { method: "POST", headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ label: "iPhone" }) });
+    const { token } = await res.json();
+    if (!token) throw new Error("token");
+    location.replace(`${RETURN}?token=${encodeURIComponent(token)}`);
+  } catch {
+    handing = false;
+    $("#card").innerHTML = `<div class="done"><p>Impossible de connecter l'app. Ferme cette fenêtre et réessaie.</p></div>`;
+  }
+});
+</script>
+</body>
+</html>

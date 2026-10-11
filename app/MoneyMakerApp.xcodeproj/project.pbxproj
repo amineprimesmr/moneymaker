@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0095B39F4DF4E19D7F6A24E0 /* LiveServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F8C9B2ECD231050E024974A /* LiveServices.swift */; };
 		062A1D73A76B17A5E576B45A /* Plan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03C62595422A5AAD282765D3 /* Plan.swift */; };
+		0A6A777943ADFDD061F9E1AE /* WebSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA79FE47B32710C507EFC77 /* WebSignIn.swift */; };
 		0E0DF9F55F63CCCFC43BAF97 /* Finance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9CEEAB6A0F6F975061B40D2 /* Finance.swift */; };
 		19BDD03E12EDAD86DDEBBDE9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1097FC8E56F8174FC341976B /* Assets.xcassets */; };
 		24B06FD26A971ACE214EAB40 /* countries.json in Resources */ = {isa = PBXBuildFile; fileRef = F8609E850E6E511A47AC0F87 /* countries.json */; };
@@ -93,6 +94,7 @@
 		F8609E850E6E511A47AC0F87 /* countries.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = countries.json; sourceTree = "<group>"; };
 		F88B72061DA7660BF3CEB1FD /* Screens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Screens.swift; sourceTree = "<group>"; };
 		F9CEEAB6A0F6F975061B40D2 /* Finance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Finance.swift; sourceTree = "<group>"; };
+		FDA79FE47B32710C507EFC77 /* WebSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSignIn.swift; sourceTree = "<group>"; };
 		FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMLive.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -164,6 +166,7 @@
 				1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */,
 				03C62595422A5AAD282765D3 /* Plan.swift */,
 				A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */,
+				FDA79FE47B32710C507EFC77 /* WebSignIn.swift */,
 			);
 			path = Live;
 			sourceTree = "<group>";
@@ -306,6 +309,7 @@
 				E41FCBB3965C52B9646B6A79 /* ProjectInsights.swift in Sources */,
 				C15F68906BCC0285C1E981AD /* Screens.swift in Sources */,
 				7811B4F791C9B3EBBC5C17E9 /* SideMenu.swift in Sources */,
+				0A6A777943ADFDD061F9E1AE /* WebSignIn.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -391,6 +395,7 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -555,6 +560,7 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};

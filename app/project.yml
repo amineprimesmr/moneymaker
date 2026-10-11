@@ -9,6 +9,7 @@ settings:
     # graphiques sont plusieurs fois plus lents en -Onone).
     SWIFT_OPTIMIZATION_LEVEL: "-O"
     SWIFT_COMPILATION_MODE: wholemodule
+    TARGETED_DEVICE_FAMILY: "1"
     DEVELOPMENT_TEAM: F2CJGJ69XU
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: Apple Development

@@ -237,6 +237,8 @@ struct LiveSettingsView: View {
     @ObservedObject private var push = PushManager.shared
     @ObservedObject private var live = LiveActivityManager.shared
     @State private var goal = MMShared.mrrGoal.map(String.init) ?? ""
+    @State private var confirmDelete = false
+    @State private var deleting = false
     var embedded = false
 
     var body: some View {
@@ -324,6 +326,12 @@ struct LiveSettingsView: View {
                         .padding(.horizontal, 16).padding(.vertical, 14)
                     }
                     Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 52)
+                    accountLink("hand.raised.fill", "Confidentialité", "https://moneymaker-io.web.app/privacy")
+                    Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 52)
+                    accountLink("doc.text.fill", "Conditions d'utilisation", "https://moneymaker-io.web.app/terms")
+                    Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 52)
+                    accountLink("questionmark.circle.fill", "Aide et contact", "https://moneymaker-io.web.app/support")
+                    Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 52)
                     Button(role: .destructive) { store.signOut() } label: {
                         HStack(spacing: 14) {
                             Image(systemName: "rectangle.portrait.and.arrow.right").font(.system(size: 13, weight: .semibold)).frame(width: 20)
@@ -333,8 +341,46 @@ struct LiveSettingsView: View {
                         .foregroundStyle(MMColor.red)
                         .padding(.horizontal, 16).padding(.vertical, 14)
                     }
+                    Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 52)
+                    Button(role: .destructive) { confirmDelete = true } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "trash.fill").font(.system(size: 13, weight: .semibold)).frame(width: 20)
+                            Text(deleting ? "Suppression…" : "Supprimer mon compte").font(MMFont.system(15))
+                            Spacer()
+                        }
+                        .foregroundStyle(MMColor.red)
+                        .padding(.horizontal, 16).padding(.vertical, 14)
+                    }
+                    .disabled(deleting)
                 }
             }
+        }
+        .alert("Supprimer ton compte ?", isPresented: $confirmDelete) {
+            Button("Supprimer définitivement", role: .destructive) {
+                deleting = true
+                Task {
+                    struct R: Decodable { let ok: Bool }
+                    let r: R? = try? await store.client.send("DELETE", "account", body: ["confirm": "SUPPRIMER"])
+                    deleting = false
+                    if r?.ok == true { store.signOut() } else { push.lastError = "La suppression a échoué, réessaie." }
+                }
+            }
+            Button("Annuler", role: .cancel) {}
+        } message: {
+            Text("Ton compte, tes jetons et les business dont tu es le seul membre (données de ventes, clés, réglages) seront supprimés. C'est irréversible.")
+        }
+    }
+
+    private func accountLink(_ icon: String, _ title: String, _ url: String) -> some View {
+        Link(destination: URL(string: url)!) {
+            HStack(spacing: 14) {
+                Image(systemName: icon).font(.system(size: 13, weight: .semibold)).foregroundStyle(MMColor.ink2).frame(width: 20)
+                Text(title).font(MMFont.system(15))
+                Spacer()
+                Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(MMColor.ink3)
+            }
+            .foregroundStyle(MMColor.ink)
+            .padding(.horizontal, 16).padding(.vertical, 14)
         }
     }
 

@@ -251,6 +251,33 @@ route("POST", "/v1/tokens", async req => {
   return { token: await issueKey({ kind: "pat", uid, label: String(req.body?.label ?? "token").slice(0, 60) }) };
 });
 
+/** Suppression du compte (exigence App Store 5.1.1(v)) : business dont on est seul membre, clés,
+ *  jetons, appareils, réglages, dépenses, puis l'utilisateur Firebase. Les business partagés sont quittés. */
+route("DELETE", "/v1/account", async req => {
+  const uid = requireUser(await authenticate(req));
+  if (req.body?.confirm !== "SUPPRIMER") throw new HttpError(400, "confirmation_required", "Envoie {\"confirm\":\"SUPPRIMER\"}");
+  const projects = await db.collection("projects").where("members", "array-contains", uid).get();
+  let deleted = 0, left = 0;
+  for (const p of projects.docs) {
+    const members: string[] = p.get("members") ?? [];
+    if (members.length <= 1) {
+      const keys = await db.collection("apiKeys").where("projectId", "==", p.id).get();
+      await Promise.all(keys.docs.map(k => k.ref.delete()));
+      await db.recursiveDelete(p.ref);
+      await db.doc(`iconCache/${p.id}`).delete().catch(() => null);
+      deleted++;
+    } else {
+      await p.ref.update({ members: FieldValue.arrayRemove(uid) });
+      left++;
+    }
+  }
+  const pats = await db.collection("apiKeys").where("uid", "==", uid).get();
+  await Promise.all(pats.docs.map(k => k.ref.delete()));
+  await db.recursiveDelete(db.doc(`users/${uid}`));
+  await getAuth().deleteUser(uid).catch(() => null);
+  return { ok: true, deletedProjects: deleted, leftProjects: left };
+});
+
 route("GET", "/v1/overview", async req => {
   const uid = requireUser(await authenticate(req));
   const days = Math.min(365, Math.max(1, Number(req.query.days ?? 30)));
