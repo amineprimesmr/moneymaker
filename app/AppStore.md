@@ -63,8 +63,8 @@ Suivi publicitaire (tracking) : **Non**.
 >
 > Sign in: tap "Se connecter ou créer un compte", then use the demo account below (email + password). Accounts can also be created in the app (Google or email).
 >
-> Demo account (pre-filled with sample businesses and sales):
-> Email: <DEMO_EMAIL>  Password: <DEMO_PASSWORD>
+> Account (email + password sign-in, with real businesses and sales):
+> Email: <TON_EMAIL>  Password: <TON_MOT_DE_PASSE>
 >
 > Account deletion: Réglages (Settings tab) → "Supprimer mon compte".
 > Notifications are optional and only report the developer's own sales. The Live Activity shows today's revenue.
@@ -78,10 +78,10 @@ Suivi publicitaire (tracking) : **Non**.
 | iPhone uniquement | ✅ |
 | Connexion et création de compte dans l'app (Google / e-mail) | ✅ |
 | Suppression du compte dans l'app (5.1.1(v)) | ✅ |
-| Pages confidentialité / conditions / aide | ✅ écrites — adresse de contact à renseigner |
+| Pages confidentialité / conditions / aide | ✅ en ligne (contact@moneymakerr.com) |
 | Fiche App Store (texte, mots-clés, catégorie, classification) | ✅ ci-dessus |
 | Questionnaire App Privacy | ✅ ci-dessus |
-| Compte de démo pour la review | ⏳ à créer (avec données d'exemple) |
+| Compte pour la review | ⏳ ton compte : il doit avoir un mot de passe (pas seulement Google) — renseigne-le toi-même dans App Store Connect |
 | Captures d'écran 6,9" (1290×2796 depuis l'iPhone 14 Pro Max acceptées) | ⏳ à faire |
 | Fiche App Store Connect | ⏳ connexion à App Store Connect requise |
 | Clé APNs (notifications) | ⏳ à créer sur developer.apple.com |

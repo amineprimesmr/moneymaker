@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confidentialité · MoneyMaker</title><meta name="description" content="Politique de confidentialité de MoneyMaker.">
+<link rel="icon" href="/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/icon-180.png"><meta name="theme-color" content="#000000">
+<link rel="stylesheet" href="/app.css"></head>
+<body class="doc"><main><nav class="crumbs"><a href="/">MoneyMaker</a><a href="/privacy">Confidentialité</a><a href="/terms">Conditions</a><a href="/support">Aide</a></nav>
+
+<h1>Politique de confidentialité</h1>
+<p>MoneyMaker est un tableau de bord de revenus pour les éditeurs d'apps et de produits numériques (App Store, Google Play, Stripe), disponible sur le web (moneymaker-io.web.app) et sur iPhone. Cette page explique quelles données sont traitées, pourquoi, et comment les supprimer.</p>
+
+<h2>Données que nous traitons</h2>
+<ul>
+<li><b>Ton compte</b> : adresse e-mail et identifiant de connexion (Google ou e-mail/mot de passe, gérés par Firebase Authentication). Le mot de passe n'est jamais visible par MoneyMaker.</li>
+<li><b>Tes business</b> : nom, configuration (produits, accès premium, devise), et les clés que tu choisis de connecter (App Store Connect, achats intégrés Apple, Google Play, Stripe). Ces clés sont stockées côté serveur uniquement, ne sont jamais renvoyées par l'API et servent seulement à lire tes ventes.</li>
+<li><b>Les achats de tes clients</b> : identifiant d'utilisateur que ton app nous transmet (pseudonyme), produit, prix, devise, pays de la boutique, dates et statut de l'abonnement. Pour ces données, MoneyMaker agit comme <b>sous-traitant</b> : tu restes responsable du traitement vis-à-vis de tes propres utilisateurs.</li>
+<li><b>Réglages financiers optionnels</b> : statut juridique, taux, dépenses, nom de ton entreprise — uniquement si tu actives « Net en poche ».</li>
+<li><b>App iPhone</b> : jeton de notification (pour t'envoyer les notifications de vente que tu as activées), préférences de notification, fuseau horaire. Aucune géolocalisation, aucun contact, aucune photo.</li>
+</ul>
+
+<h2>Ce que nous ne faisons pas</h2>
+<ul>
+<li>Aucune publicité, aucun suivi publicitaire, aucun traceur tiers, aucune vente ni location de données.</li>
+<li>L'app iPhone ne contient aucun SDK d'analytique ni de publicité.</li>
+</ul>
+
+<h2>Pourquoi</h2>
+<p>Uniquement pour fournir le service : calculer tes revenus et indicateurs, t'envoyer les notifications que tu as demandées, valider les achats de tes clients et accorder leurs accès premium. Base légale : exécution du contrat (RGPD, art. 6.1.b).</p>
+
+<h2>Où sont les données</h2>
+<p>Sur Google Cloud / Firebase, région <b>europe-west1 (Belgique)</b>. Les échanges sont chiffrés (HTTPS), les données chiffrées au repos par Google. Les services tiers sollicités sont ceux que tu connectes : Apple, Google, Stripe, et éventuellement Slack, Discord, Mixpanel, Amplitude, Segment, PostHog, AppsFlyer si tu les actives.</p>
+
+<h2>Durée de conservation et suppression</h2>
+<p>Les données sont conservées tant que ton compte existe. Tu peux <b>supprimer ton compte à tout moment depuis l'app</b> (Réglages → Supprimer mon compte) : ton compte, tes jetons, tes appareils et les business dont tu es le seul membre (ventes, clés, réglages) sont effacés immédiatement et définitivement.</p>
+
+<h2>Tes droits</h2>
+<p>Accès, rectification, effacement, portabilité (export CSV dans le dashboard), opposition : <a href="mailto:contact@moneymakerr.com">contact@moneymakerr.com</a>. Tu peux aussi saisir la CNIL (cnil.fr).</p>
+
+<p class="muted" style="margin-top:48px">Dernière mise à jour : 11 octobre 2026.</p></main></body></html>
