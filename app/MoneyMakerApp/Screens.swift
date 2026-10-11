@@ -56,6 +56,14 @@ struct SignInView: View {
                 } }
                 .disabled(store.loading)
 
+                Button { Task { await store.signIn("mm_demo") } } label: {
+                    Label("Découvrir avec un exemple", systemImage: "sparkles")
+                        .font(MMFont.system(15, .semibold)).foregroundStyle(MMColor.ink)
+                        .frame(maxWidth: .infinity).padding(.vertical, 15)
+                        .mmGlass(in: Capsule())
+                }
+                .buttonStyle(MMPressStyle()).disabled(store.loading)
+
                 if showToken {
                     HStack(spacing: 12) {
                         Image(systemName: "key.horizontal").foregroundStyle(focused ? MMColor.accent : MMColor.ink3)

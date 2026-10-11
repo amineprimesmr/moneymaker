@@ -15,6 +15,7 @@ import { projectMetrics, projectCohorts } from "./metrics";
 import { connectStripe, connectAppStore, connectGooglePlay, markConnected } from "./connect";
 import { sanitizeIntegrations } from "./integrations";
 import { toRevenueCatSubscriber, promotionalDays } from "./rccompat";
+import { DEMO_TOKEN, DEMO_UID } from "./demo";
 import { searchApps, syncTrackers, translateReview, lookupApp, TrackedApp } from "./appstore";
 
 /** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
@@ -29,6 +30,7 @@ async function authenticate(req: Request): Promise<Caller> {
   const header = req.get("authorization") ?? "";
   const raw = header.replace(/^Bearer\s+/i, "").trim();
   if (!raw) throw new HttpError(401, "missing_api_key");
+  if (raw === DEMO_TOKEN) return { kind: "user", uid: DEMO_UID };
   if (raw.startsWith("mm_")) {
     const rec: KeyRecord | null = await resolveKey(raw);
     if (!rec) throw new HttpError(401, "invalid_api_key");
@@ -850,6 +852,8 @@ export async function handle(req: Request, res: Response) {
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
   const path = req.path.replace(/^\/api(?=\/)/, "");
   try {
+    // Mode démo : lecture seule.
+    if (req.method !== "GET" && /^Bearer\s+mm_demo\s*$/i.test(req.get("authorization") ?? "")) throw new HttpError(403, "demo_read_only", "Mode démo : lecture seule");
     for (const [method, re, handler] of routes) {
       const m = re.exec(path);
       if (!m || method !== req.method) continue;

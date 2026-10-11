@@ -61,10 +61,7 @@ Suivi publicitaire (tracking) : **Non**.
 
 > MoneyMaker is a free companion app for app developers: it shows the revenue of their own apps (App Store, Google Play, Stripe) collected by the MoneyMaker web service. There are no in-app purchases and nothing to buy.
 >
-> Sign in: tap "Se connecter ou créer un compte", then use the demo account below (email + password). Accounts can also be created in the app (Google or email).
->
-> Account (email + password sign-in, with real businesses and sales):
-> Email: <TON_EMAIL>  Password: <TON_MOT_DE_PASSE>
+> NO LOGIN NEEDED FOR REVIEW: on the first screen, tap "Découvrir avec un exemple" (read-only demo business "Focus Timer", sample data refreshed hourly, token `mm_demo`).
 >
 > Account deletion: Réglages (Settings tab) → "Supprimer mon compte".
 > Notifications are optional and only report the developer's own sales. The Live Activity shows today's revenue.
@@ -81,7 +78,7 @@ Suivi publicitaire (tracking) : **Non**.
 | Pages confidentialité / conditions / aide | ✅ en ligne (contact@moneymakerr.com) |
 | Fiche App Store (texte, mots-clés, catégorie, classification) | ✅ ci-dessus |
 | Questionnaire App Privacy | ✅ ci-dessus |
-| Compte pour la review | ⏳ ton compte : il doit avoir un mot de passe (pas seulement Google) — renseigne-le toi-même dans App Store Connect |
-| Captures d'écran 6,9" (1290×2796 depuis l'iPhone 14 Pro Max acceptées) | ⏳ à faire |
-| Fiche App Store Connect | ⏳ connexion à App Store Connect requise |
-| Clé APNs (notifications) | ⏳ à créer sur developer.apple.com |
+| Accès pour la review | ✅ mode démo sans compte (« Découvrir avec un exemple »), connexion non requise |
+| Captures d'écran 6,7" (1290×2796) | ✅ 4 captures envoyées |
+| Fiche App Store Connect | ✅ app 6821596839 |
+| Clé APNs (notifications) | ✅ HY8R5SV868 dans Firestore `system/apns`, testée (200) |

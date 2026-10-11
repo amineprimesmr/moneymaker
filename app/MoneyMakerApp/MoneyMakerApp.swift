@@ -180,11 +180,13 @@ final class Store: ObservableObject {
 
     func signIn(_ raw: String) async {
         let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard t.hasPrefix("mm_pat_") else { error = "Le jeton doit commencer par mm_pat_"; return }
+        guard t.hasPrefix("mm_pat_") || t == "mm_demo" else { error = "Le jeton doit commencer par mm_pat_"; return }
         token = t
         await refresh()
         if error == nil { MoneyMakerClient.save(token: t) } else { token = nil }
     }
+
+    var isDemo: Bool { token == "mm_demo" }
 
     func signOut() {
         let old = token

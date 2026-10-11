@@ -14,6 +14,7 @@ import { pushEvent, pushRanking, sendDailySummaries, pushInsight } from "./push"
 import { insightsForProject } from "./plan";
 import { syncDownloads } from "./downloads";
 import { refreshIcon } from "./icons";
+import { demoTick } from "./demo";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 
 import { importRevenueCat } from "./revenuecat";
@@ -184,3 +185,6 @@ export const runImportJob = onDocumentCreated({ document: "importJobs/{jid}", ti
     await ref.update({ status: "failed", error: (e as Error).message, doneAt: Date.now(), secretKey: FieldValue.delete() });
   }
 });
+
+/** Business démo (lecture seule, jeton mm_demo) : quelques ventes chaque heure. */
+export const demoRefresh = onSchedule({ schedule: "20 * * * *", timeZone: "UTC", timeoutSeconds: 300 }, async () => { await demoTick(); });
