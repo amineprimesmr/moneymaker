@@ -373,7 +373,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = F2CJGJ69XU;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -417,7 +417,7 @@
 				PRODUCT_NAME = MoneyMakerWidgets;
 				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Widgets AppStore 20261009";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -443,7 +443,7 @@
 				PRODUCT_NAME = MoneyMaker;
 				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker AppStore 20261009";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -464,7 +464,7 @@
 				PRODUCT_NAME = MoneyMakerWidgets;
 				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Widgets Dev 20261009";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -490,7 +490,7 @@
 				PRODUCT_NAME = MoneyMaker;
 				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Dev 20261009";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -530,7 +530,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = F2CJGJ69XU;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
