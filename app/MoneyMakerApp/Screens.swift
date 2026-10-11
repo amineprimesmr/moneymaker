@@ -14,6 +14,16 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.45), value: store.token == nil)
         .environmentObject(store)
+        .onReceive(Router.shared.$pendingToken.compactMap { $0 }) { t in
+            Router.shared.pendingToken = nil
+            Task { await store.signIn(t) }
+        }
+        .task {
+            #if DEBUG
+            // Tests UI (captures App Store) : jeton fourni par l'environnement de lancement.
+            if store.token == nil, let t = ProcessInfo.processInfo.environment["MM_UI_TEST_TOKEN"], t.hasPrefix("mm_pat_") { await store.signIn(t) }
+            #endif
+        }
     }
 }
 

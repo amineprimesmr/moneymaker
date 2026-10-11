@@ -31,6 +31,7 @@
 		ADADB3EF429F2E44BA31DDA1 /* MMEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8864A5BC74A1FB07813601 /* MMEffects.swift */; };
 		AEBAE27FA6C291041BA9B259 /* MMTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B41F707AED2D8405F6A5A /* MMTheme.swift */; };
 		AF79FEB78C3C31BD156BF1D8 /* BusinessSideBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B505E5DB6CC437E02CFFDC2 /* BusinessSideBar.swift */; };
+		B7EE6F0D843CE65B903EC25A /* ScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0766FA3E98182D13451DA68 /* ScreenshotTests.swift */; };
 		C15F68906BCC0285C1E981AD /* Screens.swift in Sources */ = {isa = PBXBuildFile; fileRef = F88B72061DA7660BF3CEB1FD /* Screens.swift */; };
 		DD055D734B50B18D7BDBA8A8 /* CachedImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98A641DEF15038E8304BEEE0 /* CachedImage.swift */; };
 		E41FCBB3965C52B9646B6A79 /* ProjectInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */; };
@@ -46,6 +47,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 6098FF2C800EADD7638A9B42;
 			remoteInfo = MoneyMakerWidgets;
+		};
+		DCB29AAC3F54105F8FF2674F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 961FBAF6F790968A4F52CC3B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0789D875C7C756186C42961A;
+			remoteInfo = MoneyMaker;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -77,12 +85,14 @@
 		8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyMakerClient.swift; sourceTree = "<group>"; };
 		911E11FF37AB7E13CD4D68BF /* DashboardWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardWidget.swift; sourceTree = "<group>"; };
 		98A641DEF15038E8304BEEE0 /* CachedImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedImage.swift; sourceTree = "<group>"; };
+		A0766FA3E98182D13451DA68 /* ScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotTests.swift; sourceTree = "<group>"; };
 		A33B41F707AED2D8405F6A5A /* MMTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMTheme.swift; sourceTree = "<group>"; };
 		A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectInsights.swift; sourceTree = "<group>"; };
 		A82382FF73CC673CD177B62B /* LiveScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveScreens.swift; sourceTree = "<group>"; };
 		A925D692B3BCE98ECBB2187E /* land.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = land.json; sourceTree = "<group>"; };
 		AD9FF9FB850F74B6132F8088 /* SideMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideMenu.swift; sourceTree = "<group>"; };
 		C73C4CE142E8383DF54EED22 /* MoneyMaker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MoneyMaker.entitlements; sourceTree = "<group>"; };
+		C7D2D93D296848814FDB457A /* MoneyMakerUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MoneyMakerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DDD82E7144DFCD2E9CEB2649 /* MMTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMTabBar.swift; sourceTree = "<group>"; };
 		DF8864A5BC74A1FB07813601 /* MMEffects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMEffects.swift; sourceTree = "<group>"; };
 		E69CC078545BF8CD48C90C01 /* Widgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Widgets.entitlements; sourceTree = "<group>"; };
@@ -116,6 +126,7 @@
 			children = (
 				944EE90DD1E20BC8E42C0E3A /* MoneyMakerApp */,
 				9F995471F5DECAA4B24AC8F3 /* Shared */,
+				DF2C4CEA183922AAA0D3B92E /* UITests */,
 				1C20AD602793523327E33839 /* Widgets */,
 				3C6DDF886A0050101256D700 /* Products */,
 			);
@@ -125,6 +136,7 @@
 			isa = PBXGroup;
 			children = (
 				45EBE436171160AF8EA3DF70 /* MoneyMaker.app */,
+				C7D2D93D296848814FDB457A /* MoneyMakerUITests.xctest */,
 				5A389B5ED64940A8BC40C6A3 /* MoneyMakerWidgets.appex */,
 			);
 			name = Products;
@@ -183,6 +195,14 @@
 			path = Design;
 			sourceTree = "<group>";
 		};
+		DF2C4CEA183922AAA0D3B92E /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				A0766FA3E98182D13451DA68 /* ScreenshotTests.swift */,
+			);
+			path = UITests;
+			sourceTree = "<group>";
+		};
 		F364C5977DB4CF1A060A6CC3 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
@@ -216,6 +236,24 @@
 			productReference = 45EBE436171160AF8EA3DF70 /* MoneyMaker.app */;
 			productType = "com.apple.product-type.application";
 		};
+		33AF70CF0274E844D0640F9D /* MoneyMakerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3C13C9432334EB6AE08305E1 /* Build configuration list for PBXNativeTarget "MoneyMakerUITests" */;
+			buildPhases = (
+				7982252AB79588DCB0F65FDC /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				609A8075D8D9DBE5CA5DE9CD /* PBXTargetDependency */,
+			);
+			name = MoneyMakerUITests;
+			packageProductDependencies = (
+			);
+			productName = MoneyMakerUITests;
+			productReference = C7D2D93D296848814FDB457A /* MoneyMakerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		6098FF2C800EADD7638A9B42 /* MoneyMakerWidgets */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F5C653C41A00ABA9110CC1B8 /* Build configuration list for PBXNativeTarget "MoneyMakerWidgets" */;
@@ -246,6 +284,11 @@
 						DevelopmentTeam = F2CJGJ69XU;
 						ProvisioningStyle = Manual;
 					};
+					33AF70CF0274E844D0640F9D = {
+						DevelopmentTeam = F2CJGJ69XU;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 0789D875C7C756186C42961A;
+					};
 					6098FF2C800EADD7638A9B42 = {
 						DevelopmentTeam = F2CJGJ69XU;
 						ProvisioningStyle = Manual;
@@ -268,6 +311,7 @@
 			targets = (
 				0789D875C7C756186C42961A /* MoneyMaker */,
 				6098FF2C800EADD7638A9B42 /* MoneyMakerWidgets */,
+				33AF70CF0274E844D0640F9D /* MoneyMakerUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -313,6 +357,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7982252AB79588DCB0F65FDC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B7EE6F0D843CE65B903EC25A /* ScreenshotTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C9E8B2FE54B42D20AE7DB481 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -329,6 +381,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		609A8075D8D9DBE5CA5DE9CD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0789D875C7C756186C42961A /* MoneyMaker */;
+			targetProxy = DCB29AAC3F54105F8FF2674F /* PBXContainerItemProxy */;
+		};
 		80BB988BE82F95B82AC8AC4A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 6098FF2C800EADD7638A9B42 /* MoneyMakerWidgets */;
@@ -421,6 +478,24 @@
 			};
 			name = Release;
 		};
+		8770B4CDFE4E875B59BDF996 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.moneymaker.app.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = MoneyMaker;
+			};
+			name = Release;
+		};
 		AA75CE3184F49A8AF68EC520 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -446,6 +521,24 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
+		};
+		BF2D0F636CE0FE5B8198E80F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.moneymaker.app.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = MoneyMaker;
+			};
+			name = Debug;
 		};
 		F7F44DF69D389F6494DE9CAD /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -567,6 +660,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		3C13C9432334EB6AE08305E1 /* Build configuration list for PBXNativeTarget "MoneyMakerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BF2D0F636CE0FE5B8198E80F /* Debug */,
+				8770B4CDFE4E875B59BDF996 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		D4E495C90BFFE19A7FE68207 /* Build configuration list for PBXNativeTarget "MoneyMaker" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

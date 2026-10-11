@@ -78,3 +78,23 @@ targets:
       properties:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
+  MoneyMakerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: MoneyMaker
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.moneymaker.app.uitests
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: MoneyMaker
+schemes:
+  MoneyMaker:
+    build:
+      targets:
+        MoneyMaker: all
+    test:
+      targets: [MoneyMakerUITests]
