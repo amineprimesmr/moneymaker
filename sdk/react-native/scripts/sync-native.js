@@ -8,8 +8,8 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const sdk = path.resolve(root, '..');
 const jobs = [
-  { from: path.join(sdk, 'ios/Sources/MoneyMaker'), to: path.join(root, 'ios/MoneyMakerCore'), files: ['Models.swift', 'MoneyMaker.swift'] },
-  { from: path.join(sdk, 'android/moneymaker/src/main/java/io/moneymaker'), to: path.join(root, 'android/src/main/java/io/moneymaker'), files: ['Models.kt', 'MoneyMaker.kt'] },
+  { from: path.join(sdk, 'ios/Sources/MoneyMaker'), to: path.join(root, 'ios/MoneyMakerCore'), ext: '.swift' },
+  { from: path.join(sdk, 'android/moneymaker/src/main/java/io/moneymaker'), to: path.join(root, 'android/src/main/java/io/moneymaker'), ext: '.kt' },
 ];
 
 for (const job of jobs) {
@@ -18,8 +18,9 @@ for (const job of jobs) {
     continue;
   }
   fs.mkdirSync(job.to, { recursive: true });
-  for (const f of job.files) {
-    fs.copyFileSync(path.join(job.from, f), path.join(job.to, f));
-  }
-  console.log(`[moneymaker] synced ${job.files.join(', ')} -> ${path.relative(root, job.to)}`);
+  // Every source file of the native SDK, so new files (Trust, Customer Center…) are never missed.
+  const files = fs.readdirSync(job.from).filter(f => f.endsWith(job.ext));
+  for (const f of fs.readdirSync(job.to)) if (f.endsWith(job.ext) && !files.includes(f)) fs.rmSync(path.join(job.to, f));
+  for (const f of files) fs.copyFileSync(path.join(job.from, f), path.join(job.to, f));
+  console.log(`[moneymaker] synced ${files.join(', ')} -> ${path.relative(root, job.to)}`);
 }
