@@ -62,14 +62,67 @@ public struct Offering: Identifiable, Hashable, Sendable {
     public let id: String
     public let description: String?
     public let packages: [Package]
+    /// Remote paywall layout edited in the dashboard (nil → `MoneyMakerPaywall` uses its built-in layout).
+    public var paywall: PaywallConfig? = nil
     public func package(_ id: String) -> Package? { packages.first { $0.id == id } }
 }
 
 public struct Offerings: Sendable {
     public let current: Offering?
     public let all: [String: Offering]
+    /// placementId → resolved offering id (targeting rules + experiments applied server-side).
+    public var placements: [String: String] = [:]
+    /// A/B tests this user is enrolled in for this response.
+    public var experiments: [ExperimentAssignment] = []
     public subscript(id: String) -> Offering? { all[id] }
+    /// Offering to show at a placement (e.g. "onboarding", "settings"). Falls back to `current`.
+    public func offering(forPlacement placement: String) -> Offering? { placements[placement].flatMap { all[$0] } ?? current }
+    /// Experiment that served `offeringId` at `placement` ("default" = current), if any.
+    public func experiment(offeringId: String, placement: String?) -> ExperimentAssignment? {
+        experiments.first { $0.offeringId == offeringId && $0.placement == (placement ?? "default") }
+            ?? experiments.first { $0.offeringId == offeringId }
+    }
 }
+
+public struct ExperimentAssignment: Codable, Hashable, Sendable {
+    public let experimentId: String
+    public let variant: String
+    public let placement: String
+    public let offeringId: String
+}
+
+/// Remote paywall configuration (`offerings.<id>.paywall`).
+public struct PaywallConfig: Codable, Hashable, Sendable {
+    public enum Template: String, Codable, Sendable { case stack, cards, minimal }
+    public struct Feature: Codable, Hashable, Sendable { public let icon: String?; public let text: String }
+    public struct Colors: Codable, Hashable, Sendable { public let background: String?; public let accent: String?; public let text: String? }
+    public struct FooterLink: Codable, Hashable, Sendable { public let title: String; public let url: String }
+    public struct Texts: Codable, Hashable, Sendable {
+        public let title: String?; public let subtitle: String?; public let cta: String?
+        public let features: [Feature]?; public let footerLinks: [FooterLink]?
+    }
+    public let template: Template?
+    public let title: String?
+    public let subtitle: String?
+    public let cta: String?
+    public let features: [Feature]?
+    public let footerLinks: [FooterLink]?
+    public let heroImage: String?
+    public let colors: Colors?
+    public let showCloseButton: Bool?
+    public let closeDelay: Double?
+    public let localizations: [String: Texts]?
+
+    /// Texts for a language ("fr", "en", "pt-BR"…), falling back to the base texts field by field.
+    public func texts(for languageCode: String?) -> Texts {
+        let code = languageCode ?? ""
+        let l = localizations?[code] ?? localizations?[String(code.prefix(2))]
+        return Texts(title: l?.title ?? title, subtitle: l?.subtitle ?? subtitle, cta: l?.cta ?? cta,
+                     features: l?.features ?? features, footerLinks: l?.footerLinks ?? footerLinks)
+    }
+}
+
+public enum PaywallEventType: String, Sendable { case impression, close, purchaseStart = "purchase_start", purchase, cancel }
 
 public enum PurchaseResult: Sendable {
     case success(CustomerInfo)
@@ -99,9 +152,11 @@ public enum MoneyMakerError: LocalizedError, Sendable {
 
 struct OfferingsDTO: Decodable {
     struct PackageDTO: Decodable { let id: String; let productIds: [String: String]; let metadata: [String: JSONValue]? }
-    struct OfferingDTO: Decodable { let description: String?; let packages: [PackageDTO] }
+    struct OfferingDTO: Decodable { let description: String?; let packages: [PackageDTO]; let paywall: PaywallConfig? }
     let current: String?
     let offerings: [String: OfferingDTO]
+    let placements: [String: String?]?
+    let experiments: [ExperimentAssignment]?
 }
 
 enum JSONValue: Decodable, Hashable {

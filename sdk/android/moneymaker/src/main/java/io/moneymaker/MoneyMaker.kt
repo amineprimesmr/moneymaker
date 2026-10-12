@@ -97,8 +97,16 @@ class MoneyMaker private constructor(
     }
 
     // ── Offerings ────────────────────────────────────────────────────────
+    private val appVersion: String? = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+    var offerings: Offerings? = null; private set
+
     suspend fun loadOfferings(): Offerings {
-        val json = api.get("offerings")
+        val q = buildList {
+            add("appUserId=${enc(appUserId)}"); add("platform=android")
+            appVersion?.let { add("appVersion=${enc(it)}") }
+            java.util.Locale.getDefault().country.takeIf { it.length == 2 }?.let { add("country=$it") }
+        }.joinToString("&")
+        val json = api.get("offerings?$q")
         val raw = json.optJSONObject("offerings") ?: JSONObject()
         val ids = mutableSetOf<String>()
         raw.keys().forEach { k -> raw.getJSONObject(k).optJSONArray("packages")?.let { a ->
@@ -108,7 +116,7 @@ class MoneyMaker private constructor(
         val all = raw.keys().asSequence().associateWith { k ->
             val o = raw.getJSONObject(k)
             val pk = o.optJSONArray("packages")
-            Offering(k, o.optString("description").ifEmpty { null }, (0 until (pk?.length() ?: 0)).map { i ->
+            Offering(k, o.optString("description").ifEmpty { null }, paywallJson = o.optJSONObject("paywall")?.toString(), packages = (0 until (pk?.length() ?: 0)).map { i ->
                 val p = pk!!.getJSONObject(i)
                 val pids = p.optJSONObject("productIds") ?: JSONObject()
                 val meta = p.optJSONObject("metadata") ?: JSONObject()
@@ -116,7 +124,24 @@ class MoneyMaker private constructor(
                     meta.keys().asSequence().associateWith { meta.get(it).toString() }, productDetails[pids.optString("play_store")])
             })
         }
-        return Offerings(json.optString("current").ifEmpty { null }?.let { all[it] }, all)
+        val pl = json.optJSONObject("placements") ?: JSONObject()
+        val ex = json.optJSONArray("experiments")
+        return Offerings(
+            json.optString("current").ifEmpty { null }?.let { all[it] }, all,
+            pl.keys().asSequence().filter { !pl.isNull(it) }.associateWith { pl.getString(it) },
+            (0 until (ex?.length() ?: 0)).map { i -> ex!!.getJSONObject(i).let { ExperimentAssignment(it.getString("experimentId"), it.getString("variant"), it.getString("placement"), it.getString("offeringId")) } },
+        ).also { offerings = it }
+    }
+
+    /** Offering resolved for a placement. Call loadOfferings() first. */
+    fun offeringForPlacement(placement: String): Offering? = offerings?.offeringForPlacement(placement)
+
+    /** Paywall analytics + experiment results. Call from your paywall UI (impression, close, purchase_start, purchase, cancel). */
+    suspend fun trackPaywallEvent(type: PaywallEventType, offering: Offering, placement: String? = null) {
+        val body = JSONObject().put("type", type.wire).put("offeringId", offering.id)
+        placement?.let { body.put("placement", it) }
+        offerings?.experiment(offering.id, placement)?.let { body.put("experimentId", it.experimentId).put("variant", it.variant) }
+        runCatching { api.post("customers/${enc(appUserId)}/paywall-events", body) }
     }
 
     // ── Purchases ────────────────────────────────────────────────────────

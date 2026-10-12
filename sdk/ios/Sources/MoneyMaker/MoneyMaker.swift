@@ -114,7 +114,14 @@ public final class MoneyMaker: ObservableObject {
     /// Loads the paywall configured in the dashboard and resolves real App Store products/prices.
     @discardableResult
     public func loadOfferings() async throws -> Offerings {
-        let dto: OfferingsDTO = try await api.get("offerings")
+        var q = URLComponents()
+        q.queryItems = [
+            URLQueryItem(name: "appUserId", value: appUserID),
+            URLQueryItem(name: "platform", value: "ios"),
+            Bundle.main.infoDictionary?["CFBundleShortVersionString"].flatMap { $0 as? String }.map { URLQueryItem(name: "appVersion", value: $0) },
+            Locale.current.region.map { URLQueryItem(name: "country", value: $0.identifier) },
+        ].compactMap { $0 }
+        let dto: OfferingsDTO = try await api.get("offerings?\(q.percentEncodedQuery ?? "")")
         let ids = Set(dto.offerings.values.flatMap { $0.packages.compactMap { $0.productIds["app_store"] } })
         let products = try await Product.products(for: ids)
         let byId = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0) })
@@ -124,11 +131,30 @@ public final class MoneyMaker: ObservableObject {
                 Package(id: p.id, productIds: p.productIds, metadata: (p.metadata ?? [:]).mapValues(\.stringValue),
                         product: p.productIds["app_store"].flatMap { byId[$0] })
             }
-            all[id] = Offering(id: id, description: o.description, packages: packages)
+            all[id] = Offering(id: id, description: o.description, packages: packages, paywall: o.paywall)
         }
-        let result = Offerings(current: dto.current.flatMap { all[$0] }, all: all)
+        let result = Offerings(current: dto.current.flatMap { all[$0] }, all: all,
+                               placements: (dto.placements ?? [:]).compactMapValues { $0 },
+                               experiments: dto.experiments ?? [])
         offerings = result
         return result
+    }
+
+    /// Offering resolved for a placement (targeting rules + A/B tests). Call `loadOfferings()` first.
+    public func offering(forPlacement placement: String) -> Offering? { offerings?.offering(forPlacement: placement) }
+
+    /// Records a paywall event (impressions, closes, purchases) for paywall analytics and experiment results.
+    /// `MoneyMakerPaywall` calls this automatically; use it if you build your own paywall UI.
+    public func trackPaywallEvent(_ type: PaywallEventType, offering: Offering, placement: String? = nil) {
+        var body: [String: Any] = ["type": type.rawValue, "offeringId": offering.id]
+        if let placement { body["placement"] = placement }
+        if let exp = offerings?.experiment(offeringId: offering.id, placement: placement) {
+            body["experimentId"] = exp.experimentId
+            body["variant"] = exp.variant
+        }
+        let path = "customers/\(appUserID.urlPath)/paywall-events"
+        let api = self.api
+        Task { let _: FeedbackAck? = try? await api.send(path, body: body) }
     }
 
     // MARK: Purchases

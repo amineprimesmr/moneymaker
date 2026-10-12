@@ -15,8 +15,16 @@ import { ingestStripeWebhook, createCheckout, createPortal } from "./stripe";
 import { projectMetrics, projectCohorts } from "./metrics";
 import { connectStripe, connectAppStore, connectGooglePlay, markConnected } from "./connect";
 import { sanitizeIntegrations, fanOut } from "./integrations";
+import { resolveAppleAds } from "./appleads";
+import { sanitizeExports, sanitizeExportSecrets } from "./exports";
 import { toRevenueCatSubscriber, promotionalDays } from "./rccompat";
 import { DEMO_TOKEN, DEMO_UID } from "./demo";
+import { AsyncLocalStorage } from "async_hooks";
+import { Role, roleOf, atLeast, defaultRequired } from "./roles";
+import { audit, listAudit, listMembers, createInvite, deleteInvite, peekInvite, acceptInvite, setMemberRole, removeMember } from "./team";
+import { projectChart } from "./chartsLoader";
+import { chartToCsv, CHART_NAMES } from "./charts";
+import { sanitizeOfferings, sanitizeTargeting, sanitizeExperiments, resolveOfferings, aggregateResults, PAYWALL_EVENT_TYPES, Context } from "./growth";
 import { searchApps, syncTrackers, translateReview, lookupApp, TrackedApp } from "./appstore";
 
 /** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
@@ -46,12 +54,31 @@ async function authenticate(req: Request): Promise<Caller> {
   }
 }
 
-async function projectFor(caller: Caller, pid: string, allowPublic = false): Promise<Project> {
+/** Per-request context (method, acting uid, resolved project) for central role checks and the audit log. */
+interface RequestCtx { method: string; actor?: string; projectId?: string; role?: Role; auditAction?: string; auditDetails?: Record<string, unknown>; skipAudit?: boolean }
+const requestCtx = new AsyncLocalStorage<RequestCtx>();
+
+/** Resolves a project the caller may access. Role enforcement: `required` if given, otherwise
+ *  viewer for GET and developer for writes. Secret keys act as admin; owner-only actions need a user. */
+async function projectFor(caller: Caller, pid: string, allowPublic = false, required?: Role): Promise<Project & { role?: Role }> {
   const project = await getProject(cleanId(pid));
-  if (caller.kind === "user" && project.members.includes(caller.uid)) return project;
-  if (caller.kind === "secret" && caller.projectId === project.id) return project;
-  if (allowPublic && caller.kind === "public" && caller.projectId === project.id) return project;
+  const ctx = requestCtx.getStore();
+  const needed = required ?? defaultRequired(ctx?.method ?? "GET");
+  const ok = (role: Role, actor: string) => {
+    if (!atLeast(role, needed)) throw new HttpError(403, "insufficient_role", `Rôle « ${needed} » requis (le tien : ${role})`);
+    if (ctx) { ctx.projectId = project.id; ctx.role = role; ctx.actor = actor; }
+    return { ...project, role };
+  };
+  if (caller.kind === "user") { const role = roleOf(project, caller.uid); if (role) return ok(role, caller.uid); }
+  if (caller.kind === "secret" && caller.projectId === project.id) return ok("admin", "key:secret");
+  if (allowPublic && caller.kind === "public" && caller.projectId === project.id) return { ...project, role: "viewer" };
   throw new HttpError(403, "forbidden");
+}
+
+/** Adds details (never secret values) to the automatic audit entry of the current request. */
+function auditNote(action: string, details: Record<string, unknown> = {}) {
+  const ctx = requestCtx.getStore();
+  if (ctx) { ctx.auditAction = action; ctx.auditDetails = { ...(ctx.auditDetails ?? {}), ...details }; }
 }
 
 /** Projects provisioned server-side for an email are attached on the owner's first verified sign-in. */
@@ -83,6 +110,13 @@ function sanitizeConfig(input: any, current: ProjectConfig): ProjectConfig {
   }
   if (input.offerings !== undefined) next.offerings = input.offerings;
   if (input.currentOffering !== undefined) next.currentOffering = input.currentOffering;
+  // Growth (paywalls / targeting / experiments) — see growth.ts.
+  if (input.offerings !== undefined) next.offerings = sanitizeOfferings(input.offerings) as any;
+  {
+    const ids = new Set(Object.keys(next.offerings ?? {}));
+    if (input.targeting !== undefined) { if (input.targeting === null) delete next.targeting; else next.targeting = sanitizeTargeting(input.targeting, ids); }
+    if (input.experiments !== undefined) next.experiments = sanitizeExperiments(input.experiments ?? [], ids, current.experiments ?? []);
+  }
   if (input.webhooks !== undefined) {
     if (!Array.isArray(input.webhooks) || input.webhooks.length > 10) throw new HttpError(400, "invalid_webhooks");
     next.webhooks = input.webhooks.map((w: any, i: number) => {
@@ -100,6 +134,9 @@ function sanitizeConfig(input: any, current: ProjectConfig): ProjectConfig {
   if (input.integrations !== undefined) {
     const af = input.integrations?.appsflyer;
     next.integrations = af ? { appsflyer: { appId: cleanId(af.appId, 64), ...(af.androidAppId ? { androidAppId: cleanId(af.androidAppId, 200) } : {}) } } : {};
+  }
+  if (input.exports !== undefined) {
+    try { (next as any).exports = sanitizeExports(input.exports); } catch (e) { throw new HttpError(400, (e as Error).message); }
   }
   if (input.website !== undefined) {
     if (input.website === null || input.website === "") delete (next as any).website;
@@ -165,9 +202,22 @@ function offeringsFor(project: Project) {
 }
 
 type Handler = (req: Request, res: Response, params: string[]) => Promise<unknown>;
-const routes: [string, RegExp, Handler][] = [];
+const routes: [string, RegExp, Handler, string][] = [];
 const route = (method: string, pattern: string, handler: Handler) =>
-  routes.push([method, new RegExp("^" + pattern.replace(/:[a-zA-Z]+/g, "([^/]+)") + "/?$"), handler]);
+  routes.push([method, new RegExp("^" + pattern.replace(/:[a-zA-Z]+/g, "([^/]+)") + "/?$"), handler, pattern]);
+
+/** Audit action name for a mutating route: known ones get a stable name, others "METHOD /pattern". */
+const AUDIT_ACTIONS: Record<string, string> = {
+  "PATCH /v1/projects/:pid": "config.update",
+  "PUT /v1/projects/:pid/credentials": "credentials.update",
+  "POST /v1/projects/:pid/keys": "keys.issue",
+  "POST /v1/projects/:pid/customers/:id/grant": "grant.update",
+  "POST /v1/projects/:pid/invites": "invite.create",
+  "DELETE /v1/projects/:pid/invites/:id": "invite.revoke",
+  "PATCH /v1/projects/:pid/members/:uid": "member.role",
+  "DELETE /v1/projects/:pid/members/:uid": "member.remove",
+};
+const auditActionFor = (method: string, pattern: string) => AUDIT_ACTIONS[`${method} ${pattern}`] ?? `${method} ${pattern.replace(/^\/v1\/projects\/:pid/, "") || "/"}`;
 
 // ── Health ─────────────────────────────────────────────────────────────────
 route("GET", "/v1/health", async () => ({ ok: true, service: "moneymaker", time: Date.now() }));
@@ -214,7 +264,7 @@ async function clientProject(req: Request) {
   return project;
 }
 
-route("GET", "/v1/offerings", async req => offeringsFor(await clientProject(req)));
+route("GET", "/v1/offerings", async req => resolvedOfferings(req, await clientProject(req)));
 
 // ── Customer Center ──
 route("GET", "/v1/customer-center", async req => {
@@ -272,6 +322,7 @@ route("POST", "/v1/customers/:id/attributes", async (req, _res, [id]) => {
   if (typeof attrs !== "object" || Object.keys(attrs).length > 50) throw new HttpError(400, "invalid_attributes");
   const clean = Object.fromEntries(Object.entries(attrs).map(([k, v]) => [cleanId(k, 64), v === null ? FieldValue.delete() : String(v).slice(0, 500)]));
   await db.doc(`projects/${project.id}/customers/${appUserId}`).set({ attributes: clean, lastSeenAt: Date.now() }, { merge: true });
+  if (typeof clean.$appleAdsToken === "string") await resolveAppleAds(project.id, appUserId, clean.$appleAdsToken);
   return { ok: true };
 });
 
@@ -304,7 +355,7 @@ route("GET", "/v1/projects", async req => {
   const uid = requireUser(caller);
   await claimPendingProjects(caller);
   const snap = await db.collection("projects").where("members", "array-contains", uid).get();
-  return { projects: snap.docs.map(d => ({ id: d.id, name: d.get("name"), config: d.get("config") })) };
+  return { projects: snap.docs.map(d => ({ id: d.id, name: d.get("name"), config: d.get("config"), role: roleOf(d.data(), uid) })) };
 });
 
 route("POST", "/v1/projects", async req => {
@@ -401,19 +452,20 @@ route("GET", "/v1/projects/:pid", async (req, _res, [pid]) => {
   const base = PUBLIC_BASE;
   return {
     ...project,
-    credentials: { integrations: Object.keys(creds.integrations ?? {}), appStoreConnect: Boolean(creds.appStoreConnect), appsflyer: Boolean(creds.appsflyer), apple: Boolean(creds.apple), google: Boolean(creds.google), stripeKey: Boolean(creds.stripe?.secretKey), stripeWebhook: Boolean(creds.stripe?.webhookSecret) },
+    credentials: { integrations: Object.keys(creds.integrations ?? {}), exports: Object.keys((creds as any).exports ?? {}), appStoreConnect: Boolean(creds.appStoreConnect), appsflyer: Boolean(creds.appsflyer), apple: Boolean(creds.apple), google: Boolean(creds.google), stripeKey: Boolean(creds.stripe?.secretKey), stripeWebhook: Boolean(creds.stripe?.webhookSecret) },
     endpoints: {
       appleNotifications: `${base}/v1/webhooks/apple/${project.id}`,
       googleRtdn: `${base}/v1/webhooks/google/${project.id}?token=${creds.googleRtdnToken}`,
       stripeWebhook: `${base}/v1/webhooks/stripe/${project.id}`,
     },
-    webhookSigningSecret: creds.webhookSigningSecret,
+    webhookSigningSecret: project.role === "viewer" ? undefined : creds.webhookSigningSecret,
   };
 });
 
 route("PATCH", "/v1/projects/:pid", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid);
   const config = sanitizeConfig(req.body?.config ?? {}, project.config);
+  auditNote("config.update", { configKeys: Object.keys(req.body?.config ?? {}).slice(0, 30) });
   const update: Record<string, unknown> = { config };
   if (typeof req.body?.name === "string" && req.body.name.trim()) update.name = req.body.name.trim().slice(0, 80);
   await db.doc(`projects/${project.id}`).update(update);
@@ -421,7 +473,7 @@ route("PATCH", "/v1/projects/:pid", async (req, _res, [pid]) => {
 });
 
 route("PUT", "/v1/projects/:pid/credentials", async (req, _res, [pid]) => {
-  const project = await projectFor(await authenticate(req), pid);
+  const project = await projectFor(await authenticate(req), pid, false, "admin");
   const b = req.body ?? {};
   const update: Record<string, unknown> = {};
   if (b.apple) {
@@ -446,6 +498,10 @@ route("PUT", "/v1/projects/:pid/credentials", async (req, _res, [pid]) => {
     try { update.integrations = sanitizeIntegrations(b.integrations, (await getCredentials(project.id)).integrations); }
     catch (e) { throw new HttpError(400, (e as Error).message); }
   }
+  if (b.exports) {
+    try { update.exports = sanitizeExportSecrets(b.exports, ((await getCredentials(project.id)) as any).exports); }
+    catch (e) { throw new HttpError(400, (e as Error).message); }
+  }
   if (b.appsflyer) {
     if (typeof b.appsflyer.devKey !== "string" || b.appsflyer.devKey.length < 10) throw new HttpError(400, "invalid_appsflyer_dev_key");
     update.appsflyer = { devKey: b.appsflyer.devKey };
@@ -463,8 +519,9 @@ route("PUT", "/v1/projects/:pid/credentials", async (req, _res, [pid]) => {
 
 route("POST", "/v1/projects/:pid/keys", async (req, _res, [pid]) => {
   const caller = await authenticate(req);
-  const project = await projectFor(caller, pid);
+  const project = await projectFor(caller, pid, false, req.body?.revokeExisting ? "admin" : undefined);
   const kind = req.body?.kind === "public" ? "public" : "secret";
+  auditNote("keys.issue", { kind, revokeExisting: Boolean(req.body?.revokeExisting) });
   if (req.body?.revokeExisting) await revokeProjectKeys(project.id, kind);
   return { kind, key: await issueKey({ kind, projectId: project.id }) };
 });
@@ -498,6 +555,7 @@ route("POST", "/v1/projects/:pid/customers/:id/grant", async (req, _res, [pid, i
   const appUserId = cleanId(decodeURIComponent(id));
   const entitlement = cleanId(req.body?.entitlement, 64);
   const days = req.body?.days === undefined ? null : Number(req.body.days);
+  auditNote("grant.update", { appUserId, entitlement, days });
   const now = Date.now();
   const purchase: Purchase = {
     id: `promo_${entitlement}`, store: "promotional", productId: `promo:${entitlement}`, type: "non_consumable",
@@ -640,6 +698,7 @@ rcRoute("POST", "/subscribers/:id/attributes", async (req, _res, [id]) => {
     times[key] = Number(raw?.updated_at_ms) || Date.now();
   }
   await db.doc(`projects/${project.id}/customers/${appUserId}`).set({ attributes: values, attributesUpdatedAt: times, lastSeenAt: Date.now() }, { merge: true });
+  if (typeof values.$appleAdsToken === "string") await resolveAppleAds(project.id, appUserId, values.$appleAdsToken);
   return {};
 });
 
@@ -1041,6 +1100,161 @@ route("GET", "/v1/feed", async req => {
   return { events: all };
 });
 
+// ══ Growth: remote paywalls, targeting, placements, experiments (growth.ts) ══════════════
+const dayKey = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
+
+/** GET /v1/offerings — resolves `current` + `placements` for the calling user, enrolls them in running experiments. */
+async function resolvedOfferings(req: Request, project: Project) {
+  const q = req.query as Record<string, string | undefined>;
+  const ua = String(req.get("user-agent") ?? "");
+  const cfg = project.config;
+  const appUserId = q.appUserId ? cleanId(String(q.appUserId)) : undefined;
+  const ctx: Context = {
+    appUserId,
+    platform: q.platform ? String(q.platform).toLowerCase() : /Android/i.test(ua) ? "android" : /iOS|CFNetwork|Darwin/i.test(ua) ? "ios" : undefined,
+    appVersion: q.appVersion ? String(q.appVersion).slice(0, 20) : undefined,
+    country: q.country ? String(q.country).slice(0, 2).toUpperCase() : (req.get("x-country-code") ?? undefined),
+  };
+  const allRules = [...(cfg.targeting?.rules ?? []), ...Object.values(cfg.targeting?.placements ?? {}).flatMap(p => p.rules ?? [])];
+  const needsCustomer = allRules.some(r => r.conditions.attributes || r.conditions.newCustomersOnly);
+  if (appUserId && needsCustomer) {
+    const snap = await db.doc(`projects/${project.id}/customers/${appUserId}`).get();
+    ctx.attributes = snap.get("attributes") ?? {};
+    ctx.isNewCustomer = !snap.exists || Object.keys(snap.get("entitlements") ?? {}).length === 0;
+  }
+  const r = resolveOfferings(cfg, ctx);
+  if (appUserId) await Promise.all(r.experiments.map(e =>
+    db.doc(`projects/${project.id}/experimentEnrollments/${e.experimentId}_${encodeURIComponent(appUserId)}`)
+      .create({ experimentId: e.experimentId, variant: e.variant, offeringId: e.offeringId, placement: e.placement, appUserId, at: Date.now(), platform: ctx.platform ?? null, country: ctx.country ?? null })
+      .catch(() => null)));
+  return { current: r.current, offerings: cfg.offerings, placements: r.placements, experiments: r.experiments };
+}
+
+route("POST", "/v1/customers/:id/paywall-events", async (req, _res, [id]) => {
+  const project = await clientProject(req);
+  const appUserId = cleanId(decodeURIComponent(id));
+  const b = req.body ?? {};
+  const type = String(b.type ?? "");
+  if (!PAYWALL_EVENT_TYPES.includes(type)) throw new HttpError(400, "invalid_type", `type ∈ ${PAYWALL_EVENT_TYPES.join(", ")}`);
+  const offeringId = cleanId(String(b.offeringId ?? ""), 64);
+  const opt = (v: unknown) => (v === undefined || v === null || v === "" ? null : cleanId(String(v), 64));
+  const ev = { type, offeringId, appUserId, placement: opt(b.placement), experimentId: opt(b.experimentId), variant: opt(b.variant), at: Date.now() };
+  const batch = db.batch();
+  batch.set(db.collection(`projects/${project.id}/paywallEvents`).doc(), ev);
+  batch.set(db.doc(`projects/${project.id}/paywallStats/${dayKey()}`), { day: dayKey(), counts: { [offeringId]: { [type]: FieldValue.increment(1) } } }, { merge: true });
+  if (ev.experimentId && ev.variant) batch.set(db.doc(`projects/${project.id}/experimentStats/${ev.experimentId}`), { variants: { [ev.variant]: { [type]: FieldValue.increment(1) } } }, { merge: true });
+  await batch.commit();
+  return { ok: true };
+});
+
+/** Daily paywall counters per offering (dashboard). */
+route("GET", "/v1/projects/:pid/paywall-stats", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const days = Math.min(365, Math.max(1, Number(req.query.days ?? 30)));
+  const since = dayKey(Date.now() - (days - 1) * 86400000);
+  const snap = await db.collection(`projects/${project.id}/paywallStats`).where("day", ">=", since).get();
+  const totals: Record<string, Record<string, number>> = {};
+  for (const d of snap.docs) for (const [off, c] of Object.entries<any>(d.get("counts") ?? {}))
+    for (const [t, n] of Object.entries<number>(c)) (totals[off] ??= {})[t] = (totals[off][t] ?? 0) + n;
+  return { days, byDay: snap.docs.map(d => d.data()).sort((a: any, b: any) => a.day.localeCompare(b.day)), totals };
+});
+
+route("GET", "/v1/projects/:pid/experiments/:eid/results", async (req, _res, [pid, eid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const exp = (project.config.experiments ?? []).find(e => e.id === decodeURIComponent(eid));
+  if (!exp) throw new HttpError(404, "experiment_not_found");
+  const [enr, stats] = await Promise.all([
+    db.collection(`projects/${project.id}/experimentEnrollments`).where("experimentId", "==", exp.id).limit(50000).get(),
+    db.doc(`projects/${project.id}/experimentStats/${exp.id}`).get(),
+  ]);
+  const enrollments = enr.docs.map(d => d.data() as { appUserId: string; variant: string; at: number });
+  const since = Math.min(exp.startedAt ?? Date.now(), ...enrollments.map(e => e.at));
+  let txQuery = db.collection(`projects/${project.id}/transactions`).where("at", ">=", since);
+  if (exp.stoppedAt) txQuery = txQuery.where("at", "<=", exp.stoppedAt);
+  const tx = enrollments.length ? (await txQuery.limit(100000).get()).docs.map(d => d.data() as any) : [];
+  const impressions = Object.fromEntries(Object.entries<any>(stats.get("variants") ?? {}).map(([v, c]) => [v, c.impression ?? 0]));
+  return { experiment: exp, currency: project.config.currency, variants: aggregateResults(exp.variants, enrollments, tx, impressions), paywallEvents: stats.get("variants") ?? {} };
+});
+// ══ end Growth ═════════════════════════════════════════════════════════════════════════
+
+// ── Charts (RevenueCat parity) ─────────────────────────────────────────────
+route("GET", "/v1/charts", async () => ({ charts: CHART_NAMES }));
+
+route("GET", "/v1/projects/:pid/charts/:name", async (req, res, [pid, name]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const csvOut = /\.csv$/.test(name) || req.query.format === "csv";
+  const chart = await projectChart(project, name.replace(/\.csv$/, ""), req.query as Record<string, unknown>);
+  if (!csvOut) return chart;
+  res.set("Content-Type", "text/csv; charset=utf-8");
+  res.set("Content-Disposition", `attachment; filename="${project.name}-${chart.name}.csv"`);
+  res.status(200).send(chartToCsv(chart));
+});
+
+// ── Team: members, roles, invitations, audit log ──────────────────────────
+route("GET", "/v1/projects/:pid/members", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  return { role: project.role, ...(await listMembers(project, PUBLIC_BASE, atLeast(project.role ?? "viewer", "admin"))) };
+});
+
+route("PATCH", "/v1/projects/:pid/members/:uid", async (req, _res, [pid, uid]) => {
+  const caller = await authenticate(req);
+  const actorUid = requireUser(caller);
+  const project = await projectFor(caller, pid, false, "admin");
+  const out = await setMemberRole(project, project.role!, actorUid, cleanId(uid, 128), String(req.body?.role ?? ""));
+  auditNote("member.role", { target: out.uid, role: out.role, previous: out.previous });
+  return out;
+});
+
+route("DELETE", "/v1/projects/:pid/members/:uid", async (req, _res, [pid, uid]) => {
+  const caller = await authenticate(req);
+  const actorUid = requireUser(caller);
+  const target = cleanId(uid, 128);
+  // Anyone can leave; removing someone else needs admin (checked again in removeMember).
+  const project = await projectFor(caller, pid, false, target === actorUid ? "viewer" : "admin");
+  const out = await removeMember(project, project.role!, actorUid, target);
+  auditNote("member.remove", { target, previous: out.previous });
+  return out;
+});
+
+route("GET", "/v1/projects/:pid/invites", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid, false, "admin");
+  return { invites: (await listMembers(project, PUBLIC_BASE, true)).invites };
+});
+
+route("POST", "/v1/projects/:pid/invites", async (req, _res, [pid]) => {
+  const caller = await authenticate(req);
+  const uid = requireUser(caller);
+  const project = await projectFor(caller, pid, false, "admin");
+  const inv = await createInvite(project, uid, req.body, PUBLIC_BASE);
+  auditNote("invite.create", { email: inv.email, role: inv.role, inviteId: inv.id });
+  return { ...inv, note: "Aucun e-mail n'est envoyé : partage ce lien avec la personne invitée." };
+});
+
+route("DELETE", "/v1/projects/:pid/invites/:id", async (req, _res, [pid, id]) => {
+  const caller = await authenticate(req);
+  requireUser(caller);
+  const project = await projectFor(caller, pid, false, "admin");
+  const out = await deleteInvite(project, cleanId(id, 64));
+  auditNote("invite.revoke", { inviteId: id, email: out.email });
+  return { ok: true };
+});
+
+route("GET", "/v1/invites/:token", async (req, _res, [token]) => {
+  requireUser(await authenticate(req));
+  return peekInvite(cleanId(token, 100));
+});
+
+route("POST", "/v1/invites/:token/accept", async (req, _res, [token]) => {
+  const caller = await authenticate(req);
+  const uid = requireUser(caller);
+  return acceptInvite(cleanId(token, 100), uid, caller.kind === "user" ? caller.email : undefined);
+});
+
+route("GET", "/v1/projects/:pid/audit", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid, false, "admin");
+  return listAudit(project.id, Number(req.query.limit ?? 100), req.query.before ? Number(req.query.before) : undefined);
+});
+
 // ── Dispatcher ─────────────────────────────────────────────────────────────
 export async function handle(req: Request, res: Response) {
   res.set("Access-Control-Allow-Origin", "*");
@@ -1051,10 +1265,17 @@ export async function handle(req: Request, res: Response) {
   try {
     // Mode démo : lecture seule.
     if (req.method !== "GET" && /^Bearer\s+mm_demo\s*$/i.test(req.get("authorization") ?? "")) throw new HttpError(403, "demo_read_only", "Mode démo : lecture seule");
-    for (const [method, re, handler] of routes) {
+    for (const [method, re, handler, pattern] of routes) {
       const m = re.exec(path);
       if (!m || method !== req.method) continue;
-      const out = await handler(req, res, m.slice(1));
+      const ctx: RequestCtx = { method: req.method };
+      const out = await requestCtx.run(ctx, () => handler(req, res, m.slice(1)));
+      if (req.method !== "GET" && ctx.projectId && ctx.actor && !ctx.skipAudit) {
+        await audit(ctx.projectId, ctx.actor, ctx.auditAction ?? auditActionFor(method, pattern), {
+          path, ...(req.body && typeof req.body === "object" && !Array.isArray(req.body) ? { fields: Object.keys(req.body).slice(0, 30) } : {}),
+          ...(ctx.auditDetails ?? {}),
+        });
+      }
       if (!res.headersSent) res.status(200).json(out ?? { ok: true });
       return;
     }

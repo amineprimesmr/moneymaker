@@ -11,11 +11,12 @@ interface Tx { appUserId: string; store: string; productId: string; kind: string
 interface Ev { type: string; appUserId: string; productId: string; store: string; priceMicros?: number; currency?: string; periodMonths?: number; isSandbox?: boolean; isTrial?: boolean; country?: string | null; at: number }
 
 /** Pure aggregation over one window of transactions/events — unit-tested. */
-export function summarizeWindow(txs: Tx[], events: Ev[], currency: string) {
+export function summarizeWindow(txs: Tx[], events: Ev[], currency: string, campaignOf: Record<string, string> = {}) {
   let revenue = 0, refunds = 0, newRevenue = 0, renewalRevenue = 0;
   const payers = new Set<string>();
   const revenueByDay: Record<string, number> = {}, revenueByCountry: Record<string, number> = {};
   const revenueByStore: Record<string, number> = {}, revenueByProduct: Record<string, number> = {};
+  const revenueByCampaign: Record<string, number> = {}; // Apple Search Ads campaign id, "organic" otherwise
   for (const t of txs) {
     if (t.isSandbox) continue;
     const v = t.amountMicrosProject;
@@ -24,6 +25,8 @@ export function summarizeWindow(txs: Tx[], events: Ev[], currency: string) {
     revenueByCountry[cc] = (revenueByCountry[cc] ?? 0) + v;
     revenueByStore[t.store] = (revenueByStore[t.store] ?? 0) + v;
     revenueByProduct[t.productId] = (revenueByProduct[t.productId] ?? 0) + v;
+    const camp = campaignOf[t.appUserId] ?? "organic";
+    revenueByCampaign[camp] = (revenueByCampaign[camp] ?? 0) + v;
     if (v < 0) { refunds += -v; continue; }
     revenue += v;
     payers.add(t.appUserId);
@@ -48,7 +51,7 @@ export function summarizeWindow(txs: Tx[], events: Ev[], currency: string) {
     newRevenueMicros: newRevenue, renewalRevenueMicros: renewalRevenue,
     payingCustomers: payers.size, arppuMicros: payers.size ? Math.round(revenue / payers.size) : 0,
     refundRate: ratio(refunds, revenue),
-    revenueByDay, revenueByCountry, revenueByStore, revenueByProduct,
+    revenueByDay, revenueByCountry, revenueByStore, revenueByProduct, revenueByCampaign,
     eventCounts: counts, trialsByProduct,
     mrrMovement: { newMicros: Math.round(newMrr), churnedMicros: Math.round(churnedMrr), netMicros: Math.round(newMrr - churnedMrr) },
   };
@@ -81,8 +84,12 @@ export async function projectMetrics(project: Project, days = 30) {
   }
 
   const txs = txSnap.docs.map(d => d.data() as Tx), evs = eventsSnap.docs.map(d => d.data() as Ev);
-  const cur = summarizeWindow(txs.filter(t => t.at >= since), evs.filter(e => e.at >= since), project.config.currency);
-  const prev = summarizeWindow(txs.filter(t => t.at < since), evs.filter(e => e.at < since), project.config.currency);
+  // Apple Search Ads campaigns resolved from AdServices tokens (see appleads.ts).
+  const campaignOf: Record<string, string> = {};
+  const attributed = await db.collection(`projects/${pid}/customers`).where("appleAds.attribution", "==", true).select("appleAds").get().catch(() => null);
+  attributed?.docs.forEach(d => { const c = d.get("appleAds"); if (c?.campaignId) campaignOf[d.id] = `apple_ads:${c.campaignName ?? c.campaignId}`; });
+  const cur = summarizeWindow(txs.filter(t => t.at >= since), evs.filter(e => e.at >= since), project.config.currency, campaignOf);
+  const prev = summarizeWindow(txs.filter(t => t.at < since), evs.filter(e => e.at < since), project.config.currency, campaignOf);
 
   const started = cur.eventCounts.TRIAL_STARTED ?? 0, converted = cur.eventCounts.TRIAL_CONVERTED ?? 0;
   const churned = cur.eventCounts.EXPIRATION ?? 0;

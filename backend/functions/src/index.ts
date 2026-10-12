@@ -188,3 +188,13 @@ export const runImportJob = onDocumentCreated({ document: "importJobs/{jid}", ti
 
 /** Business démo (lecture seule, jeton mm_demo) : quelques ventes chaque heure. */
 export const demoRefresh = onSchedule({ schedule: "20 * * * *", timeZone: "UTC", timeoutSeconds: 300 }, async () => { await demoTick(); });
+
+/** Scheduled data exports (S3 / GCS / webhook), incremental since each export's last successful run. */
+export const scheduledExports = onSchedule({ schedule: "0 3 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "1GiB" }, async () => {
+  const { runProjectExports } = await import("./exports");
+  const projects = await db.collection("projects").select("config.exports").get();
+  for (const p of projects.docs) {
+    if (!(p.get("config.exports") ?? []).length) continue;
+    await runProjectExports(p.id).catch(e => console.error("exports", p.id, (e as Error).message));
+  }
+});

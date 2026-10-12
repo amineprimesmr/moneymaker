@@ -21,6 +21,8 @@ export interface ProjectConfig {
   integrations?: { appsflyer?: { appId: string; androidAppId?: string } };
   appStore?: { apps: { appId: string; own?: boolean }[] };
   customerCenter?: CustomerCenterConfig;
+  targeting?: import("./growth").Targeting;
+  experiments?: import("./growth").Experiment[];
 }
 
 export interface CustomerCenterConfig {
@@ -34,6 +36,9 @@ export interface Project {
   id: string;
   name: string;
   members: string[];
+  /** uid → role ("admin" | "developer" | "viewer"); members absent from the map are owners. */
+  roles?: Record<string, string>;
+  ownerUid?: string;
   config: ProjectConfig;
   createdAt?: unknown;
 }
@@ -80,7 +85,7 @@ export async function getProject(id: string): Promise<Project> {
   const snap = await db.doc(`projects/${id}`).get();
   if (!snap.exists) throw new HttpError(404, "project_not_found");
   const data = snap.data()!;
-  return { id, name: data.name, members: data.members ?? [], config: { ...DEFAULT_CONFIG, ...data.config }, createdAt: data.createdAt };
+  return { id, name: data.name, members: data.members ?? [], roles: data.roles ?? {}, ownerUid: data.ownerUid, config: { ...DEFAULT_CONFIG, ...data.config }, createdAt: data.createdAt };
 }
 
 export async function getCredentials(projectId: string): Promise<Credentials> {
@@ -209,6 +214,7 @@ export async function customerInfo(project: Project, appUserId: string) {
       isSandbox: p.isSandbox, billingIssue: p.billingIssue,
     })),
     attributes: snap.get("attributes") ?? {},
+    appleAds: snap.get("appleAds") ?? null,
     firstSeenAt: snap.get("firstSeenAt") ?? null,
     requestedAt: Date.now(),
   };

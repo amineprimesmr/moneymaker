@@ -3,6 +3,7 @@ import {
   getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword,
   createUserWithEmailAndPassword, signOut, connectAuthEmulator,
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import { tabGrowth } from "./growth.js";
 
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -44,7 +45,7 @@ $("#logout").onclick = () => signOut(auth);
 onAuthStateChanged(auth, async user => {
   $("#login").classList.toggle("hidden", Boolean(user));
   $("#app").classList.toggle("hidden", !user);
-  if (user) { await loadProjects(); route(); }
+  if (user) { await acceptPendingInvite(); await loadProjects(); route(); }
 });
 
 async function loadProjects() {
@@ -76,7 +77,7 @@ function smoothPath(pts) {
     return `C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p[0].toFixed(1)},${p[1].toFixed(1)}`;
   }).join("");
 }
-function lineChart(points, cur, color = "var(--accent)") {
+function lineChart(points, cur, color = "var(--accent)", fmt = null) {
   if (points.length < 2) return `<div class="empty">Pas encore assez d'historique — le graphique se remplit chaque jour.</div>`;
   const id = `c${++chartSeq}`;
   const W = 600, H = 220, P = 10, max = Math.max(1, ...points.map(p => p.v)) * 1.08, min = Math.min(0, ...points.map(p => p.v));
@@ -96,7 +97,7 @@ function lineChart(points, cur, color = "var(--accent)") {
     <path d="${d}L${x(points.length - 1)},${H}L${x(0)},${H}Z" fill="url(#${id}f)"/>
     <path d="${d}" fill="none" stroke="url(#${id}s)" stroke-width="5" opacity=".7" filter="url(#${id}g)"/>
     <path d="${d}" fill="none" stroke="url(#${id}s)" stroke-width="2.2" stroke-linecap="round" vector-effect="non-scaling-stroke" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" style="animation:mmDraw 1.4s cubic-bezier(.16,1,.3,1) forwards"/>
-    ${xy.map(([cx, cy], i) => `<g><rect class="hit" x="${(cx - step / 2).toFixed(1)}" y="0" width="${step.toFixed(1)}" height="${H}" fill="transparent"><title>${esc(points[i].label)} · ${esc(money(points[i].v, cur))}</title></rect><g class="dot" opacity="0" pointer-events="none" style="transition:opacity .15s"><line x1="${cx}" x2="${cx}" y1="0" y2="${H}" stroke="rgba(255,255,255,.3)" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/><circle cx="${cx}" cy="${cy}" r="9" fill="${accent}" opacity=".25"/><circle cx="${cx}" cy="${cy}" r="4" fill="#fff"/></g></g>`).join("")}
+    ${xy.map(([cx, cy], i) => `<g><rect class="hit" x="${(cx - step / 2).toFixed(1)}" y="0" width="${step.toFixed(1)}" height="${H}" fill="transparent"><title>${esc(points[i].label)} · ${esc(fmt ? fmt(points[i].v) : money(points[i].v, cur))}</title></rect><g class="dot" opacity="0" pointer-events="none" style="transition:opacity .15s"><line x1="${cx}" x2="${cx}" y1="0" y2="${H}" stroke="rgba(255,255,255,.3)" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/><circle cx="${cx}" cy="${cy}" r="9" fill="${accent}" opacity=".25"/><circle cx="${cx}" cy="${cy}" r="4" fill="#fff"/></g></g>`).join("")}
   </svg>`;
 }
 function barChart(byDay, days, cur) {
@@ -138,7 +139,7 @@ async function renderOverview(main) {
 }
 
 // ── Project ─────────────────────────────────────────────────────────────
-const TABS = { start: "Démarrage", metrics: "Métriques", map: "Carte", cohorts: "Cohortes", appstore: "App Store", reviews: "Avis", alerts: "Alertes", customers: "Clients", events: "Événements", products: "Produits & accès", connect: "Connexions", settings: "Réglages" };
+const TABS = { start: "Démarrage", metrics: "Métriques", map: "Carte", cohorts: "Cohortes", charts: "Graphiques", appstore: "App Store", reviews: "Avis", alerts: "Alertes", customers: "Clients", events: "Événements", products: "Produits & accès", growth: "Paywalls & tests", connect: "Connexions", settings: "Réglages" };
 async function renderProject(main) {
   const p = state.projects.find(x => x.id === state.projectId);
   if (!TABS[state.tab]) state.tab = "metrics";
@@ -146,7 +147,7 @@ async function renderProject(main) {
     <div class="tabs">${Object.entries(TABS).map(([k, v]) => `<button class="small ${state.tab === k ? "active" : ""}" data-tab="${k}">${v}</button>`).join("")}</div><div id="tab"></div>`;
   document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => go({ tab: b.dataset.tab }));
   bindDays();
-  await ({ start: tabStart, metrics: tabMetrics, map: tabMap, cohorts: tabCohorts, appstore: tabAppStore, reviews: tabReviews, alerts: tabAlerts, customers: tabCustomers, events: tabEvents, products: tabProducts, connect: tabConnect, settings: tabSettings }[state.tab] ?? tabMetrics)($("#tab"));
+  await ({ start: tabStart, metrics: tabMetrics, map: tabMap, cohorts: tabCohorts, charts: tabCharts, appstore: tabAppStore, reviews: tabReviews, alerts: tabAlerts, customers: tabCustomers, events: tabEvents, products: tabProducts, growth: el => tabGrowth(el, { api, esc, toast, money, pct, date, projectId: state.projectId, reload: loadProjects }), connect: tabConnect, settings: tabSettings }[state.tab] ?? tabMetrics)($("#tab"));
 }
 
 const delta = (cur, prev, fmt = v => v) => {
@@ -450,7 +451,24 @@ Remplace toute logique RevenueCat/StoreKit existante, appelle MoneyMaker.configu
         .map(([k, label, ph]) => `<div class="field"><label>${label} ${integ.includes(k === "posthogKey" ? "posthog" : k) ? '<span class="pill ok">actif</span>' : ""}</label><input data-integ="${k}" placeholder="${ph}" autocomplete="off"></div>`).join("")}
       <div class="field"><label>AppsFlyer — App ID iOS / Android ${p.credentials.appsflyer ? '<span class="pill ok">actif</span>' : ""}</label><div class="row"><input id="afApp" placeholder="id123456789" value="${esc(p.config.integrations?.appsflyer?.appId ?? "")}"><input id="afAndroid" placeholder="com.example.app" value="${esc(p.config.integrations?.appsflyer?.androidAppId ?? "")}"></div></div>
       <div class="field"><label>AppsFlyer — Dev key</label><input id="afKey" placeholder="dev key" autocomplete="off"></div>
-    </div><button class="primary" id="saveInteg">Enregistrer les intégrations</button></div>`;
+    </div><button class="primary" id="saveInteg">Enregistrer les intégrations</button></div>
+  <div class="card" style="margin-top:12px"><h2>Intégrations serveur (attribution &amp; CRM)</h2><p class="muted">Envoi serveur à serveur de chaque événement d'abonnement, avec les identifiants envoyés par le SDK en attributs (<code>$idfa</code>, <code>$gpsAdId</code>, <code>$fbAnonId</code>, <code>$adjustId</code>, <code>$firebaseAppInstanceId</code>, <code>$onesignalId</code>…). Les champs vides gardent la valeur enregistrée ; coche « Déconnecter » pour retirer. Les événements sandbox sont ignorés sauf si « Sandbox » est coché.</p>
+    <div class="grid2">${MM_CONNECTORS.map(([k, name, fields]) => `<details class="field" data-conn="${k}"><summary><b>${name}</b> ${integ.includes(k) ? '<span class="pill ok">actif</span>' : ""}</summary>
+      ${fields.map(([f, label, ph]) => `<label class="muted">${label}</label>${f === "eventTokens" ? `<textarea data-f="${f}" style="min-height:60px" placeholder="${ph}"></textarea>` : `<input data-f="${f}" placeholder="${esc(ph)}" autocomplete="off">`}`).join("")}
+      <label class="row" style="gap:8px"><input type="checkbox" data-f="sandbox" style="width:auto;flex:0"> Sandbox</label>
+      <label class="row" style="gap:8px"><input type="checkbox" data-f="_remove" style="width:auto;flex:0"> Déconnecter</label></details>`).join("")}</div>
+    <p class="muted">Apple Search Ads : rien à configurer. Le SDK envoie le jeton AdServices en attribut <code>$appleAdsToken</code>, MoneyMaker récupère campagne / groupe / mot-clé (fiche client, et « revenueByCampaign » dans les métriques).</p>
+    <button class="primary" id="saveConn">Enregistrer les intégrations serveur</button></div>
+  <div class="card" style="margin-top:12px"><h2>Exports programmés ${ok((p.config.exports ?? []).length)}</h2><p class="muted">Fichiers incrémentaux (depuis le dernier export réussi) chaque jour à 03:00 UTC, ou le lundi pour « hebdo ». L'e-mail n'est pas encore disponible (aucun fournisseur d'envoi) : choisis S3, GCS ou webhook.</p>
+    <div id="exList">${(p.config.exports ?? []).map(x => `<div class="row"><span class="pill ${p.credentials.exports?.includes(x.id) || x.destination === "webhook" ? "ok" : "warn"}">${esc(x.id)}</span><span>${esc(x.destination)} · ${x.schedule === "weekly" ? "hebdo" : "quotidien"} · ${esc(x.format)} · ${x.datasets.map(esc).join(", ")}</span><button style="flex:0" data-exdel="${esc(x.id)}">Supprimer</button></div>`).join("") || '<p class="muted">Aucun export.</p>'}</div>
+    <div class="row"><input id="exId" placeholder="identifiant (ex. s3-quotidien)"><select id="exDest"><option value="s3">Amazon S3</option><option value="gcs">Google Cloud Storage</option><option value="webhook">Webhook</option><option value="email">E-mail (bientôt)</option></select>
+      <select id="exSched"><option value="daily">Quotidien</option><option value="weekly">Hebdo</option></select><select id="exFmt"><option value="csv">CSV</option><option value="jsonl">JSONL</option></select></div>
+    <div class="row">${["transactions", "events", "customers", "subscriptions"].map(d => `<label class="row" style="gap:6px;flex:0;white-space:nowrap"><input type="checkbox" data-exds="${d}" checked style="width:auto"> ${d}</label>`).join("")}</div>
+    <div class="row"><input id="exBucket" placeholder="bucket (S3 / GCS)"><input id="exRegion" placeholder="région S3 (eu-west-3)"><input id="exPrefix" placeholder="préfixe (optionnel)"></div>
+    <div class="row"><input id="exAk" placeholder="S3 Access key ID" autocomplete="off"><input id="exSk" placeholder="S3 Secret access key" autocomplete="off"></div>
+    <input id="exUrl" placeholder="URL webhook https://… (signée MoneyMaker-Signature)"><input id="exTo" placeholder="e-mail destinataire">
+    <textarea id="exSa" style="min-height:60px" placeholder='GCS : compte de service {"type":"service_account",…}'></textarea>
+    <button class="primary" id="exAdd">Ajouter l'export</button></div>`;
   const out = (id, html) => $(id).innerHTML = `<div class="notice">${html}</div>`;
   const busy = async (btn, fn) => { btn.disabled = true; const t = btn.textContent; btn.textContent = "…"; try { await fn(); } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = t; } };
   $("#cStripe").onclick = e => busy(e.target, async () => {
@@ -491,7 +509,64 @@ Remplace toute logique RevenueCat/StoreKit existante, appelle MoneyMaker.configu
     if ($("#afApp").value.trim() || $("#afAndroid").value.trim()) await api(`/v1/projects/${state.projectId}`, { method: "PATCH", body: { config: { integrations: { appsflyer: { appId: $("#afApp").value.trim(), androidAppId: $("#afAndroid").value.trim() || undefined } } } } });
     toast("Intégrations enregistrées"); tabConnect(el);
   });
+  $("#saveConn").onclick = e => busy(e.target, async () => {
+    const integrations = {};
+    el.querySelectorAll("[data-conn]").forEach(d => {
+      const k = d.dataset.conn, cfg = {}; let touched = false;
+      d.querySelectorAll("[data-f]").forEach(i => {
+        if (i.type === "checkbox") { if (i.dataset.f === "sandbox" && (i.checked || integ.includes(k))) cfg.sandbox = i.checked; return; }
+        const v = i.value.trim(); if (!v) return; touched = true;
+        cfg[i.dataset.f] = i.dataset.f === "eventTokens" ? Object.fromEntries(v.split(/\n+/).map(l => l.split(/[=:\s]+/).map(x => x.trim())).filter(x => x[0] && x[1])) : v;
+      });
+      if (d.querySelector('[data-f="_remove"]').checked) integrations[k] = null;
+      else if (touched || (integ.includes(k) && "sandbox" in cfg)) integrations[k] = cfg;
+    });
+    if (!Object.keys(integrations).length) return toast("Rien à enregistrer");
+    await api(`/v1/projects/${state.projectId}/credentials`, { method: "PUT", body: { integrations } });
+    toast("Intégrations serveur enregistrées"); tabConnect(el);
+  });
+  const saveExports = list => api(`/v1/projects/${state.projectId}`, { method: "PATCH", body: { config: { exports: list } } });
+  el.querySelectorAll("[data-exdel]").forEach(b => b.onclick = () => busy(b, async () => {
+    await saveExports((p.config.exports ?? []).filter(x => x.id !== b.dataset.exdel));
+    await api(`/v1/projects/${state.projectId}/credentials`, { method: "PUT", body: { exports: { [b.dataset.exdel]: null } } });
+    toast("Export supprimé"); await loadProjects(); tabConnect(el);
+  }));
+  $("#exAdd").onclick = e => busy(e.target, async () => {
+    const dest = $("#exDest").value, id = $("#exId").value.trim(), v = s => $(s).value.trim();
+    const x = { id, destination: dest, schedule: $("#exSched").value, format: $("#exFmt").value, datasets: [...el.querySelectorAll("[data-exds]:checked")].map(i => i.dataset.exds) };
+    if (dest === "s3") x.s3 = { bucket: v("#exBucket"), region: v("#exRegion"), prefix: v("#exPrefix") };
+    if (dest === "gcs") x.gcs = { bucket: v("#exBucket"), prefix: v("#exPrefix") };
+    if (dest === "webhook") x.webhook = { url: v("#exUrl") };
+    if (dest === "email") x.email = { to: v("#exTo") };
+    const secrets = {};
+    if (dest === "s3" && v("#exAk")) secrets.s3 = { accessKeyId: v("#exAk"), secretAccessKey: v("#exSk") };
+    if (dest === "gcs" && v("#exSa")) secrets.gcs = { serviceAccount: v("#exSa") };
+    if (Object.keys(secrets).length) await api(`/v1/projects/${state.projectId}/credentials`, { method: "PUT", body: { exports: { [id]: secrets } } });
+    await saveExports([...(p.config.exports ?? []).filter(y => y.id !== id), x]);
+    toast("Export enregistré"); await loadProjects(); tabConnect(el);
+  });
 }
+
+/** Server-side connectors: [key, label, [[field, label, placeholder]]] — mirrors SCHEMA in backend integrations.ts. */
+const MM_CONNECTORS = [
+  ["meta", "Meta (Conversions API)", [["datasetId", "Dataset ID (ID de l'app / jeu de données)", "1234567890"], ["accessToken", "Jeton d'accès Conversions API", "EAAB…"], ["testEventCode", "Code d'événement test (optionnel)", "TEST123"]]],
+  ["adjust", "Adjust", [["appToken", "App token", "abc123def456"], ["s2sToken", "Jeton S2S (Bearer)", "jeton S2S"], ["eventTokens", "Jetons d'événements (un par ligne)", "INITIAL_PURCHASE=abc123\nRENEWAL=def456\nTRIAL_STARTED=ghi789"]]],
+  ["branch", "Branch", [["branchKey", "Branch key", "key_live_…"]]],
+  ["singular", "Singular", [["sdkKey", "SDK key", "clé SDK"]]],
+  ["kochava", "Kochava", [["appGuid", "App GUID", "komyapp-xxxx"]]],
+  ["tenjin", "Tenjin", [["apiKey", "SDK / API key", "clé"]]],
+  ["braze", "Braze", [["restEndpoint", "REST endpoint", "https://rest.fra-01.braze.eu"], ["apiKey", "Clé REST API (users.track)", "clé"]]],
+  ["onesignal", "OneSignal", [["appId", "App ID", "xxxxxxxx-…"], ["restApiKey", "REST API key", "os_v2_app_…"]]],
+  ["iterable", "Iterable", [["apiKey", "Server-side API key", "clé"], ["region", "Région (us / eu)", "us"]]],
+  ["customerio", "Customer.io", [["siteId", "Site ID", "site id"], ["apiKey", "Track API key", "clé"], ["region", "Région (us / eu)", "us"]]],
+  ["clevertap", "CleverTap", [["accountId", "Account ID", "XXX-XXX-XXXX"], ["passcode", "Passcode", "passcode"], ["region", "Région (eu1, us1, in1, sg1…)", "eu1"]]],
+  ["airship", "Airship", [["token", "Bearer token", "jeton"], ["region", "Région (us / eu)", "us"]]],
+  ["intercom", "Intercom", [["accessToken", "Access token", "dG9r…"], ["region", "Région (us / eu / au)", "us"]]],
+  ["ga4", "Firebase / Google Analytics 4", [["firebaseAppId", "Firebase App ID (iOS)", "1:123:ios:abc"], ["androidFirebaseAppId", "Firebase App ID Android (optionnel)", "1:123:android:abc"], ["apiSecret", "Measurement Protocol API secret", "secret"]]],
+  ["mparticle", "mParticle", [["apiKey", "Server key", "us1-…"], ["apiSecret", "Server secret", "secret"], ["pod", "Pod (us1, us2, eu1, au1)", "us1"]]],
+  ["statsig", "Statsig", [["serverSecret", "Server secret key", "secret-…"]]],
+  ["telemetrydeck", "TelemetryDeck", [["appId", "App ID", "XXXXXXXX-…"]]],
+];
 
 const statusPill = s => `<span class="pill ${["active"].includes(s) ? "ok" : ["grace", "billing_retry", "paused"].includes(s) ? "warn" : "bad"}">${esc(s)}</span>`;
 async function tabCustomers(el) {
@@ -515,6 +590,7 @@ async function customerDialog(id) {
   openModal(`<h2 class="mono">${esc(id)}</h2>
     <h3>Accès</h3><p>${Object.values(c.entitlements).map(e => `<span class="pill ${e.active ? "ok" : "bad"}">${esc(e.id)} ${e.active ? "actif" : "inactif"}</span> <span class="muted">jusqu'au ${e.expiresAt ? date(e.expiresAt) : "à vie"}</span>`).join("<br>") || "Aucun"}</p>
     <h3>Achats</h3><table>${c.purchases.map(x => `<tr><td>${esc(x.store)}</td><td class="mono">${esc(x.productId)}</td><td>${statusPill(x.status)}${x.isSandbox ? ' <span class="pill">sandbox</span>' : ""}</td><td>${x.expiresAt ? date(x.expiresAt) : "à vie"}</td></tr>`).join("") || `<tr><td class="muted">Aucun</td></tr>`}</table>
+    ${c.appleAds?.attribution ? `<h3 style="margin-top:14px">Apple Search Ads</h3><p class="mono">campagne ${esc(c.appleAds.campaignId)} · groupe ${esc(c.appleAds.adGroupId)} · mot-clé ${esc(c.appleAds.keywordId ?? "—")} · ${esc(c.appleAds.countryOrRegion ?? "")}</p>` : ""}
     <h3 style="margin-top:14px">Historique</h3><table>${c.events.slice(0, 30).map(e => `<tr><td>${esc(e.type)}</td><td class="mono">${esc(e.productId)}</td><td>${date(e.at)}</td></tr>`).join("") || `<tr><td class="muted">—</td></tr>`}</table>
     ${ents.length ? `<h3 style="margin-top:14px">Offrir un accès</h3><div class="row"><select id="gEnt">${ents.map(e => `<option>${esc(e)}</option>`).join("")}</select><input id="gDays" type="number" placeholder="jours (vide = à vie, 0 = retirer)"><button type="button" class="primary" id="grant">Appliquer</button></div>` : ""}
     <div class="row" style="margin-top:16px"><button>Fermer</button></div>`);
@@ -598,6 +674,8 @@ async function tabSettings(el) {
     $("#newKey").innerHTML = `<p class="muted">Copie-la maintenant :</p>${copyRow(r.key)}`;
   };
   $("#kPub").onclick = () => key("public"); $("#kSec").onclick = () => key("secret"); $("#kRot").onclick = () => key("secret", true);
+  el.insertAdjacentHTML("beforeend", `<div class="card" style="margin-top:12px" id="team"></div>`);
+  teamSection($("#team")).catch(e => { $("#team").innerHTML = `<h2>Équipe</h2><div class="empty error">${esc(e.message)}</div>`; });
 }
 
 // ── Account / tokens ────────────────────────────────────────────────────
@@ -650,4 +728,137 @@ function newProjectDialog() {
       <div class="row"><button type="button" class="primary" id="goSetup">Continuer la mise en route →</button></div>`);
     $("#goSetup").onclick = () => { $("#modal").close(); go({ view: "project", projectId: r.projectId, tab: "start" }); };
   };
+}
+
+// ── Graphiques (parité RevenueCat Charts) ─────────────────────────────────
+const CHARTS = {
+  active_subscriptions: ["Abonnements actifs", "line"], active_subscriptions_movement: ["Mouvement des abonnements", "bars"],
+  active_trials: ["Essais actifs", "line"], active_trials_movement: ["Mouvement des essais", "bars"],
+  mrr: ["MRR", "line"], mrr_movement: ["Mouvement du MRR", "bars"], arr: ["ARR", "line"], revenue: ["Revenus", "bars"],
+  new_customers: ["Nouveaux clients", "bars"], conversion_to_paying: ["Conversion en payant", "line"], initial_conversion: ["Conversion initiale", "line"],
+  trial_conversion_funnel: ["Entonnoir des essais", "funnel"], trial_conversion_rate: ["Taux de conversion des essais", "line"],
+  trial_cancellation_rate: ["Taux d'annulation des essais", "line"], subscription_retention: ["Rétention des abonnements", "retention"],
+  churn: ["Churn", "line"], refund_rate: ["Taux de remboursement", "line"], refunds: ["Remboursements", "bars"],
+  realized_ltv_per_customer: ["LTV réalisée par client", "line"], realized_ltv_per_paying_customer: ["LTV réalisée par client payant", "line"],
+  non_subscription_purchases: ["Achats hors abonnement", "bars"], subscription_status: ["Statut des abonnements", "bars"], paywall: ["Paywall", "line"],
+};
+const MOVE_KEYS = { active_subscriptions_movement: ["new", "reactivated", "churned"], mrr_movement: ["new", "reactivated", "churned"], active_trials_movement: ["new", "converted", "expired"], subscription_status: ["active", "cancelled_active", "grace", "billing_retry"] };
+const MOVE_LABEL = { new: "Nouveaux", reactivated: "Réactivés", churned: "Perdus", converted: "Convertis", expired: "Expirés", active: "Actifs", cancelled_active: "Annulés (encore actifs)", grace: "Période de grâce", billing_retry: "Relance de paiement", revenue: "Revenus", refunds: "Remboursements", net: "Net", transactions: "Transactions", amount: "Montant", customers: "Clients", payingCustomers: "Clients payants", converted: "Convertis", started: "Essais démarrés", stillActive: "Toujours actifs", cancelled: "Annulés", pending: "En cours", churned: "Perdus", impressions: "Affichages", conversions: "Achats", purchaseStarts: "Achats commencés", closes: "Fermetures", immature: "Trop récents", cohorts: "Cohortes", expired: "Expirés", conversionDays: "Fenêtre (jours)" };
+const MOVE_COLOR = ["#00F19F", "#2E8BFF", "#FF5C7A", "#FFB547"];
+
+function seriesBars(series, keys, fmt) {
+  const id = `c${++chartSeq}`, W = 600, H = 220, n = Math.max(1, series.length), bw = W / n;
+  const pos = p => keys.reduce((a, k) => a + Math.max(0, p[k] ?? 0), 0), neg = p => keys.reduce((a, k) => a + Math.min(0, p[k] ?? 0), 0);
+  const max = Math.max(1, ...series.map(pos)), min = Math.min(0, ...series.map(neg)), span = max - min || 1;
+  const y = v => ((max - v) / span) * H;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="graphique en barres">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#00F19F"/><stop offset="1" stop-color="#2E8BFF" stop-opacity=".25"/></linearGradient></defs>
+    ${min < 0 ? `<line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="rgba(255,255,255,.2)" vector-effect="non-scaling-stroke"/>` : ""}
+    ${series.map((p, i) => { let up = 0, down = 0; return keys.map((k, j) => {
+      const v = p[k] ?? 0; if (!v) return "";
+      const top = v > 0 ? y(up + v) : y(down), h = Math.abs(y(0) - y(Math.abs(v))) || 1;
+      if (v > 0) up += v; else down += v;
+      const fill = keys.length === 1 ? `url(#${id})` : MOVE_COLOR[j % MOVE_COLOR.length];
+      return `<rect x="${(i * bw + bw * 0.15).toFixed(1)}" y="${top.toFixed(1)}" width="${Math.max(1, bw * 0.7).toFixed(1)}" height="${h.toFixed(1)}" rx="${Math.min(3, bw * 0.25).toFixed(1)}" fill="${fill}"><title>${esc(p.date)} · ${esc(MOVE_LABEL[k] ?? k)} : ${esc(fmt(v))}</title></rect>`;
+    }).join(""); }).join("")}</svg>`;
+}
+
+async function tabCharts(el) {
+  const c = (state.chart ??= { name: "mrr", days: 90, resolution: "day", store: "", country: "", product: "" }), cur = state.projects.find(p => p.id === state.projectId)?.config?.currency ?? "EUR";
+  const opt = (v, l, sel) => `<option value="${esc(v)}" ${v === sel ? "selected" : ""}>${esc(l)}</option>`;
+  el.innerHTML = `<div class="card section"><div class="row" style="flex-wrap:wrap;gap:8px;align-items:end">
+      <div class="field" style="min-width:220px"><label>Graphique</label><select id="chName">${Object.entries(CHARTS).map(([k, [l]]) => opt(k, l, c.name)).join("")}</select></div>
+      <div class="field"><label>Période</label><select id="chDays">${[[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "12 mois"], [730, "24 mois"]].map(([v, l]) => opt(String(v), l, String(c.days))).join("")}</select></div>
+      <div class="field"><label>Résolution</label><select id="chRes">${[["day", "Jour"], ["week", "Semaine"], ["month", "Mois"]].map(([v, l]) => opt(v, l, c.resolution)).join("")}</select></div>
+      <div class="field"><label>Store</label><select id="chStore">${[["", "Tous"], ["app_store", "App Store"], ["play_store", "Google Play"], ["stripe", "Stripe"]].map(([v, l]) => opt(v, l, c.store)).join("")}</select></div>
+      <div class="field"><label>Pays</label><input id="chCountry" maxlength="2" placeholder="FR" value="${esc(c.country)}" style="width:70px"></div>
+      <div class="field"><label>Produit</label><input id="chProduct" placeholder="tous" value="${esc(c.product)}"></div>
+      <button id="chCsv" class="small">⬇︎ CSV</button></div></div><div id="chOut"><div class="empty">Chargement…</div></div>`;
+  const read = () => Object.assign(c, { name: $("#chName").value, days: Number($("#chDays").value), resolution: $("#chRes").value, store: $("#chStore").value, country: $("#chCountry").value.trim().toUpperCase(), product: $("#chProduct").value.trim() });
+  const qs = (extra = {}) => new URLSearchParams(Object.fromEntries(Object.entries({ days: c.days, resolution: c.resolution, store: c.store, country: c.country, product: c.product, ...extra }).filter(([, v]) => v !== "" && v != null))).toString();
+  el.querySelectorAll("select, input").forEach(i => i.onchange = () => { read(); tabCharts(el); });
+  $("#chCsv").onclick = async () => {
+    const token = await auth.currentUser.getIdToken();
+    const res = await fetch(`/v1/projects/${state.projectId}/charts/${c.name}?${qs({ format: "csv" })}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return toast("Export impossible");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(await res.blob()); a.download = `${c.name}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  };
+  let r;
+  try { r = await api(`/v1/projects/${state.projectId}/charts/${c.name}?${qs()}`); } catch (e) { $("#chOut").innerHTML = `<div class="card empty error">${esc(e.message)}</div>`; return; }
+  const currency = r.currency ?? cur;
+  const fmt = v => v == null ? "—" : r.unit === "micros" ? money(v, currency) : r.unit === "ratio" ? pct(v) : new Intl.NumberFormat("fr-FR").format(v);
+  const [label, kind] = CHARTS[c.name];
+  const sum = Object.entries(r.summary ?? {}).filter(([k, v]) => typeof v === "number" && !/^p\d+$/.test(k));
+  const sumFmt = (k, v) => k === "value" ? fmt(v) : /^(revenue|refunds|amount|net)$/.test(k) || (r.unit === "micros" && ["new", "reactivated", "churned"].includes(k)) ? money(v, currency) : new Intl.NumberFormat("fr-FR").format(v);
+  const kpis = `<div class="kpis">${sum.slice(0, 6).map(([k, v]) => kpi(k === "value" ? label : (MOVE_LABEL[k] ?? k), sumFmt(k, v))).join("")}</div>`;
+  let body;
+  if (kind === "retention") {
+    const ks = Object.keys(r.series[0] ?? {}).filter(k => /^p\d+$/.test(k));
+    const cell = v => v == null ? "<td></td>" : `<td style="text-align:center;background:rgba(0,208,132,${(v * 0.85).toFixed(2)});color:${v > .45 ? "#001a10" : "inherit"}">${Math.round(v * 100)}%</td>`;
+    body = r.series.length ? `<div style="overflow-x:auto"><table><thead><tr><th>Cohorte</th><th>Abonnés</th>${ks.map(k => `<th style="text-align:center">M${k.slice(1)}</th>`).join("")}</tr></thead>
+      <tbody>${r.series.map(p => `<tr><td>${esc(p.date.slice(0, 7))}</td><td>${p.size}</td>${ks.map(k => cell(p[k])).join("")}</tr>`).join("")}</tbody></table></div>` : `<div class="empty">Aucune cohorte sur la période.</div>`;
+  } else if (kind === "funnel") {
+    const s = r.summary, steps = [["Essais démarrés", s.started], ["Convertis", s.converted], ["Toujours actifs", s.stillActive]];
+    body = `<div>${steps.map(([l, v]) => `<div style="margin:8px 0"><div class="row" style="justify-content:space-between"><span>${l}</span><b>${v ?? 0}${s.started ? ` · ${pct((v ?? 0) / s.started)}` : ""}</b></div><div style="height:10px;border-radius:6px;background:rgba(255,255,255,.06)"><div style="height:10px;border-radius:6px;width:${s.started ? ((v ?? 0) / s.started) * 100 : 0}%;background:linear-gradient(90deg,#2E8BFF,#00F19F)"></div></div></div>`).join("")}</div>
+      ${lineChart(r.series.filter(p => p.value != null).map(p => ({ label: p.date, v: p.value })), currency, undefined, fmt)}`;
+  } else if (kind === "bars") {
+    const keys = MOVE_KEYS[c.name] ?? ["value"];
+    body = seriesBars(r.series, keys, fmt) + (keys.length > 1 ? `<div class="row" style="gap:14px;margin-top:8px">${keys.map((k, j) => `<span class="muted"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${MOVE_COLOR[j]}"></span> ${MOVE_LABEL[k] ?? k}</span>`).join("")}</div>` : "");
+  } else {
+    body = lineChart(r.series.filter(p => p.value != null).map(p => ({ label: p.date, v: p.value })), currency, undefined, fmt);
+  }
+  $("#chOut").innerHTML = `${kpis}<div class="card section"><h2>${esc(label)}</h2>${r.note ? `<p class="muted">${esc(r.note)}</p>` : ""}${body}
+    <details style="margin-top:10px"><summary class="muted">Données</summary><div style="overflow-x:auto"><table><thead><tr>${Object.keys(r.series[0] ?? { date: 1, value: 1 }).map(k => `<th>${esc(k)}</th>`).join("")}</tr></thead>
+    <tbody>${r.series.slice().reverse().map(p => `<tr>${Object.entries(p).map(([k, v]) => `<td>${k === "date" ? esc(v) : k === "value" ? fmt(v) : esc(v ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div></details></div>`;
+}
+
+// ── Équipe : membres, rôles, invitations, journal ─────────────────────────
+const ROLE_LABEL = { owner: "Propriétaire", admin: "Admin", developer: "Développeur", viewer: "Lecteur" };
+const AUDIT_LABEL = { "config.update": "Configuration modifiée", "credentials.update": "Identifiants modifiés", "keys.issue": "Clé API générée", "grant.update": "Accès accordé", "invite.create": "Invitation créée", "invite.revoke": "Invitation révoquée", "invite.accept": "Invitation acceptée", "member.role": "Rôle modifié", "member.remove": "Membre retiré" };
+
+async function teamSection(box) {
+  const pid = state.projectId, me = auth.currentUser?.uid;
+  const t = await api(`/v1/projects/${pid}/members`);
+  const admin = ["owner", "admin"].includes(t.role);
+  const roleSel = (m) => `<select data-role="${esc(m.uid)}" ${!admin || m.role === "owner" && t.role !== "owner" ? "disabled" : ""}>${(m.role === "owner" ? ["owner", "admin", "developer", "viewer"] : ["admin", "developer", "viewer"]).map(r => `<option value="${r}" ${r === m.role ? "selected" : ""} ${r === "owner" ? "disabled" : ""}>${ROLE_LABEL[r]}</option>`).join("")}</select>`;
+  box.innerHTML = `<h2>Équipe</h2><p class="muted">Ton rôle : <b>${ROLE_LABEL[t.role] ?? esc(t.role)}</b>. Lecteur = lecture seule · Développeur = configuration, produits, clés publiques · Admin = tout sauf le transfert de propriété (membres, identifiants, révocation des clés).</p>
+    <table><thead><tr><th>Membre</th><th>Rôle</th><th></th></tr></thead><tbody>${t.members.map(m => `<tr><td>${esc(m.email ?? m.uid)}${m.uid === me ? ' <span class="pill">toi</span>' : ""}</td><td>${roleSel(m)}</td>
+      <td style="text-align:right">${m.uid === me ? `<button class="small" data-remove="${esc(m.uid)}">Quitter</button>` : admin && (m.role !== "owner" || t.role === "owner") ? `<button class="small danger" data-remove="${esc(m.uid)}">Retirer</button>` : ""}</td></tr>`).join("")}</tbody></table>
+    ${admin ? `<h3 style="margin-top:16px">Inviter</h3><div class="row"><input id="invEmail" type="email" placeholder="email@exemple.com"><select id="invRole">${["developer", "viewer", "admin"].map(r => `<option value="${r}">${ROLE_LABEL[r]}</option>`).join("")}</select><button class="primary" id="invGo">Créer le lien</button></div>
+      <p class="muted">Aucun e-mail n'est envoyé : copie le lien et partage-le. Il expire après 14 jours et ne fonctionne que pour cette adresse.</p><div id="invLink"></div>
+      ${t.invites.length ? `<h3 style="margin-top:16px">Invitations en attente</h3><table><tbody>${t.invites.map(i => `<tr><td>${esc(i.email)}</td><td>${ROLE_LABEL[i.role]}</td><td class="muted">expire ${date(i.expiresAt)}</td><td style="text-align:right"><button class="small" data-copyinv="${esc(i.link)}">Copier le lien</button> <button class="small danger" data-revoke="${esc(i.id)}">Révoquer</button></td></tr>`).join("")}</tbody></table>` : ""}
+      <h3 style="margin-top:16px">Journal d'audit</h3><div id="auditLog"><div class="empty">Chargement…</div></div>` : ""}`;
+  const reload = () => teamSection(box).catch(e => toast(e.message));
+  box.querySelectorAll("[data-role]").forEach(s => s.onchange = async () => { try { await api(`/v1/projects/${pid}/members/${s.dataset.role}`, { method: "PATCH", body: { role: s.value } }); toast("Rôle mis à jour"); } catch (e) { toast(e.message); } reload(); });
+  box.querySelectorAll("[data-remove]").forEach(b => b.onclick = async () => {
+    const self = b.dataset.remove === me;
+    if (!confirm(self ? "Quitter ce business ?" : "Retirer ce membre ?")) return;
+    try { await api(`/v1/projects/${pid}/members/${b.dataset.remove}`, { method: "DELETE" }); if (self) { await loadProjects(); return go({ view: "overview", projectId: null }); } reload(); } catch (e) { toast(e.message); }
+  });
+  box.querySelectorAll("[data-copyinv]").forEach(b => b.onclick = () => copy(b.dataset.copyinv));
+  box.querySelectorAll("[data-revoke]").forEach(b => b.onclick = async () => { try { await api(`/v1/projects/${pid}/invites/${b.dataset.revoke}`, { method: "DELETE" }); reload(); } catch (e) { toast(e.message); } });
+  if (!admin) return;
+  $("#invGo").onclick = async () => {
+    try { const r = await api(`/v1/projects/${pid}/invites`, { method: "POST", body: { email: $("#invEmail").value.trim(), role: $("#invRole").value } }); await reload(); $("#invLink").innerHTML = `<p class="muted">Lien pour ${esc(r.email)} :</p>${copyRow(r.link)}`; }
+    catch (e) { toast(e.message); }
+  };
+  const { entries } = await api(`/v1/projects/${pid}/audit?limit=50`).catch(() => ({ entries: [] }));
+  $("#auditLog").innerHTML = entries.length ? `<div style="overflow-x:auto"><table><thead><tr><th>Quand</th><th>Qui</th><th>Action</th><th>Détails</th></tr></thead><tbody>${entries.map(a => `<tr><td>${date(a.at)}</td><td>${esc(a.email ?? (a.uid?.startsWith("key:") ? "clé secrète" : a.uid))}</td><td>${esc(AUDIT_LABEL[a.action] ?? a.action)}</td>
+    <td class="muted mono" style="font-size:12px">${esc(Object.entries(a.details ?? {}).filter(([k]) => k !== "path").map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · "))}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">Aucune action enregistrée.</div>`;
+}
+
+/** ?invite=TOKEN (reste dans l'URL pendant la connexion) : accepte l'invitation une fois connecté.
+ *  Autonome (pas de const de module) : peut s'exécuter avant la fin de l'évaluation du module. */
+async function acceptPendingInvite() {
+  const token = new URLSearchParams(location.search).get("invite");
+  if (!token) return;
+  history.replaceState(null, "", location.pathname + location.hash);
+  const roles = { admin: "Admin", developer: "Développeur", viewer: "Lecteur" };
+  try {
+    const info = await api(`/v1/invites/${encodeURIComponent(token)}`);
+    if (!confirm(`Rejoindre « ${info.projectName} » en tant que ${roles[info.role] ?? info.role} ?`)) return;
+    const r = await api(`/v1/invites/${encodeURIComponent(token)}/accept`, { method: "POST" });
+    toast(`Tu as rejoint ${r.projectName}`);
+    history.replaceState(null, "", `#${r.projectId}/metrics`);
+  } catch (e) { toast(`Invitation : ${e.message}`); }
 }

@@ -49,13 +49,29 @@ data class Package(val id: String, val productIds: Map<String, String>, val meta
         get() = product?.subscriptionOfferDetails?.any { o -> o.pricingPhases.pricingPhaseList.any { it.priceAmountMicros == 0L } } == true
 }
 
-data class Offering(val id: String, val description: String?, val packages: List<Package>) {
+data class Offering(
+    val id: String, val description: String?, val packages: List<Package>,
+    /** Remote paywall config (raw JSON, see llms.txt) — null when the offering has none. */
+    val paywallJson: String? = null,
+) {
     fun pkg(id: String) = packages.firstOrNull { it.id == id }
 }
 
-data class Offerings(val current: Offering?, val all: Map<String, Offering>) {
+data class ExperimentAssignment(val experimentId: String, val variant: String, val placement: String, val offeringId: String)
+
+data class Offerings(
+    val current: Offering?, val all: Map<String, Offering>,
+    /** placementId → resolved offering id (targeting + experiments applied server-side). */
+    val placements: Map<String, String> = emptyMap(),
+    val experiments: List<ExperimentAssignment> = emptyList(),
+) {
     operator fun get(id: String) = all[id]
+    fun offeringForPlacement(placement: String): Offering? = placements[placement]?.let { all[it] } ?: current
+    fun experiment(offeringId: String, placement: String?) =
+        experiments.firstOrNull { it.offeringId == offeringId && it.placement == (placement ?: "default") } ?: experiments.firstOrNull { it.offeringId == offeringId }
 }
+
+enum class PaywallEventType(val wire: String) { IMPRESSION("impression"), CLOSE("close"), PURCHASE_START("purchase_start"), PURCHASE("purchase"), CANCEL("cancel") }
 
 sealed class PurchaseResult {
     data class Success(val customerInfo: CustomerInfo) : PurchaseResult()
