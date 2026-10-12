@@ -6,7 +6,7 @@ import { HttpError, cleanId, Purchase } from "./engine";
 import type { Credentials } from "./store";
 import {
   db, getProject, createProject, customerInfo, mergeCustomers, touchCustomer, resolveKey, issueKey, revokeProjectKeys,
-  upsertPurchase, accountUUID, Project, ProjectConfig, getCredentials, KeyRecord, DEFAULT_CONFIG, CustomerCenterConfig,
+  upsertPurchase, lookupIndex, accountUUID, Project, ProjectConfig, getCredentials, KeyRecord, DEFAULT_CONFIG, CustomerCenterConfig,
 } from "./store";
 import { ingestAppleTransaction, ingestAppleNotification } from "./apple";
 import { sanitizeRefundControl, refundStats, DEFAULT_REFUND_CONTROL } from "./refund";
@@ -37,6 +37,7 @@ import { sanitizeAdmobConfig, sanitizeAdEvent, recordAdEvent, handleSsv } from "
 import { projectBenchmarks } from "./benchmarks";
 import { sanitizeVirtualCurrencies, readWallet, moveWallet, parseAmount, parseIdempotencyKey } from "./wallet";
 import { projectLtv, audienceById, audienceCustomers, loadCustomerRows } from "./segmentsLoader";
+import { verifyStripeAppSignature, stripeAppPayload, parseGrantDays, isStripeCustomerId, STRIPE_APP_GRANT_DAYS } from "./stripeApp";
 
 /** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
 export const PUBLIC_BASE = process.env.MONEYMAKER_PUBLIC_BASE ?? "https://moneymaker-io.web.app";
@@ -1561,6 +1562,114 @@ route("POST", "/v1/customers/:id/manage-link", async (req, _res, [id]) =>
 
 // ── Dispatcher ─────────────────────────────────────────────────────────────
 /** Routes returning customer info are signed (trusted entitlements, see signing.ts). */
+
+// ══ Stripe App ══ ═══════════════════════════════════════════════════════════
+// Routes appelées par l'app MoneyMaker installée dans le Dashboard Stripe (stripe-app/).
+// Double authentification :
+//   1. Stripe-Signature (fetchStripeSignature) vérifiée avec le secret de signature de l'app
+//      (env STRIPE_APP_SECRET, virgules pour une rotation, ou Firestore system/stripeApp { signingSecret }) ;
+//      payload signé = {"user_id","account_id"} transmis dans X-Stripe-User-Id / X-Stripe-Account-Id ;
+//   2. Authorization: Bearer mm_sk_… (clé secrète MoneyMaker du marchand, lue dans le Secret Store Stripe).
+// Si le projet connaît son compte Stripe (config.stripe.accountId), le compte signé doit être le même.
+let stripeAppSecretsCache: { at: number; secrets: string[] } | null = null;
+async function stripeAppSecrets(): Promise<string[]> {
+  const env = (process.env.STRIPE_APP_SECRET ?? "").split(",").map(s => s.trim()).filter(Boolean);
+  if (env.length) return env;
+  if (stripeAppSecretsCache && Date.now() - stripeAppSecretsCache.at < 300_000) return stripeAppSecretsCache.secrets;
+  const doc = await db.doc("system/stripeApp").get();
+  const secrets = [doc.get("signingSecret"), ...((doc.get("signingSecrets") as string[] | undefined) ?? [])].filter((s): s is string => typeof s === "string" && !!s);
+  stripeAppSecretsCache = { at: Date.now(), secrets };
+  return secrets;
+}
+
+async function stripeAppProject(req: Request): Promise<{ project: Project & { role?: Role }; accountId: string; userId: string }> {
+  const userId = String(req.get("x-stripe-user-id") ?? req.body?.user_id ?? "");
+  const accountId = String(req.get("x-stripe-account-id") ?? req.body?.account_id ?? "");
+  if (!/^usr_\w+$/.test(userId) || !/^acct_\w+$/.test(accountId)) throw new HttpError(400, "stripe_app_context_missing", "X-Stripe-User-Id / X-Stripe-Account-Id requis");
+  const secrets = await stripeAppSecrets();
+  if (!secrets.length) throw new HttpError(503, "stripe_app_not_configured", "Secret de signature de l'app Stripe absent côté serveur (STRIPE_APP_SECRET)");
+  const check = verifyStripeAppSignature(req.get("stripe-signature"), stripeAppPayload(userId, accountId), secrets);
+  if (!check.ok) throw new HttpError(401, "invalid_stripe_signature", check.reason);
+  const caller = await authenticate(req);
+  if (caller.kind !== "secret") throw new HttpError(403, "secret_key_required", "Colle ta clé secrète MoneyMaker (mm_sk_…) dans les réglages de l'app");
+  const project = await projectFor(caller, caller.projectId);
+  const known = (project.config as any).stripe?.accountId as string | undefined;
+  if (known && known !== accountId) throw new HttpError(403, "stripe_account_mismatch", "Cette clé MoneyMaker appartient à un projet relié à un autre compte Stripe");
+  return { project, accountId, userId };
+}
+
+const dashboardCustomerUrl = (pid: string, appUserId?: string) =>
+  `${PUBLIC_BASE}/#${encodeURIComponent(pid)}/customers${appUserId ? `/${encodeURIComponent(appUserId)}` : ""}`;
+
+async function stripeAppCustomer(project: Project, stripeCustomerId: string) {
+  const appUserId = await lookupIndex(project.id, `stripe_cus:${stripeCustomerId}`);
+  const entitlementIds = Object.keys(project.config.entitlements ?? {});
+  const base = { project: { id: project.id, name: project.name, currency: project.config.currency }, stripeCustomerId, entitlementIds, grantDays: STRIPE_APP_GRANT_DAYS };
+  if (!appUserId) return { ...base, linked: false as const, dashboardUrl: dashboardCustomerUrl(project.id) };
+  const [info, snap, events] = await Promise.all([
+    customerInfo(project, appUserId),
+    db.doc(`projects/${project.id}/customers/${appUserId}`).get(),
+    db.collection(`projects/${project.id}/events`).where("appUserId", "==", appUserId).orderBy("at", "desc").limit(15).get(),
+  ]);
+  return {
+    ...base, linked: true as const, appUserId, dashboardUrl: dashboardCustomerUrl(project.id, appUserId),
+    entitlements: Object.values(info.entitlements), activeEntitlements: info.activeEntitlements,
+    purchases: info.purchases.sort((a, b) => (b.purchasedAt ?? 0) - (a.purchasedAt ?? 0)),
+    stores: [...new Set(info.purchases.map(p => p.store))],
+    totalSpentMicros: snap.get("totalSpentMicros") ?? 0,
+    isPaying: snap.get("isPaying") ?? false,
+    firstSeenAt: info.firstSeenAt, lastSeenAt: snap.get("lastSeenAt") ?? null, country: snap.get("country") ?? null,
+    attributes: Object.fromEntries(Object.entries(info.attributes ?? {}).slice(0, 20)),
+    events: events.docs.map(d => { const e = d.data(); return { id: d.id, type: e.type, store: e.store, productId: e.productId, priceMicros: e.priceMicros ?? null, currency: e.currency ?? null, isSandbox: !!e.isSandbox, at: e.at }; }),
+  };
+}
+
+route("GET", "/v1/stripe-app/customer/:sc", async (req, _res, [sc]) => {
+  const { project } = await stripeAppProject(req);
+  const stripeCustomerId = decodeURIComponent(sc);
+  if (!isStripeCustomerId(stripeCustomerId)) throw new HttpError(400, "invalid_stripe_customer");
+  return stripeAppCustomer(project, stripeCustomerId);
+});
+
+route("GET", "/v1/stripe-app/overview", async req => {
+  const { project, accountId } = await stripeAppProject(req);
+  const m: any = await projectMetrics(project, 28);
+  return {
+    project: { id: project.id, name: project.name, currency: project.config.currency }, accountId,
+    dashboardUrl: `${PUBLIC_BASE}/#${encodeURIComponent(project.id)}/metrics`,
+    mrrMicros: m.mrrMicros, revenue28dMicros: m.revenueMicros, netRevenue28dMicros: m.netRevenueMicros,
+    previousRevenue28dMicros: m.previous?.revenueMicros ?? null,
+    activeSubscriptions: m.activeSubscriptions, activeTrials: m.activeTrials, activeCustomers: m.activeCustomers,
+    newCustomers28d: m.newCustomers, trialConversionRate: m.trialConversionRate,
+    byStore: m.byStore, revenueByStore: m.revenueByStore ?? {}, generatedAt: m.generatedAt,
+  };
+});
+
+route("POST", "/v1/stripe-app/customer/:sc/grant", async (req, _res, [sc]) => {
+  const { project, userId } = await stripeAppProject(req);
+  const stripeCustomerId = decodeURIComponent(sc);
+  if (!isStripeCustomerId(stripeCustomerId)) throw new HttpError(400, "invalid_stripe_customer");
+  const appUserId = await lookupIndex(project.id, `stripe_cus:${stripeCustomerId}`);
+  if (!appUserId) throw new HttpError(404, "customer_not_linked", "Client Stripe non relié à un utilisateur MoneyMaker");
+  const entitlement = cleanId(req.body?.entitlement, 64);
+  if (!(entitlement in (project.config.entitlements ?? {}))) throw new HttpError(400, "unknown_entitlement");
+  const days = parseGrantDays(req.body?.days);
+  if (days === undefined) throw new HttpError(400, "invalid_duration");
+  auditNote("grant.update", { appUserId, entitlement, days, via: "stripe_app", stripeUser: userId });
+  const now = Date.now();
+  const ref = db.doc(`projects/${project.id}/customers/${appUserId}/purchases/promo_${entitlement}`);
+  const prev = (await ref.get()).data() as Purchase | undefined;
+  // Cumul comme RevenueCat : un nouvel accès prolonge l'accès promotionnel encore en cours.
+  const from = prev?.status === "active" && prev.expiresAt && prev.expiresAt > now ? prev.expiresAt : now;
+  await upsertPurchase(project, appUserId, {
+    id: `promo_${entitlement}`, store: "promotional", productId: `promo:${entitlement}`, type: "non_consumable", status: "active",
+    purchasedAt: prev?.purchasedAt ?? now, latestPurchaseAt: now, expiresAt: days === null ? null : from + days * 86400000,
+    willRenew: false, isTrial: false, isSandbox: false, priceMicros: 0, currency: project.config.currency, periodMonths: 0, billingIssue: false, updatedAt: now,
+  });
+  return stripeAppCustomer(project, stripeCustomerId);
+});
+// ══ fin Stripe App ══ ═══════════════════════════════════════════════════════
+
 const SIGNED_ROUTES = new Set([
   "GET /v1/customers/:id", "POST /v1/customers/:id/apple", "POST /v1/customers/:id/google",
   "POST /v1/customers/:id/alias", "POST /v1/customers/:id/test-purchase", "POST /v1/customers/:id/redeem",
@@ -1577,7 +1686,7 @@ async function sendSigned(req: Request, res: Response, out: unknown) {
 
 export async function handle(req: Request, res: Response) {
   res.set("Access-Control-Allow-Origin", "*");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Nonce");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Nonce, Stripe-Signature, X-Stripe-User-Id, X-Stripe-Account-Id");
   res.set("Access-Control-Expose-Headers", "X-MoneyMaker-Signature, X-Request-Time");
   res.set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }

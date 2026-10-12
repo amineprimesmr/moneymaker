@@ -58,7 +58,7 @@ $("#newProject").onclick = newProjectDialog;
 
 function go(patch) { Object.assign(state, patch); history.replaceState(null, "", state.projectId ? `#${state.projectId}/${state.tab}` : `#${state.view}`); route(); }
 function route() {
-  if (!state.projectId && location.hash.includes("/")) { const [pid, tab] = location.hash.slice(1).split("/"); if (state.projects.some(p => p.id === pid)) Object.assign(state, { view: "project", projectId: pid, tab }); }
+  if (!state.projectId && location.hash.includes("/")) { const [pid, tab, cust] = location.hash.slice(1).split("/"); if (state.projects.some(p => p.id === pid)) Object.assign(state, { view: "project", projectId: pid, tab, openCustomer: cust ? decodeURIComponent(cust) : null }); }
   document.querySelectorAll(".nav").forEach(b => b.classList.toggle("active", b.dataset.view === state.view && !state.projectId || b.dataset.project === state.projectId));
   const main = $("#main");
   main.innerHTML = `<div class="empty">Chargement…</div>`;
@@ -610,6 +610,8 @@ async function tabCustomers(el) {
   el.innerHTML = `<div id="audBox" class="card section"></div><div class="row section"><input id="cid" placeholder="Rechercher un appUserId exact…"><button class="primary" style="flex:0" id="find">Ouvrir</button>
     <label class="row" style="flex:0;white-space:nowrap"><input type="checkbox" id="paying" style="width:auto"> payants</label></div><div id="list" class="card"></div>`;
   $("#find").onclick = () => $("#cid").value.trim() && customerDialog($("#cid").value.trim());
+  // Lien profond #<pid>/customers/<appUserId> (ex. depuis l'app Stripe) : ouvre directement la fiche.
+  if (state.openCustomer) { const c = state.openCustomer; state.openCustomer = null; customerDialog(c); }
   const load = async () => {
     const { customers } = await api(`/v1/projects/${state.projectId}/customers?limit=100${$("#paying").checked ? "&paying=true" : ""}`);
     $("#list").innerHTML = customers.length ? `<table><thead><tr><th>Client</th><th>Accès</th><th>Payant</th><th>Dépensé</th><th>Vu</th></tr></thead><tbody>${customers.map(c =>

@@ -41,7 +41,9 @@ export async function connectStripe(project: Project, baseUrl: string, secretKey
     await db.doc(`projects/${project.id}/private/credentials`).set({ stripe: { secretKey } }, { merge: true });
     warning = `Webhook non créé (${(e as Error).message.slice(0, 120)}). Ajoute la permission « Webhook Endpoints : écriture » à la clé restreinte puis reconnecte, ou crée le webhook à la main vers ${url} et colle son secret whsec_ dans Réglages.`;
   }
-  await db.doc(`projects/${project.id}`).update({ "config.stripe.enabled": true, "config.stripe.accountName": account.settings?.dashboard?.display_name ?? account.business_profile?.name ?? account.id });
+  await db.doc(`projects/${project.id}`).update({ "config.stripe.enabled": true, "config.stripe.accountName": account.settings?.dashboard?.display_name ?? account.business_profile?.name ?? account.id,
+    // Compte Stripe relié : l'app Stripe (══ Stripe App ══ dans api.ts) refuse les requêtes signées pour un autre compte.
+    ...(account.id.startsWith("acct_") ? { "config.stripe.accountId": account.id } : {}) });
   const imported = await importStripeHistory(project, stripe);
   return { account: account.settings?.dashboard?.display_name ?? account.id, livemode: secretKey.includes("_live_"), webhookEndpoint, warning, ...imported };
 }

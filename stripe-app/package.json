@@ -1,0 +1,25 @@
+{
+  "name": "io.moneymaker.stripe",
+  "version": "0.1.0",
+  "description": "MoneyMaker dans le Dashboard Stripe : statut multi-store, MRR et accès promotionnels",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint",
+    "start": "stripe apps start",
+    "build": "stripe apps build"
+  },
+  "dependencies": {
+    "@stripe/ui-extension-sdk": "9.4.0",
+    "stripe": "^17.7.0"
+  },
+  "devDependencies": {
+    "@stripe/ui-extension-tools": "0.1.0",
+    "@types/react": "18.3.31",
+    "eslint": "9.0.0",
+    "typescript": "5.9.3"
+  }
+}

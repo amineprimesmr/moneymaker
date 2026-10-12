@@ -1,0 +1,8 @@
+{
+  "extends": "@stripe/ui-extension-tools/tsconfig.ui-extension",
+  "compilerOptions": {
+    "rootDir": ".",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true
+  }
+}
