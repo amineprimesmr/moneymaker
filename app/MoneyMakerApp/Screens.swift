@@ -137,6 +137,7 @@ struct RootTabView: View {
         .onChange(of: phase) { _, p in if p == .active { Task { await store.refreshLive() } } }
         .onChange(of: router.pending) { _, d in route(d) }
         .onAppear { route(router.pending) }
+        .onChange(of: store.overview?.projects.count) { _, _ in route(router.pending) }
     }
 
     private var tabs: some View {
@@ -157,6 +158,8 @@ struct RootTabView: View {
 
     private func route(_ d: Router.Destination?) {
         guard let d else { return }
+        // Lancement à froid : les écrans d'un business attendent la première vue d'ensemble.
+        switch d { case .project, .charts: if store.overview == nil { return }; default: break }
         router.pending = nil
         withAnimation(.snappy) {
             switch d {
