@@ -1,5 +1,5 @@
 {
-  "name": "@moneymaker/react-native",
+  "name": "moneymaker-react-native",
   "version": "1.1.1",
   "description": "MoneyMaker subscriptions SDK for React Native and Expo (App Store StoreKit 2 + Google Play Billing).",
   "main": "build/index.js",

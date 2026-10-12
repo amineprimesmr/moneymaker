@@ -5,7 +5,7 @@
 ## Install SDKs (1.1.1)
 - iOS (Swift Package Manager): `https://github.com/amineprimesmr/moneymaker`, from `1.1.1`.
 - Android (JitPack): `implementation("com.github.amineprimesmr:moneymaker:1.1.1")` + `maven("https://jitpack.io")`. Amazon Appstore: optional module `sdk/android/moneymaker-amazon`.
-- React Native / Expo: `npx expo install https://github.com/amineprimesmr/moneymaker/releases/download/1.1.1/moneymaker-react-native-1.1.1.tgz` then `npx expo prebuild` (development build, not Expo Go).
+- React Native / Expo: `npx expo install moneymaker-react-native` then `npx expo prebuild` (development build, not Expo Go).
 - Flutter: `moneymaker_flutter: { git: { url: https://github.com/amineprimesmr/moneymaker, path: sdk/flutter, ref: 1.1.1 } }` (Flutter 3.44+).
 
 ## Setup status (use it to know what is left)
