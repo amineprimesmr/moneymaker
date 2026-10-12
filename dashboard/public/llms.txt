@@ -2,6 +2,12 @@
 
 > Self-hosted alternative to RevenueCat. One backend for App Store (StoreKit 2), Google Play Billing and Stripe subscriptions: receipt validation, server notifications, entitlements, remote paywall offerings, metrics (MRR, churn, trials), outgoing signed webhooks. Base URL: https://moneymaker-io.web.app/v1
 
+## Install SDKs (1.1.1)
+- iOS (Swift Package Manager): `https://github.com/amineprimesmr/moneymaker`, from `1.1.1`.
+- Android (JitPack): `implementation("com.github.amineprimesmr:moneymaker:1.1.1")` + `maven("https://jitpack.io")`. Amazon Appstore: optional module `sdk/android/moneymaker-amazon`.
+- React Native / Expo: `npx expo install https://github.com/amineprimesmr/moneymaker/releases/download/1.1.1/moneymaker-react-native-1.1.1.tgz` then `npx expo prebuild` (development build, not Expo Go).
+- Flutter: `moneymaker_flutter: { git: { url: https://github.com/amineprimesmr/moneymaker, path: sdk/flutter, ref: 1.1.1 } }` (Flutter 3.44+).
+
 ## Setup status (use it to know what is left)
 `GET /v1/projects/{id}/setup` → `{ progress (0–1), next, steps: [{ id, title, done, optional, help }] }`. Steps auto-validate from real traffic (SDK call, Apple/Google notification received, Stripe webhook, first purchase). Human guide: https://moneymaker-io.web.app/guide
 

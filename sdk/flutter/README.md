@@ -9,7 +9,7 @@ Flutter plugin for [MoneyMaker](https://github.com/amineprimesmr/moneymaker) —
 ```yaml
 dependencies:
   moneymaker_flutter:
-    git: { url: https://github.com/amineprimesmr/moneymaker, path: sdk/flutter }
+    git: { url: https://github.com/amineprimesmr/moneymaker, path: sdk/flutter, ref: 1.1.1 }
 ```
 
 - iOS 16+. The Swift SDK is vendored in the pod (`tool/sync_native_sources.sh`).

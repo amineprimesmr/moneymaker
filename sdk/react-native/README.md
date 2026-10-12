@@ -11,7 +11,7 @@ Not supported in Expo Go: use a development build.
 **Expo (managed / prebuild)**
 
 ```sh
-npx expo install @moneymaker/react-native
+npx expo install https://github.com/amineprimesmr/moneymaker/releases/download/1.1.1/moneymaker-react-native-1.1.1.tgz
 npx expo prebuild   # or: eas build
 ```
 
@@ -22,7 +22,7 @@ Set `ios.deploymentTarget` to `16.0` with `expo-build-properties` if your projec
 
 ```sh
 npx install-expo-modules@latest   # once, if expo-modules-core is not set up yet
-npm install @moneymaker/react-native
+npm install https://github.com/amineprimesmr/moneymaker/releases/download/1.1.1/moneymaker-react-native-1.1.1.tgz
 cd ios && pod install
 ```
 
@@ -75,7 +75,7 @@ Dates are epoch milliseconds. Errors carry `error.code` (`not_configured`, `prod
 ## FR — en bref
 
 SDK React Native / Expo de MoneyMaker, basé sur les SDK natifs (StoreKit 2 et Google Play Billing).
-Installation Expo : `npx expo install @moneymaker/react-native` puis `npx expo prebuild` (pas d'Expo Go,
+Installation Expo : `npx expo install https://github.com/amineprimesmr/moneymaker/releases/download/1.1.1/moneymaker-react-native-1.1.1.tgz` puis `npx expo prebuild` (pas d'Expo Go,
 pas de plugin de config nécessaire). React Native nu : `npx install-expo-modules@latest`, `npm install`,
 puis `pod install`. Appelez `MoneyMaker.configure({ apiKey })` au démarrage, `getOfferings()` pour le
 paywall, `purchasePackage(pkg)` pour acheter, `isEntitled('premium')` ou `useEntitlement('premium')`
