@@ -1115,7 +1115,7 @@ route("POST", "/v1/devices/:id/test", async (req, _res, [id]) => {
   if (!d?.apnsToken) throw new HttpError(400, "no_apns_token");
   if (!(await apnsConfigured())) throw new HttpError(503, "apns_not_configured", "La clé APNs n'est pas encore configurée côté serveur.");
   const r = await apnsSend(d.env, d.apnsToken, "alert", {
-    aps: { alert: { title: "+9,99 € · MoneyMaker", subtitle: "Notification de test", body: "Nouvel abonné · mensuel · 🇫🇷 FR" }, sound: d.prefs?.sound === false ? "default" : "cash.caf", "thread-id": "test", category: "SALE" },
+    aps: { alert: { title: "+9,99 € · MoneyMaker", subtitle: "Notification de test", body: "Nouvel abonné · mensuel · 🇫🇷 FR" }, sound: saleSoundFile(d.prefs ?? {}), "thread-id": "test", category: "SALE" },
   });
   if (r.status !== 200) throw new HttpError(502, "apns_failed", r.reason ?? String(r.status));
   return { ok: true };

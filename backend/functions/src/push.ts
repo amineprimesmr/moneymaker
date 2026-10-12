@@ -28,14 +28,15 @@ export interface PushPrefs {
   insights: boolean;    // alertes intelligentes (baisse, record, remboursements, nouveau pays)
   dailySummary: boolean;
   sandbox: boolean;     // also notify for sandbox purchases (testing)
-  sound: boolean;       // cha-ching vs default sound
+  sound: boolean;       // cha-ching vs default sound (legacy, = saleSound !== "none")
+  saleSound: string;    // son des ventes : cash | coin | chime | levelup | pop | default | none
   liveActivityAuto: boolean; // server starts the Live Activity on the first sale of the day
   mutedProjects: string[];
 }
 
 export const DEFAULT_PREFS: PushPrefs = {
   sales: true, renewals: true, trials: true, churn: false, billing: true, refunds: true, rankings: true, insights: true,
-  dailySummary: true, sandbox: false, sound: true, liveActivityAuto: true, mutedProjects: [],
+  dailySummary: true, sandbox: false, sound: true, saleSound: "cash", liveActivityAuto: true, mutedProjects: [],
 };
 
 export interface Device {
@@ -50,6 +51,15 @@ export interface Device {
   updatedAt: number;
 }
 
+export const SALE_SOUNDS = new Set(["cash", "coin", "chime", "levelup", "pop", "default", "none"]);
+
+/** Fichier son APNs d'une vente selon les préférences (undefined = silencieux). */
+export function saleSoundFile(prefs: Partial<PushPrefs>): string | undefined {
+  const s = prefs.saleSound ?? (prefs.sound === false ? "default" : "cash");
+  if (s === "none") return undefined;
+  return s === "default" ? "default" : `${s}.caf`;
+}
+
 const HEX = /^[0-9a-f]{32,400}$/i;
 
 /** Validates a device payload from the app. Pure — unit-tested. */
@@ -62,7 +72,9 @@ export function sanitizeDevice(id: string, body: any, current?: Partial<Device>)
   const prefs = Object.fromEntries(Object.entries(prev).map(([k, v]) =>
     [k, k === "mutedProjects"
       ? (Array.isArray(prefsIn.mutedProjects) ? prefsIn.mutedProjects.map(String).slice(0, 100) : v)
+      : k === "saleSound" ? (SALE_SOUNDS.has(prefsIn.saleSound) ? prefsIn.saleSound : v)
       : typeof prefsIn[k] === "boolean" ? prefsIn[k] : v])) as unknown as PushPrefs;
+  if (typeof prefsIn.saleSound === "string" && SALE_SOUNDS.has(prefsIn.saleSound)) prefs.sound = prefsIn.saleSound !== "none";
   const la = body?.liveActivity ?? {};
   let tz = typeof body?.tz === "string" ? body.tz : current?.tz ?? "UTC";
   try { new Intl.DateTimeFormat("en", { timeZone: tz }); } catch { tz = "UTC"; }
@@ -134,7 +146,7 @@ export function eventNotification(project: Project, e: Record<string, any>, pref
   return {
     aps: {
       alert: { title, ...(subtitle ? { subtitle } : {}), body: bits.join(" · ") },
-      sound: loud && prefs.sound ? (isRevenue ? "cash.caf" : "default") : undefined,
+      sound: loud && prefs.sound !== false ? (isRevenue ? saleSoundFile(prefs) : prefs.saleSound === "none" ? undefined : "default") : undefined,
       "thread-id": `project-${project.id}`,
       "interruption-level": isRevenue ? "time-sensitive" : "active",
       "relevance-score": isRevenue ? Math.min(1, 0.5 + (e.priceMicros ?? 0) / 200e6) : 0.3,

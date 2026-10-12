@@ -15,7 +15,7 @@ final class ScreenshotTests: XCTestCase {
         app.launch()
         sleep(9)                      // animation d'entrée + chargement des données
         shot(app, "1-accueil")
-        for (name, link) in [("2-ventes", "moneymaker://feed"), ("3-planete", "moneymaker://globe"), ("4-pilotage", "moneymaker://plan")] {
+        for (name, link) in [("2-ventes", "moneymaker://feed"), ("3-planete", "moneymaker://globe"), ("4-graphiques", "moneymaker://charts")] {
             app.open(URL(string: link)!)
             sleep(5)
             shot(app, name)

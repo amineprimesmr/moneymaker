@@ -153,7 +153,7 @@ struct NetCard: View {
             ("Commission App Store / Google Play", -w.storeFeesMicros, MMColor.orange, true, "15 % (Small Business / Google) ou 30 %."),
             ("Frais de paiement Stripe", -w.paymentFeesMicros, MMColor.orange, true, "≈ 1,5 % + 0,25 € par paiement (carte européenne)."),
             ("CA net encaissé", w.netRevenueMicros, MMColor.blue, false, micro ? "Base de calcul de tes cotisations URSSAF." : "Ce qui arrive réellement sur ton compte, hors TVA."),
-            ("Charges", -w.expensesMicros, MMColor.ink3, true, "Tes dépenses (Pilotage) ou l'estimation en %."),
+            ("Charges", -w.expensesMicros, MMColor.ink3, true, "Estimation en % de tes charges."),
             (micro ? "Cotisations URSSAF" : "Cotisations", -w.socialMicros, MMColor.red, true,
              micro ? "Pourcentage de ton CA payé à l'URSSAF chaque mois ou trimestre (+ versement libératoire si tu l'as choisi)." : "Cotisations sociales."),
             ("Impôt sur les sociétés", -w.corporateTaxMicros, MMColor.red, true, "15 % jusqu'à 42 500 € de bénéfice, puis 25 %."),
@@ -338,7 +338,6 @@ struct FinanceSettingsSection: View {
         Task {
             _ = try? await store.client.saveFinance(changes)
             await model.load(store, force: true)
-            await PlanModel.shared.load(store, force: true)
             saving = false
         }
     }

@@ -32,18 +32,6 @@ final class SetupCache: ObservableObject {
     }
 }
 
-/// Un canal de revenus / de données et l'étape de mise en route qui le valide.
-private struct Channel: Identifiable {
-    let id: String, label: String, icon: String
-    static let all: [Channel] = [
-        .init(id: "sdk", label: "SDK", icon: "chevron.left.forwardslash.chevron.right"),
-        .init(id: "asc", label: "App Store", icon: "apple.logo"),
-        .init(id: "google", label: "Google Play", icon: "play.fill"),
-        .init(id: "stripe", label: "Stripe", icon: "creditcard.fill"),
-        .init(id: "appstore", label: "Classements", icon: "trophy.fill"),
-    ]
-}
-
 // MARK: - Icône d'un business
 
 /// Icône App Store du business (coins continus façon iOS), initiale en repli.
@@ -189,20 +177,9 @@ struct BusinessSideBar: View {
         VStack(alignment: .leading, spacing: 4) {
             Image("Logo").resizable().scaledToFit().frame(height: 30)
                 .shadow(color: .white.opacity(0.15), radius: 8)
-                .padding(.bottom, 14)
-            HStack {
-                Text("AFFICHER")
-                    .font(MMFont.system(11, .medium)).tracking(2.2).foregroundStyle(MMColor.ink3)
-                Spacer()
-                Text("\(store.activeIds.count) sur \(projects.count)")
-                    .font(MMFont.system(12, .medium)).foregroundStyle(MMColor.ink3)
-                    .contentTransition(.numericText())
-            }
-            Text(summary(projects)).font(MMFont.system(12)).foregroundStyle(MMColor.ink3).lineLimit(1).minimumScaleFactor(0.8)
-                .padding(.top, 2)
-
+                .padding(.bottom, 18)
             ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) {
                     ForEach(projects) { p in
                         Button { toggle(p.projectId) } label: { row(p) }
                             .buttonStyle(MMPressStyle(scale: 0.97))
@@ -252,88 +229,32 @@ struct BusinessSideBar: View {
         }
     }
 
-    /// « Connecté » = au moins une source de revenus branchée et validée, ou un achat déjà reçu.
-    /// (La mise en route à 100 % est une autre notion : elle est affichée sur chaque ligne.)
-    private static let sources: Set<String> = ["sdk", "asc", "google", "stripe", "firstPurchase"]
-
-    private func isConnected(_ p: ProjectSummary) -> Bool? {
-        guard let status = setup.byProject[p.projectId] else { return nil }
-        return status.steps.contains { Self.sources.contains($0.id) && $0.done } || p.mrrMicros > 0 || p.netRevenueMicros > 0
-    }
-
-    private func summary(_ projects: [ProjectSummary]) -> String {
-        let known = projects.compactMap(isConnected)
-        guard known.count == projects.count else { return "\(projects.count) business · vérification…" }
-        let connected = known.filter { $0 }.count
-        let toFinish = projects.filter { (setup.byProject[$0.projectId]?.progress ?? 1) < 1 }.count
-        var parts = ["\(projects.count) business", connected == projects.count ? "tous connectés" : "\(connected) connecté\(connected > 1 ? "s" : "")"]
-        if toFinish > 0 { parts.append("\(toFinish) à finir") }
-        return parts.joined(separator: " · ")
-    }
-
-    private func card<C: View>(selected: Bool, @ViewBuilder _ content: () -> C) -> some View {
-        content()
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white.opacity(selected ? 0.09 : 0.04)))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(selected ? MMColor.accent.opacity(0.85) : Color.white.opacity(0.06), lineWidth: selected ? 1.5 : 1))
-            .contentShape(Rectangle())
-            .animation(.snappy(duration: 0.25), value: selected)
-    }
-
     private func row(_ p: ProjectSummary) -> some View {
-        let status = setup.byProject[p.projectId]
-        let channels = Channel.all.filter { c in
-            guard let step = status?.steps.first(where: { $0.id == c.id }) else { return false }
-            return step.done || step.optional != true
-        }
-        let progress = status?.progress
+        let progress = setup.byProject[p.projectId]?.progress
         let selected = store.activeIds.contains(p.projectId)
-        return card(selected: selected) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 12) {
-                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(selected ? MMColor.accent : Color.white.opacity(0.3))
-                        .contentTransition(.symbolEffect(.replace))
-                    ProjectIcon(project: p, size: 40)
-                        .opacity(selected ? 1 : 0.45)
-                        .saturation(selected ? 1 : 0)
-                        .overlay(alignment: .bottomTrailing) {
-                            if let progress {
-                                Circle().fill(progress >= 1 ? MMColor.accent : MMColor.orange)
-                                    .frame(width: 10, height: 10)
-                                    .overlay(Circle().stroke(Color.black, lineWidth: 2))
-                                    .offset(x: 3, y: 3)
-                            }
-                        }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(p.name).font(MMFont.system(16, .semibold)).foregroundStyle(.white).lineLimit(1)
-                        Text(progress.map { $0 >= 1 ? "Tout est branché" : "Mise en route \(Int($0 * 100)) %" } ?? "Vérification…")
-                            .font(MMFont.system(12)).foregroundStyle(progress.map { $0 >= 1 ? MMColor.accent : MMColor.orange } ?? MMColor.ink3)
-                    }
-                    Spacer(minLength: 4)
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(p.mrrMicros.money(p.currency, compact: true)).font(MMFont.number(15, .regular)).foregroundStyle(.white)
-                        Text("\(p.activeSubscriptions) abonnés").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
+        return HStack(spacing: 14) {
+            ProjectIcon(project: p, size: 38)
+                .opacity(selected ? 1 : 0.4)
+                .saturation(selected ? 1 : 0)
+                .overlay(alignment: .bottomTrailing) {
+                    if let progress {
+                        Circle().fill(progress >= 1 ? MMColor.accent : MMColor.orange)
+                            .frame(width: 9, height: 9)
+                            .overlay(Circle().stroke(Color.black, lineWidth: 2))
+                            .offset(x: 3, y: 3)
                     }
                 }
-                if !channels.isEmpty {
-                    HStack(spacing: 6) {
-                        ForEach(channels) { c in
-                            let done = status?.steps.first(where: { $0.id == c.id })?.done == true
-                            Image(systemName: c.icon)
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(done ? MMColor.accent : MMColor.ink3)
-                                .frame(width: 26, height: 22)
-                                .background((done ? MMColor.accent : Color.white).opacity(done ? 0.14 : 0.06), in: Capsule())
-                                .accessibilityLabel("\(c.label) \(done ? "branché" : "à brancher")")
-                        }
-                    }
-                    .padding(.leading, 84)
-                }
-            }
+            Text(p.name).font(MMFont.system(17, .semibold))
+                .foregroundStyle(selected ? Color.white : MMColor.ink3).lineLimit(1)
+            Spacer(minLength: 8)
+            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(selected ? MMColor.accent : Color.white.opacity(0.25))
+                .contentTransition(.symbolEffect(.replace))
         }
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .animation(.snappy(duration: 0.25), value: selected)
         .offset(x: shake == p.projectId ? 8 : 0)
     }
 

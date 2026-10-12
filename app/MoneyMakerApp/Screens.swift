@@ -128,7 +128,16 @@ struct RootTabView: View {
         } content: { _ in
             tabs
         }
-        .task { await store.refresh() }
+        .overlay(alignment: .top) { IslandRefreshBanner(state: .home).ignoresSafeArea() }
+        .task {
+            // La goutte sort de l'île pendant la première synchro, coche verte à l'arrivée.
+            HealthSyncStatus.shared.begin()
+            await store.refresh()
+            // Les données arrivent souvent avant la fin de l'ouverture : la goutte a le temps d'être vue.
+            while !LaunchCoordinator.shared.revealed { try? await Task.sleep(for: .milliseconds(80)) }
+            try? await Task.sleep(for: .milliseconds(1300))
+            HealthSyncStatus.shared.finish(succeeded: store.error == nil)
+        }
         .task { await prompt.presentIfNeeded() }
         .sheet(isPresented: $prompt.isPresented) {
             NotificationPermissionView { prompt.enable() } secondaryAction: { prompt.later() }
@@ -166,7 +175,7 @@ struct RootTabView: View {
             case .today: tab = 0; homePath = NavigationPath()
             case .feed: tab = 1
             case .globe: tab = 2
-            case .project, .plan, .charts: tab = 0; homePath = NavigationPath(); homePath.append(d)
+            case .project, .charts: tab = 0; homePath = NavigationPath(); homePath.append(d)
             }
         }
     }
@@ -197,7 +206,6 @@ struct OverviewView: View {
                         let scope = store.viewIds
                         RevenueCard().mmAppear(1).mmDataSwap(scope)
                         NetCard().mmAppear(2).mmDataSwap(scope, delay: 0.03)
-                        PlanCard().mmAppear(2).mmDataSwap(scope, delay: 0.035)
                         mrrCard(o).mmAppear(2).mmDataSwap(scope, delay: 0.04)
                         stats(o).mmAppear(3).mmDataSwap(scope, delay: 0.08)
                         if !store.scopedAlerts.isEmpty { alerts.mmAppear(4).mmDataSwap(scope, delay: 0.12) }
@@ -219,11 +227,10 @@ struct OverviewView: View {
             }
             .scrollIndicators(.hidden)
             .simultaneousGesture(TapGesture().onEnded { store.clearFocus() })
-            .refreshable { await store.refresh() }
+            .islandRefreshable(.home) { await store.refresh(); return store.error == nil }
             .navigationDestination(for: ProjectSummary.self) { ProjectView(p: $0) }
             .navigationDestination(for: Router.Destination.self) { d in
                 if case .project(let id) = d, let p = store.overview?.projects.first(where: { $0.projectId == id }) { ProjectView(p: p) }
-                else if case .plan = d { PlanScreen() }
                 else if case .charts(let id) = d, let pid = id ?? store.selectedProject?.projectId ?? store.overview?.projects.first?.projectId {
                     ChartsScreen(projectId: pid)
                 }

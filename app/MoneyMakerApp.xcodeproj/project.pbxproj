@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		0095B39F4DF4E19D7F6A24E0 /* LiveServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F8C9B2ECD231050E024974A /* LiveServices.swift */; };
-		062A1D73A76B17A5E576B45A /* Plan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03C62595422A5AAD282765D3 /* Plan.swift */; };
 		0A6A777943ADFDD061F9E1AE /* WebSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA79FE47B32710C507EFC77 /* WebSignIn.swift */; };
 		0E0DF9F55F63CCCFC43BAF97 /* Finance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9CEEAB6A0F6F975061B40D2 /* Finance.swift */; };
 		19BDD03E12EDAD86DDEBBDE9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1097FC8E56F8174FC341976B /* Assets.xcassets */; };
@@ -21,6 +20,7 @@
 		4794E62556120F3F01B74FEE /* MMTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDD82E7144DFCD2E9CEB2649 /* MMTabBar.swift */; };
 		5136F7DBC24F48EC3D6CA704 /* cash.caf in Resources */ = {isa = PBXBuildFile; fileRef = 1C16D5B2A5EFA0E3324011BA /* cash.caf */; };
 		524AAF5826767D1D2CB7D926 /* Growth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3363C1059D0F3A8BB7B01D0E /* Growth.swift */; };
+		59ECB948AB8D8B9A1D53DB82 /* SyncIslandThreshold.metal in Sources */ = {isa = PBXBuildFile; fileRef = 788A031366AAAAB5EC2FB323 /* SyncIslandThreshold.metal */; };
 		5CEDC2CFC73F062E994B9B48 /* MMLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */; };
 		6C437D9CEE116445C4FB19A9 /* MoneyMakerWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7462A45DA2C0BCD45AD96986 /* MoneyMakerWidgets.swift */; };
 		7373A56139635C616E4FEEB0 /* land.json in Resources */ = {isa = PBXBuildFile; fileRef = A925D692B3BCE98ECBB2187E /* land.json */; };
@@ -34,6 +34,7 @@
 		AF79FEB78C3C31BD156BF1D8 /* BusinessSideBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B505E5DB6CC437E02CFFDC2 /* BusinessSideBar.swift */; };
 		B7EE6F0D843CE65B903EC25A /* ScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0766FA3E98182D13451DA68 /* ScreenshotTests.swift */; };
 		C15F68906BCC0285C1E981AD /* Screens.swift in Sources */ = {isa = PBXBuildFile; fileRef = F88B72061DA7660BF3CEB1FD /* Screens.swift */; };
+		C37B661FE683FB08F8463FC6 /* SyncBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FEFF0FBF7420753D830CBF3 /* SyncBanner.swift */; };
 		DD055D734B50B18D7BDBA8A8 /* CachedImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98A641DEF15038E8304BEEE0 /* CachedImage.swift */; };
 		E41FCBB3965C52B9646B6A79 /* ProjectInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */; };
 		ED2ECE641415901FA314EA93 /* DashboardWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 911E11FF37AB7E13CD4D68BF /* DashboardWidget.swift */; };
@@ -73,7 +74,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		03C62595422A5AAD282765D3 /* Plan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plan.swift; sourceTree = "<group>"; };
+		0FEFF0FBF7420753D830CBF3 /* SyncBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncBanner.swift; sourceTree = "<group>"; };
 		1097FC8E56F8174FC341976B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPermissionView.swift; sourceTree = "<group>"; };
 		1C16D5B2A5EFA0E3324011BA /* cash.caf */ = {isa = PBXFileReference; path = cash.caf; sourceTree = "<group>"; };
@@ -83,6 +84,7 @@
 		45EBE436171160AF8EA3DF70 /* MoneyMaker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MoneyMaker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A389B5ED64940A8BC40C6A3 /* MoneyMakerWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MoneyMakerWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7462A45DA2C0BCD45AD96986 /* MoneyMakerWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyMakerWidgets.swift; sourceTree = "<group>"; };
+		788A031366AAAAB5EC2FB323 /* SyncIslandThreshold.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = SyncIslandThreshold.metal; sourceTree = "<group>"; };
 		7F8C9B2ECD231050E024974A /* LiveServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveServices.swift; sourceTree = "<group>"; };
 		8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyMakerClient.swift; sourceTree = "<group>"; };
 		911E11FF37AB7E13CD4D68BF /* DashboardWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardWidget.swift; sourceTree = "<group>"; };
@@ -179,7 +181,6 @@
 				A82382FF73CC673CD177B62B /* LiveScreens.swift */,
 				7F8C9B2ECD231050E024974A /* LiveServices.swift */,
 				1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */,
-				03C62595422A5AAD282765D3 /* Plan.swift */,
 				A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */,
 				FDA79FE47B32710C507EFC77 /* WebSignIn.swift */,
 			);
@@ -194,6 +195,8 @@
 				DF8864A5BC74A1FB07813601 /* MMEffects.swift */,
 				DDD82E7144DFCD2E9CEB2649 /* MMTabBar.swift */,
 				AD9FF9FB850F74B6132F8088 /* SideMenu.swift */,
+				0FEFF0FBF7420753D830CBF3 /* SyncBanner.swift */,
+				788A031366AAAAB5EC2FB323 /* SyncIslandThreshold.metal */,
 			);
 			path = Design;
 			sourceTree = "<group>";
@@ -353,10 +356,11 @@
 				2F13A1B4CC19D980D0A815C3 /* MoneyMakerApp.swift in Sources */,
 				8EFD41694F6ACF6B5C362766 /* MoneyMakerClient.swift in Sources */,
 				2AFD4C6B033F517E98B4102C /* NotificationPermissionView.swift in Sources */,
-				062A1D73A76B17A5E576B45A /* Plan.swift in Sources */,
 				E41FCBB3965C52B9646B6A79 /* ProjectInsights.swift in Sources */,
 				C15F68906BCC0285C1E981AD /* Screens.swift in Sources */,
 				7811B4F791C9B3EBBC5C17E9 /* SideMenu.swift in Sources */,
+				C37B661FE683FB08F8463FC6 /* SyncBanner.swift in Sources */,
+				59ECB948AB8D8B9A1D53DB82 /* SyncIslandThreshold.metal in Sources */,
 				0A6A777943ADFDD061F9E1AE /* WebSignIn.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
