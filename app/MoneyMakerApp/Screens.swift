@@ -115,29 +115,22 @@ struct RootTabView: View {
         .init(tag: 0, title: "Accueil", icon: "square.grid.2x2.fill"),
         .init(tag: 1, title: "Ventes", icon: "bolt.fill"),
         .init(tag: 2, title: "Planète", icon: "globe.europe.africa.fill"),
-        .init(tag: 3, title: "Réglages", icon: "gearshape.fill"),
     ]
+    @State private var showSettings = false
 
     var body: some View {
         SideMenu(isEnabled: tab == 0 && homePath.isEmpty, isExpanded: $menuOpen, contentKey: "\(tab)|\(homePath.count)") { _ in
             BusinessSideBar(isExpanded: $menuOpen) { p in
                 homePath = NavigationPath(); homePath.append(p)
             } openSettings: {
-                withAnimation(.snappy) { tab = 3 }
+                menuOpen = false
+                showSettings = true
             }
         } content: { _ in
             tabs
         }
-        .overlay(alignment: .top) { IslandRefreshBanner(state: .home).ignoresSafeArea() }
-        .task {
-            // La goutte sort de l'île pendant la première synchro, coche verte à l'arrivée.
-            HealthSyncStatus.shared.begin()
-            await store.refresh()
-            // Les données arrivent souvent avant la fin de l'ouverture : la goutte a le temps d'être vue.
-            while !LaunchCoordinator.shared.revealed { try? await Task.sleep(for: .milliseconds(80)) }
-            try? await Task.sleep(for: .milliseconds(1300))
-            HealthSyncStatus.shared.finish(succeeded: store.error == nil)
-        }
+        .task { LaunchSync.runOnce(store) }
+        .sheet(isPresented: $showSettings) { LiveSettingsView() }
         .task { await prompt.presentIfNeeded() }
         .sheet(isPresented: $prompt.isPresented) {
             NotificationPermissionView { prompt.enable() } secondaryAction: { prompt.later() }
@@ -145,20 +138,24 @@ struct RootTabView: View {
         .onReceive(NotificationCenter.default.publisher(for: .mmLiveEvent)) { _ in Task { await store.refreshLive() } }
         .onChange(of: phase) { _, p in if p == .active { Task { await store.refreshLive() } } }
         .onChange(of: router.pending) { _, d in route(d) }
-        .onAppear { route(router.pending) }
+        .onAppear {
+            route(router.pending)
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["MM_OPEN_SETTINGS"] != nil { router.pending = .settings }
+            #endif
+        }
         .onChange(of: store.overview?.projects.count) { _, _ in route(router.pending) }
     }
 
     private var tabs: some View {
         ZStack(alignment: .bottom) {
             Color.black.ignoresSafeArea()
-            // Accueil, Ventes et Réglages restent montés (scroll et état conservés) ;
+            // L'Accueil reste monté (scroll et état conservés) ;
             // la planète n'est rendue que visible : elle anime 60 i/s.
             OverviewView(path: $homePath, menuOpen: $menuOpen).tabLayer(tab == 0)
             // Onglets secondaires : rendus seulement quand ils sont visibles (rien ne tourne en arrière-plan).
             if tab == 1 { NavigationStack { FeedScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
             if tab == 2 { NavigationStack { GlobeScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
-            if tab == 3 { NavigationStack { LiveSettingsView(embedded: true).toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
             MMTabBar(selection: $tab, items: items) { t in if t == 0 { withAnimation { homePath = NavigationPath() } } }
                 .padding(.bottom, 4)
                 .ignoresSafeArea(.keyboard)
@@ -175,6 +172,13 @@ struct RootTabView: View {
             case .today: tab = 0; homePath = NavigationPath()
             case .feed: tab = 1
             case .globe: tab = 2
+            case .settings:
+                // Après l'ouverture : une feuille présentée pendant le splash est ignorée.
+                Task {
+                    while !LaunchCoordinator.shared.revealed { try? await Task.sleep(for: .milliseconds(80)) }
+                    try? await Task.sleep(for: .milliseconds(300))
+                    showSettings = true
+                }
             case .project, .charts: tab = 0; homePath = NavigationPath(); homePath.append(d)
             }
         }
@@ -615,6 +619,25 @@ struct TrackedAppCard: View {
                     .scrollIndicators(.hidden)
                 }
             }
+        }
+    }
+}
+
+/// Synchro du lancement, détachée des vues : une vue recréée au démarrage n'annule plus la goutte.
+@MainActor
+enum LaunchSync {
+    private static var started = false
+    static func runOnce(_ store: Store) {
+        guard !started else { return }
+        started = true
+        Task { @MainActor in
+            // La goutte descend de l'île une fois l'app ouverte (jamais sous l'écran de lancement).
+            async let loaded: Void = store.refresh()
+            while !LaunchCoordinator.shared.revealed { try? await Task.sleep(for: .milliseconds(80)) }
+            HealthSyncStatus.shared.begin()
+            await loaded
+            try? await Task.sleep(for: .milliseconds(1300))
+            HealthSyncStatus.shared.finish(succeeded: store.error == nil)
         }
     }
 }

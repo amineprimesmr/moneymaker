@@ -19,6 +19,10 @@
 		425C064EB8D2A265790D5C41 /* MMLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */; };
 		4794E62556120F3F01B74FEE /* MMTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDD82E7144DFCD2E9CEB2649 /* MMTabBar.swift */; };
 		5136F7DBC24F48EC3D6CA704 /* cash.caf in Resources */ = {isa = PBXBuildFile; fileRef = 1C16D5B2A5EFA0E3324011BA /* cash.caf */; };
+		D8682AD3DA314401B4326DB0 /* pop.caf in Resources */ = {isa = PBXBuildFile; fileRef = 905B4E4D867B470A8580C11B /* pop.caf */; };
+		33D8D1ADD5A443A490F77611 /* levelup.caf in Resources */ = {isa = PBXBuildFile; fileRef = 76932BACF046462E95615AB2 /* levelup.caf */; };
+		6283EE5969794E8182FE0C8C /* chime.caf in Resources */ = {isa = PBXBuildFile; fileRef = F31D3C79C1C940919FB36114 /* chime.caf */; };
+		B19FFE66A2F0415BA380FDB6 /* coin.caf in Resources */ = {isa = PBXBuildFile; fileRef = C413B459B0174F91BDE3AB49 /* coin.caf */; };
 		524AAF5826767D1D2CB7D926 /* Growth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3363C1059D0F3A8BB7B01D0E /* Growth.swift */; };
 		59ECB948AB8D8B9A1D53DB82 /* SyncIslandThreshold.metal in Sources */ = {isa = PBXBuildFile; fileRef = 788A031366AAAAB5EC2FB323 /* SyncIslandThreshold.metal */; };
 		5CEDC2CFC73F062E994B9B48 /* MMLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */; };
@@ -78,6 +82,10 @@
 		1097FC8E56F8174FC341976B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPermissionView.swift; sourceTree = "<group>"; };
 		1C16D5B2A5EFA0E3324011BA /* cash.caf */ = {isa = PBXFileReference; path = cash.caf; sourceTree = "<group>"; };
+		905B4E4D867B470A8580C11B /* pop.caf */ = {isa = PBXFileReference; path = pop.caf; sourceTree = "<group>"; };
+		76932BACF046462E95615AB2 /* levelup.caf */ = {isa = PBXFileReference; path = levelup.caf; sourceTree = "<group>"; };
+		F31D3C79C1C940919FB36114 /* chime.caf */ = {isa = PBXFileReference; path = chime.caf; sourceTree = "<group>"; };
+		C413B459B0174F91BDE3AB49 /* coin.caf */ = {isa = PBXFileReference; path = coin.caf; sourceTree = "<group>"; };
 		21F9030100E848B1A39A4B16 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		2B505E5DB6CC437E02CFFDC2 /* BusinessSideBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessSideBar.swift; sourceTree = "<group>"; };
 		3363C1059D0F3A8BB7B01D0E /* Growth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Growth.swift; sourceTree = "<group>"; };
@@ -213,6 +221,10 @@
 			isa = PBXGroup;
 			children = (
 				1C16D5B2A5EFA0E3324011BA /* cash.caf */,
+				905B4E4D867B470A8580C11B /* pop.caf */,
+				76932BACF046462E95615AB2 /* levelup.caf */,
+				F31D3C79C1C940919FB36114 /* chime.caf */,
+				C413B459B0174F91BDE3AB49 /* coin.caf */,
 				F8609E850E6E511A47AC0F87 /* countries.json */,
 				A925D692B3BCE98ECBB2187E /* land.json */,
 			);
@@ -329,6 +341,10 @@
 			files = (
 				19BDD03E12EDAD86DDEBBDE9 /* Assets.xcassets in Resources */,
 				5136F7DBC24F48EC3D6CA704 /* cash.caf in Resources */,
+				D8682AD3DA314401B4326DB0 /* pop.caf in Resources */,
+				33D8D1ADD5A443A490F77611 /* levelup.caf in Resources */,
+				6283EE5969794E8182FE0C8C /* chime.caf in Resources */,
+				B19FFE66A2F0415BA380FDB6 /* coin.caf in Resources */,
 				24B06FD26A971ACE214EAB40 /* countries.json in Resources */,
 				7373A56139635C616E4FEEB0 /* land.json in Resources */,
 			);

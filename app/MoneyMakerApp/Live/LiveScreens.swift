@@ -7,6 +7,8 @@
 import SwiftUI
 import UserNotifications
 import WidgetKit
+import AVFoundation
+import AudioToolbox
 
 // MARK: - Carte « Revenu » (période au choix, 28 jours par défaut)
 
@@ -229,7 +231,36 @@ struct FeedScreen: View {
     }
 }
 
-// MARK: - Réglages notifications & widgets
+// MARK: - Réglages (ouverts depuis le menu latéral)
+
+/// Sons proposés pour les ventes. Le fichier `<id>.caf` est embarqué dans l'app (APNs le joue).
+struct SaleSound: Identifiable, Hashable {
+    let id: String, title: String, icon: String
+    static let all: [SaleSound] = [
+        .init(id: "cash", title: "Cha-ching", icon: "dollarsign.circle.fill"),
+        .init(id: "coin", title: "Pièce", icon: "circle.circle.fill"),
+        .init(id: "chime", title: "Carillon", icon: "bell.fill"),
+        .init(id: "levelup", title: "Level up", icon: "arrow.up.forward.circle.fill"),
+        .init(id: "pop", title: "Pop", icon: "bubble.fill"),
+        .init(id: "none", title: "Silencieux", icon: "speaker.slash.fill"),
+    ]
+}
+
+@MainActor
+private enum SoundPreview {
+    static var player: AVAudioPlayer?
+    static func play(_ id: String) {
+        switch id {
+        case "none": return
+        case "default": AudioServicesPlayAlertSound(1007)
+        default:
+            guard let url = Bundle.main.url(forResource: id, withExtension: "caf") else { return }
+            try? AVAudioSession.sharedInstance().setCategory(.ambient)
+            player = try? AVAudioPlayer(contentsOf: url)
+            player?.play()
+        }
+    }
+}
 
 struct LiveSettingsView: View {
     @EnvironmentObject var store: Store
@@ -239,122 +270,119 @@ struct LiveSettingsView: View {
     @State private var goal = MMShared.mrrGoal.map(String.init) ?? ""
     @State private var confirmDelete = false
     @State private var deleting = false
-    var embedded = false
+
+    private var denied: Bool { push.status == .denied }
 
     var body: some View {
-        if embedded { content } else {
-            NavigationStack {
-                content
-                    .navigationTitle("Notifications")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("OK") { dismiss() } } }
-            }
-            .presentationBackground(Color.black)
-        }
-    }
-
-    private var content: some View {
+        NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    if embedded {
-                        Text("Réglages").font(MMFont.system(34, .bold)).tracking(-0.8).padding(.top, 8).mmAppear(0)
-                    }
-                    statusCard.mmAppear(1)
-                    group("Ventes", [
-                        toggle("Nouveaux abonnés & achats", "arrow.up.right", \.sales),
-                        toggle("Renouvellements", "arrow.clockwise", \.renewals),
-                        toggle("Essais démarrés", "sparkles", \.trials),
-                    ]).mmAppear(2)
-                    group("Risques", [
-                        toggle("Problèmes de paiement", "exclamationmark.triangle", \.billing),
-                        toggle("Remboursements", "arrow.uturn.backward", \.refunds),
-                        toggle("Annulations & expirations", "xmark.circle", \.churn),
-                    ]).mmAppear(3)
-                    group("App Store & récap", [
-                        toggle("Classements App Store", "trophy", \.rankings),
-                        toggle("Alertes intelligentes (baisse, record, remboursements)", "sparkles", \.insights),
-                        toggle("Récap du soir (21 h)", "moon.stars", \.dailySummary),
-                    ]).mmAppear(4)
-                    group("Expérience", [
-                        toggle("Son « cha-ching »", "speaker.wave.2", \.sound),
-                        toggle("Live Activity automatique à la 1re vente", "dot.radiowaves.left.and.right", \.liveActivityAuto),
-                        toggle("Inclure les achats sandbox", "hammer", \.sandbox),
-                    ]).mmAppear(5)
-                    if let projects = store.overview?.projects, projects.count > 1 {
-                        MMLabel(text: "Business notifiés").padding(.horizontal, 4).padding(.top, 8)
-                        MMCard(padding: 0) {
-                            VStack(spacing: 0) {
-                                ForEach(Array(projects.enumerated()), id: \.element.id) { i, p in
-                                    if i > 0 { Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 18) }
-                                    Toggle(isOn: Binding(get: { !push.prefs.mutedProjects.contains(p.projectId) },
-                                                         set: { on in push.update { $0.mutedProjects.removeAll { $0 == p.projectId }; if !on { $0.mutedProjects.append(p.projectId) } } })) {
-                                        Text(p.name).font(MMFont.system(15))
-                                    }
-                                    .padding(.horizontal, 18).padding(.vertical, 12)
-                                }
+                VStack(alignment: .leading, spacing: 22) {
+                    statusCard.mmAppear(0)
+                    section("Me notifier pour", footer: "Toutes les notifications sont groupées par business.") {
+                        toggle("Ventes et renouvellements", "eurosign.circle.fill", MMColor.accent,
+                               get: { $0.sales || $0.renewals }, set: { $0.sales = $1; $0.renewals = $1 })
+                        divider
+                        toggle("Essais gratuits", "sparkles", MMColor.blue,
+                               get: { $0.trials }, set: { $0.trials = $1 })
+                        divider
+                        toggle("Paiements, remboursements, annulations", "exclamationmark.triangle.fill", .orange,
+                               get: { $0.billing || $0.refunds || $0.churn }, set: { $0.billing = $1; $0.refunds = $1; $0.churn = $1 })
+                        divider
+                        toggle("Classements et alertes intelligentes", "trophy.fill", .yellow,
+                               get: { $0.rankings || $0.insights }, set: { $0.rankings = $1; $0.insights = $1 })
+                        divider
+                        toggle("Récap du soir · 21 h", "moon.stars.fill", .purple,
+                               get: { $0.dailySummary }, set: { $0.dailySummary = $1 })
+                        if let projects = store.overview?.projects, projects.count > 1 {
+                            divider
+                            NavigationLink { MutedProjectsView(projects: projects) } label: {
+                                row("Business notifiés", "square.stack.3d.up.fill", MMColor.ink2,
+                                    value: "\(projects.count - projects.filter { push.prefs.mutedProjects.contains($0.projectId) }.count)/\(projects.count)")
                             }
+                            .buttonStyle(.plain)
                         }
                     }
-                    FinanceSettingsSection().mmAppear(6)
-                    widgetsCard.mmAppear(6)
-                    if embedded { accountCard.mmAppear(7) }
+                    .disabled(denied).opacity(denied ? 0.5 : 1)
+                    .mmAppear(1)
+
+                    soundSection.disabled(denied).opacity(denied ? 0.5 : 1).mmAppear(2)
+
+                    section("Live Activity et widgets") {
+                        toggle("Live Activity à la 1re vente du jour", "dot.radiowaves.left.and.right", .red,
+                               get: { $0.liveActivityAuto }, set: { $0.liveActivityAuto = $1 })
+                        divider
+                        Button { Task { live.isRunning ? await live.stop() : await live.start() } } label: {
+                            row(live.isRunning ? "Arrêter le direct" : "Lancer le direct maintenant", "play.circle.fill", MMColor.ink2)
+                        }
+                        .buttonStyle(.plain)
+                        divider
+                        HStack(spacing: 14) {
+                            icon("target", MMColor.accent)
+                            Text("Objectif de MRR").font(MMFont.system(15))
+                            Spacer()
+                            TextField("10000", text: $goal).keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                                .font(MMFont.number(16, .regular)).frame(width: 90)
+                                .onChange(of: goal) { _, v in
+                                    MMShared.mrrGoal = Int(v.filter(\.isNumber))
+                                    WidgetCenter.shared.reloadTimelines(ofKind: "MoneyMakerOverview")
+                                }
+                            Text(store.overview?.currency ?? "EUR").font(MMFont.system(13)).foregroundStyle(MMColor.ink3)
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 11)
+                    }
+                    .mmAppear(3)
+
+                    FinanceSettingsSection().mmAppear(4)
+
+                    section("Compte") {
+                        link("Dashboard web", "safari.fill", "https://moneymaker-io.web.app")
+                        divider
+                        link("Aide et contact", "questionmark.circle.fill", "https://moneymaker-io.web.app/support")
+                        divider
+                        link("Confidentialité et conditions", "hand.raised.fill", "https://moneymaker-io.web.app/privacy")
+                        divider
+                        toggle("Inclure les achats sandbox", "hammer.fill", MMColor.ink2,
+                               get: { $0.sandbox }, set: { $0.sandbox = $1 })
+                    }
+                    .mmAppear(5)
+
+                    VStack(spacing: 10) {
+                        Button { dismiss(); store.signOut() } label: {
+                            Text("Se déconnecter").font(MMFont.system(15, .medium)).foregroundStyle(MMColor.red)
+                                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                                .background(MMColor.red.opacity(0.12), in: Capsule())
+                        }
+                        .buttonStyle(MMPressStyle())
+                        Button { confirmDelete = true } label: {
+                            Text(deleting ? "Suppression…" : "Supprimer mon compte").font(MMFont.system(13)).foregroundStyle(MMColor.ink3)
+                        }
+                        .disabled(deleting)
+                    }
+                    .mmAppear(6)
+
                     if let e = push.lastError {
                         Text(e).font(MMFont.system(12)).foregroundStyle(MMColor.red).padding(.horizontal, 4)
                     }
+                    Text(versionLabel).font(MMFont.system(11)).foregroundStyle(MMColor.ink3).frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal, 16).padding(.bottom, 40)
+                .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 40)
                 .tint(MMColor.accent)
             }
             .scrollIndicators(.hidden)
-            .mmPage()
-            .task { await push.refreshAuthorization() }
-    }
-
-    private var accountCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            MMLabel(text: "Compte").padding(.horizontal, 4).padding(.top, 8)
-            MMCard(padding: 0) {
-                VStack(spacing: 0) {
-                    Link(destination: URL(string: "https://moneymaker-io.web.app")!) {
-                        HStack(spacing: 14) {
-                            Image(systemName: "safari").font(.system(size: 13, weight: .semibold)).foregroundStyle(MMColor.ink2).frame(width: 20)
-                            Text("Ouvrir le dashboard web").font(MMFont.system(15))
-                            Spacer()
-                            Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(MMColor.ink3)
-                        }
-                        .foregroundStyle(MMColor.ink)
-                        .padding(.horizontal, 16).padding(.vertical, 14)
-                    }
-                    Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 52)
-                    accountLink("hand.raised.fill", "Confidentialité", "https://moneymaker-io.web.app/privacy")
-                    Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 52)
-                    accountLink("doc.text.fill", "Conditions d'utilisation", "https://moneymaker-io.web.app/terms")
-                    Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 52)
-                    accountLink("questionmark.circle.fill", "Aide et contact", "https://moneymaker-io.web.app/support")
-                    Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 52)
-                    Button(role: .destructive) { store.signOut() } label: {
-                        HStack(spacing: 14) {
-                            Image(systemName: "rectangle.portrait.and.arrow.right").font(.system(size: 13, weight: .semibold)).frame(width: 20)
-                            Text("Déconnexion").font(MMFont.system(15))
-                            Spacer()
-                        }
-                        .foregroundStyle(MMColor.red)
-                        .padding(.horizontal, 16).padding(.vertical, 14)
-                    }
-                    Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 52)
-                    Button(role: .destructive) { confirmDelete = true } label: {
-                        HStack(spacing: 14) {
-                            Image(systemName: "trash.fill").font(.system(size: 13, weight: .semibold)).frame(width: 20)
-                            Text(deleting ? "Suppression…" : "Supprimer mon compte").font(MMFont.system(15))
-                            Spacer()
-                        }
-                        .foregroundStyle(MMColor.red)
-                        .padding(.horizontal, 16).padding(.vertical, 14)
-                    }
-                    .disabled(deleting)
+            .scrollDismissesKeyboard(.interactively)
+            .background(Color.black.ignoresSafeArea())
+            .navigationTitle("Réglages")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel("Fermer")
                 }
             }
+            .task { await push.refreshAuthorization() }
         }
+        .presentationBackground(Color.black)
+        .presentationDragIndicator(.visible)
+        .environment(\.colorScheme, .dark)
         .alert("Supprimer ton compte ?", isPresented: $confirmDelete) {
             Button("Supprimer définitivement", role: .destructive) {
                 deleting = true
@@ -362,7 +390,7 @@ struct LiveSettingsView: View {
                     struct R: Decodable { let ok: Bool }
                     let r: R? = try? await store.client.send("DELETE", "account", body: ["confirm": "SUPPRIMER"])
                     deleting = false
-                    if r?.ok == true { store.signOut() } else { push.lastError = "La suppression a échoué, réessaie." }
+                    if r?.ok == true { dismiss(); store.signOut() } else { push.lastError = "La suppression a échoué, réessaie." }
                 }
             }
             Button("Annuler", role: .cancel) {}
@@ -371,109 +399,163 @@ struct LiveSettingsView: View {
         }
     }
 
-    private func accountLink(_ icon: String, _ title: String, _ url: String) -> some View {
+    private var versionLabel: String {
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        return "MoneyMaker \(v)" + (store.isDemo ? " · démo" : "")
+    }
+
+    // MARK: Carte d'état
+
+    private var statusCard: some View {
+        let on = push.status == .authorized
+        return MMCard(padding: 18, radius: 24, glow: on ? MMColor.accent : nil) {
+            HStack(spacing: 14) {
+                Image(systemName: on ? "bell.badge.fill" : "bell.slash.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(on ? MMColor.accent : MMColor.ink3)
+                    .frame(width: 44, height: 44).background(Color.white.opacity(0.06), in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(on ? "Notifications actives" : denied ? "Notifications bloquées" : "Notifications éteintes")
+                        .font(MMFont.system(16, .semibold))
+                    Text(on ? "Chaque vente, en direct." : denied ? "À réactiver dans Réglages iOS." : "Active-les pour chaque vente.")
+                        .font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
+                }
+                Spacer(minLength: 8)
+                Button {
+                    if denied { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }
+                    else if !on { NotificationPrompt.shared.show() }
+                    else { Task { await push.sendTest() } }
+                } label: {
+                    Text(denied ? "Ouvrir" : !on ? "Activer" : push.testing ? "Envoi…" : "Tester")
+                        .font(MMFont.system(13, .semibold)).foregroundStyle(.black)
+                        .padding(.horizontal, 16).padding(.vertical, 9)
+                        .background(MMColor.accent, in: Capsule())
+                }
+                .buttonStyle(MMPressStyle())
+            }
+        }
+    }
+
+    // MARK: Son des ventes
+
+    private var soundSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            MMLabel(text: "Son des ventes").padding(.horizontal, 4)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                ForEach(SaleSound.all) { s in
+                    let selected = push.prefs.saleSound == s.id
+                    Button {
+                        SoundPreview.play(s.id)
+                        guard !selected else { return }
+                        push.update { $0.saleSound = s.id }
+                    } label: {
+                        VStack(spacing: 8) {
+                            Image(systemName: s.icon).font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(selected ? .black : MMColor.ink2)
+                                .symbolEffect(.bounce, value: selected)
+                            Text(s.title).font(MMFont.system(12, .medium))
+                                .foregroundStyle(selected ? .black : MMColor.ink)
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 14)
+                        .background(selected ? AnyShapeStyle(MMColor.accent) : AnyShapeStyle(Color.white.opacity(0.06)),
+                                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(Color.white.opacity(selected ? 0 : 0.08), lineWidth: 1))
+                    }
+                    .buttonStyle(MMPressStyle())
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+            .sensoryFeedback(.selection, trigger: push.prefs.saleSound)
+            Text("Touche un son pour l'écouter. Les alertes de paiement gardent le son du système.")
+                .font(MMFont.system(12)).foregroundStyle(MMColor.ink3).padding(.horizontal, 4)
+        }
+    }
+
+    // MARK: Briques
+
+    private var divider: some View {
+        Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 58)
+    }
+
+    private func section<C: View>(_ title: String, footer: String? = nil, @ViewBuilder _ rows: () -> C) -> some View {
+        let content = rows()
+        return VStack(alignment: .leading, spacing: 10) {
+            MMLabel(text: title).padding(.horizontal, 4)
+            MMCard(padding: 0) { VStack(spacing: 0) { content } }
+            if let footer { Text(footer).font(MMFont.system(12)).foregroundStyle(MMColor.ink3).padding(.horizontal, 4) }
+        }
+    }
+
+    private func icon(_ name: String, _ color: Color) -> some View {
+        Image(systemName: name).font(.system(size: 13, weight: .semibold)).foregroundStyle(color)
+            .frame(width: 30, height: 30).background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+
+    private func row(_ title: String, _ name: String, _ color: Color, value: String? = nil) -> some View {
+        HStack(spacing: 14) {
+            icon(name, color)
+            Text(title).font(MMFont.system(15)).foregroundStyle(MMColor.ink)
+            Spacer()
+            if let value { Text(value).font(MMFont.system(14)).foregroundStyle(MMColor.ink3) }
+            Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(MMColor.ink3)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 11)
+        .contentShape(.rect)
+    }
+
+    private func link(_ title: String, _ name: String, _ url: String) -> some View {
         Link(destination: URL(string: url)!) {
             HStack(spacing: 14) {
-                Image(systemName: icon).font(.system(size: 13, weight: .semibold)).foregroundStyle(MMColor.ink2).frame(width: 20)
-                Text(title).font(MMFont.system(15))
+                icon(name, MMColor.ink2)
+                Text(title).font(MMFont.system(15)).foregroundStyle(MMColor.ink)
                 Spacer()
                 Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(MMColor.ink3)
             }
-            .foregroundStyle(MMColor.ink)
-            .padding(.horizontal, 16).padding(.vertical, 14)
+            .padding(.horizontal, 16).padding(.vertical, 11)
         }
     }
 
-    private var statusCard: some View {
-        MMCard(padding: 18, radius: 24, glow: push.status == .authorized ? MMColor.accent : nil) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 12) {
-                    Image(systemName: push.status == .authorized ? "bell.badge.fill" : "bell.slash")
-                        .foregroundStyle(push.status == .authorized ? MMColor.accent : MMColor.ink3)
-                        .frame(width: 38, height: 38).background(Color.white.opacity(0.06), in: Circle())
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(push.status == .authorized ? "Notifications actives" : push.status == .denied ? "Notifications désactivées" : "Notifications à activer")
-                            .font(MMFont.system(15, .medium))
-                        Text(push.status == .denied ? "Réactive-les dans Réglages → MoneyMaker." : "Instantanées, groupées par business.")
-                            .font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
-                    }
-                    Spacer()
-                }
-                HStack(spacing: 10) {
-                    if push.status == .denied {
-                        pill("Ouvrir Réglages", filled: true) { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }
-                    } else if push.status != .authorized {
-                        pill("Activer", filled: true) { NotificationPrompt.shared.show() }
-                    } else {
-                        pill(push.testing ? "Envoi…" : "Envoyer un test", filled: true) { Task { await push.sendTest() } }
-                    }
-                    pill(live.isRunning ? "Arrêter le direct" : "Live Activity", filled: false) {
-                        Task { live.isRunning ? await live.stop() : await live.start() }
-                    }
-                }
+    private func toggle(_ title: String, _ name: String, _ color: Color,
+                        get: @escaping (PushPrefs) -> Bool, set: @escaping (inout PushPrefs, Bool) -> Void) -> some View {
+        Toggle(isOn: Binding(get: { get(push.prefs) }, set: { v in push.update { set(&$0, v) } })) {
+            HStack(spacing: 14) {
+                icon(name, color)
+                Text(title).font(MMFont.system(15)).lineLimit(2)
             }
         }
+        .padding(.horizontal, 16).padding(.vertical, 9)
+        .sensoryFeedback(.selection, trigger: get(push.prefs))
     }
+}
 
-    private var widgetsCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            MMLabel(text: "Widgets").padding(.horizontal, 4).padding(.top, 8)
-            MMCard(padding: 18, radius: 24) {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Objectif de MRR").font(MMFont.system(15))
-                        Spacer()
-                        TextField("10000", text: $goal).keyboardType(.numberPad).multilineTextAlignment(.trailing)
-                            .font(MMFont.number(17, .regular)).frame(width: 110)
-                            .onChange(of: goal) { _, v in
-                                MMShared.mrrGoal = Int(v.filter(\.isNumber))
-                                WidgetCenter.shared.reloadTimelines(ofKind: "MoneyMakerOverview")
-                            }
-                        Text(store.overview?.currency ?? "EUR").font(MMFont.system(13)).foregroundStyle(MMColor.ink3)
-                    }
-                    Rectangle().fill(MMColor.hairline).frame(height: 1)
-                    Text("Ajoute les widgets depuis l'écran d'accueil : Aujourd'hui, Ventes en direct, MRR (par business, avec objectif), Classements. Sur l'écran verrouillé et dans le Centre de contrôle aussi.")
-                        .font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
-                }
-            }
-        }
-    }
+/// Choix des business qui envoient des notifications.
+private struct MutedProjectsView: View {
+    let projects: [ProjectSummary]
+    @ObservedObject private var push = PushManager.shared
 
-    private func pill(_ title: String, filled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title).font(MMFont.system(13, .medium)).foregroundStyle(filled ? .black : MMColor.ink)
-                .frame(maxWidth: .infinity).padding(.vertical, 11)
-                .background(filled ? AnyShapeStyle(MMColor.accent) : AnyShapeStyle(Color.white.opacity(0.08)), in: Capsule())
-        }
-        .buttonStyle(MMPressStyle())
-    }
-
-    private func group(_ title: String, _ rows: [AnyView]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            MMLabel(text: title).padding(.horizontal, 4).padding(.top, 8)
+    var body: some View {
+        ScrollView {
             MMCard(padding: 0) {
                 VStack(spacing: 0) {
-                    ForEach(Array(rows.enumerated()), id: \.offset) { i, r in
-                        if i > 0 { Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 52) }
-                        r
+                    ForEach(Array(projects.enumerated()), id: \.element.id) { i, p in
+                        if i > 0 { Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 62) }
+                        Toggle(isOn: Binding(get: { !push.prefs.mutedProjects.contains(p.projectId) },
+                                             set: { on in push.update { $0.mutedProjects.removeAll { $0 == p.projectId }; if !on { $0.mutedProjects.append(p.projectId) } } })) {
+                            HStack(spacing: 14) {
+                                ProjectIcon(project: p, size: 32)
+                                Text(p.name).font(MMFont.system(15))
+                            }
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 10)
                     }
                 }
             }
-            .disabled(push.status == .denied)
-            .opacity(push.status == .denied ? 0.5 : 1)
+            .padding(16)
+            .tint(MMColor.accent)
         }
-    }
-
-    private func toggle(_ title: String, _ icon: String, _ key: WritableKeyPath<PushPrefs, Bool>) -> AnyView {
-        AnyView(
-            Toggle(isOn: Binding(get: { push.prefs[keyPath: key] }, set: { v in push.update { $0[keyPath: key] = v } })) {
-                HStack(spacing: 14) {
-                    Image(systemName: icon).font(.system(size: 13, weight: .semibold)).foregroundStyle(MMColor.ink2).frame(width: 20)
-                    Text(title).font(MMFont.system(15))
-                }
-            }
-            .padding(.horizontal, 16).padding(.vertical, 12)
-            .sensoryFeedback(.selection, trigger: push.prefs[keyPath: key])
-        )
+        .background(Color.black.ignoresSafeArea())
+        .navigationTitle("Business notifiés")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

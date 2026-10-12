@@ -11,8 +11,9 @@ import SwiftUI
 // MARK: - État
 
 /// Où en est la collecte HealthKit → upload → recalcul serveur.
+@Observable
 @MainActor
-final class HealthSyncStatus: ObservableObject {
+final class HealthSyncStatus {
 
     static let shared = HealthSyncStatus()
 
@@ -37,11 +38,11 @@ final class HealthSyncStatus: ObservableObject {
         }
     }
 
-    @Published private(set) var phase: Phase = .idle
+    private(set) var phase: Phase = .idle
     var isRefreshing: Bool { phase == .syncing }
-    let titles: () -> Titles
+    @ObservationIgnored let titles: () -> Titles
 
-    private var hideTask: Task<Void, Never>?
+    @ObservationIgnored private var hideTask: Task<Void, Never>?
 
     /// `titles` est relu à chaque affichage pour suivre le changement de langue.
     init(titles: @escaping () -> Titles = { .health }) {
@@ -108,9 +109,10 @@ struct HomeSyncBanner: View {
 
     /// État fourni par le parent (qui l'observe) : la bannière se réévalue à chaque changement.
     let status: HealthSyncStatus
-    let phase: HealthSyncStatus.Phase
-    let isSyncVisible: Bool
-    var scenePhase: ScenePhase = .active
+    @Environment(\.scenePhase) private var scenePhase
+    /// Lu directement (Observation) : la bannière suit la synchro sans dépendre de son parent.
+    private var phase: HealthSyncStatus.Phase { status.phase }
+    private var isSyncVisible: Bool { status.phase != .idle && scenePhase == .active }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Descente de la goutte pilotée par la synchro (0 ou 1, animée).
     @State private var syncProgress: CGFloat = 0
@@ -642,14 +644,10 @@ struct IslandRefreshBanner: View {
 /// Observe la synchro, l'ouverture de l'app et la scène, et passe l'état à la bannière.
 private struct IslandRefreshBannerBody: View {
     let pull: CGFloat
-    @ObservedObject var status: HealthSyncStatus
-    @ObservedObject private var launch = LaunchCoordinator.shared
-    @Environment(\.scenePhase) private var scenePhase
+    let status: HealthSyncStatus
 
     var body: some View {
-        HomeSyncBanner(pullProgress: pull, status: status, phase: status.phase,
-                       isSyncVisible: status.phase != .idle && launch.revealed && scenePhase == .active,
-                       scenePhase: scenePhase)
+        HomeSyncBanner(pullProgress: pull, status: status)
     }
 }
 

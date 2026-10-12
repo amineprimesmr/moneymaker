@@ -8,6 +8,8 @@ struct MoneyMakerApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                // La synchro descend de la Dynamic Island par-dessus toute l'app (comme V2).
+                .overlay(alignment: .top) { IslandRefreshBanner(state: .home).ignoresSafeArea() }
                 .overlay { if showsSplash { LaunchSplashView { showsSplash = false } } }
                 .onOpenURL { Router.shared.open($0) }
                 // fixed-scheme: the whole product (dashboard, widgets) is dark-only.
