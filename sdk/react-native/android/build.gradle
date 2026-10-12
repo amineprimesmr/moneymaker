@@ -1,0 +1,28 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+group = 'io.moneymaker.reactnative'
+version = '1.0.0'
+
+def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useExpoPublishing()
+
+android {
+  namespace "io.moneymaker.reactnative"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  // Same versions as sdk/android/moneymaker/build.gradle.kts (sources in src/main/java/io/moneymaker).
+  api "com.android.billingclient:billing-ktx:7.1.1"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0"
+}

@@ -3,6 +3,7 @@ import {
   JWSRenewalInfoDecodedPayload, ResponseBodyV2DecodedPayload,
 } from "@apple/app-store-server-library";
 import { APPLE_ROOT_CERTIFICATES } from "./appleRootCertificates";
+import { handleConsumptionRequest, recordRefundOutcome } from "./refund";
 import { toAlpha2 } from "./countries";
 import { dropImportedDuplicates } from "./revenuecat";
 import { Purchase, PurchaseStatus, PurchaseType, HttpError } from "./engine";
@@ -140,6 +141,16 @@ export async function ingestAppleNotification(project: Project, signedPayload: s
   const appUserId = await lookupIndex(project.id, `apple:${purchase.id}`, tx.appAccountToken ? `acct:${tx.appAccountToken.toLowerCase()}` : null)
     ?? `$apple:${purchase.id}`;
   if (!appUserId.startsWith("$")) await dropImportedDuplicates(project.id, appUserId, purchase.productId, "app_store");
+  const type = String(n.notificationType);
+  if (type === "CONSUMPTION_REQUEST") {
+    // Refund Control: answer Apple (12 h deadline) without touching the purchase state.
+    const rc = await handleConsumptionRequest(project, env, String(tx.transactionId ?? purchase.id), purchase.id, appUserId,
+      (data as any).consumptionRequestReason, purchase.productId);
+    return { notificationType: n.notificationType, appUserId, ...rc };
+  }
   const result = await upsertPurchase(project, appUserId, purchase, [`apple:${purchase.id}`]);
+  if (type === "REFUND" || type === "REFUND_DECLINED") {
+    await recordRefundOutcome(project, String(tx.transactionId ?? purchase.id), type === "REFUND" ? "refunded" : "declined").catch(() => null);
+  }
   return { notificationType: n.notificationType, subtype: n.subtype, appUserId, ...result };
 }

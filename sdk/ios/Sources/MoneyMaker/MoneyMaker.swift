@@ -180,6 +180,29 @@ public final class MoneyMaker: ObservableObject {
         #endif
     }
 
+    // MARK: Customer Center
+
+    /// Customer Center configuration set in the dashboard (survey, retention offer, support email).
+    public func loadCustomerCenterConfig() async throws -> CustomerCenterConfig {
+        try await api.get("customer-center")
+    }
+
+    /// Records a Customer Center answer (cancellation reason, accepted offer, refund…).
+    public func sendCustomerCenterFeedback(reason: String, comment: String? = nil, action: CustomerCenterAction) async throws {
+        var body: [String: Any] = ["reason": reason, "action": action.rawValue]
+        if let comment, !comment.isEmpty { body["comment"] = comment }
+        let _: FeedbackAck = try await api.send("customers/\(appUserID.urlPath)/customer-center/feedback", body: body)
+    }
+
+    /// Signs an App Store promotional offer (retention, win-back) on the MoneyMaker server
+    /// with the project's In-App Purchase key. Pass the result to `Product.PurchaseOption.promotionalOffer`.
+    public func signPromotionalOffer(productID: String, offerID: String) async throws -> PromotionalOfferSignature {
+        struct DTO: Decodable { let keyIdentifier: String; let nonce: String; let timestamp: Int; let signature: String }
+        let r: DTO = try await api.send("customers/\(appUserID.urlPath)/offers/apple/sign", body: ["productId": productID, "offerId": offerID])
+        guard let nonce = UUID(uuidString: r.nonce), let sig = Data(base64Encoded: r.signature) else { throw MoneyMakerError.productNotFound(productID) }
+        return PromotionalOfferSignature(keyID: r.keyIdentifier, nonce: nonce, signature: sig, timestamp: r.timestamp)
+    }
+
     // MARK: Internals
 
     /// Deterministic UUID shared with the backend so server notifications map back to this user.

@@ -14,7 +14,7 @@ const LABELS: Record<string, string> = {
   INITIAL_PURCHASE: "💰 Nouvel abonné", RENEWAL: "🔁 Renouvellement", TRIAL_STARTED: "✨ Essai démarré", TRIAL_CONVERTED: "🎉 Essai converti",
   CANCELLATION: "⚠️ Annulation", UNCANCELLATION: "↩️ Réactivation", EXPIRATION: "⌛ Expiration", BILLING_ISSUE: "💳 Problème de paiement",
   BILLING_RECOVERED: "✅ Paiement récupéré", REFUND: "↩️ Remboursement", PRODUCT_CHANGE: "🔀 Changement d'offre", NON_RENEWING_PURCHASE: "💰 Achat",
-  REVOKED: "⛔ Révoqué", PAUSED: "⏸️ En pause", GRANT: "🎁 Accès offert", TEST: "🧪 Test",
+  REVOKED: "⛔ Révoqué", PAUSED: "⏸️ En pause", GRANT: "🎁 Accès offert", CUSTOMER_CENTER_FEEDBACK: "📝 Retour Customer Center", TEST: "🧪 Test",
   NEW_COUNTRY: "🌍 Nouveau pays", TOP_100: "📈 Entrée dans le top 100", TOP_10: "🏆 Top 10", TOP_1: "🥇 Numéro 1", JUMP: "🚀 Forte hausse", DROP: "📉 Forte baisse",
 };
 const CHART_LABEL: Record<string, string> = { free: "Gratuites", paid: "Payantes", grossing: "Revenus" };
@@ -30,6 +30,7 @@ export function describe(project: Project, e: Record<string, any>): string {
     const move = e.prevRank ? ` (avant #${e.prevRank})` : "";
     return `${label} — *${e.appName ?? e.appId}* #${e.rank ?? "–"} ${where}${move}`;
   }
+  if (e.type === "CUSTOMER_CENTER_FEEDBACK") return `${label} — *${project.name}* · ${e.action} · « ${e.reason} »${e.comment ? ` — ${String(e.comment).slice(0, 300)}` : ""}`;
   const amount = e.priceMicros && !e.isTrial ? ` · ${money(e.priceMicros, e.currency)}` : "";
   const where = e.country ? ` · ${e.country}` : "";
   return `${label} — *${project.name}* · ${e.productId ?? ""}${amount}${where} · ${e.store ?? ""}${e.isSandbox ? " (sandbox)" : ""}`;

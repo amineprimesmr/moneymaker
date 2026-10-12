@@ -1,0 +1,46 @@
+{
+  "name": "@moneymaker/react-native",
+  "version": "1.0.0",
+  "description": "MoneyMaker subscriptions SDK for React Native and Expo (App Store StoreKit 2 + Google Play Billing).",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "react-native": "src/index.ts",
+  "source": "src/index.ts",
+  "files": [
+    "build",
+    "src",
+    "ios",
+    "android/build.gradle",
+    "android/src",
+    "expo-module.config.json",
+    "MoneyMakerReactNative.podspec",
+    "scripts"
+  ],
+  "scripts": {
+    "sync-native": "node scripts/sync-native.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepare": "node scripts/sync-native.js && tsc -p tsconfig.json"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "in-app-purchase",
+    "subscriptions",
+    "storekit",
+    "google-play-billing",
+    "moneymaker"
+  ],
+  "license": "MIT",
+  "homepage": "https://moneymakerr.com",
+  "peerDependencies": {
+    "expo": ">=52.0.0",
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "@types/react": "~18.3.0",
+    "expo-modules-core": "~2.2.0",
+    "typescript": "~5.6.0"
+  }
+}

@@ -143,6 +143,31 @@ class MoneyMaker private constructor(
         return deferred.await()
     }
 
+    // ── Customer Center ──
+
+    /** Customer Center configuration from the dashboard (survey, retention offer, support email). */
+    suspend fun customerCenterConfig(): JSONObject = api.get("customer-center")
+
+    /**
+     * Opens Google Play's subscription management for the active Play subscription
+     * (or the generic subscriptions list when there is none).
+     */
+    fun showCustomerCenter(activity: Activity) {
+        val sku = _customerInfo.value?.entitlements?.values
+            ?.firstOrNull { it.active && it.store == "play_store" }?.productId
+        val url = if (sku != null)
+            "https://play.google.com/store/account/subscriptions?sku=${enc(sku)}&package=${enc(activity.packageName)}"
+        else "https://play.google.com/store/account/subscriptions"
+        activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+    }
+
+    /** Records a cancellation reason / action. action ∈ cancel, accepted_offer, refund, dismissed, contact_support. */
+    suspend fun sendCustomerCenterFeedback(reason: String, action: String, comment: String? = null) {
+        val body = JSONObject().put("reason", reason).put("action", action)
+        if (!comment.isNullOrBlank()) body.put("comment", comment)
+        api.post("customers/${enc(appUserId)}/customer-center/feedback", body)
+    }
+
     /** Re-posts every purchase owned by the Google account. */
     suspend fun restorePurchases(): CustomerInfo {
         connect()

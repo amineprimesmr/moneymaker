@@ -6,14 +6,15 @@ import { HttpError, cleanId, Purchase } from "./engine";
 import type { Credentials } from "./store";
 import {
   db, getProject, createProject, customerInfo, mergeCustomers, touchCustomer, resolveKey, issueKey, revokeProjectKeys,
-  upsertPurchase, Project, ProjectConfig, getCredentials, KeyRecord, DEFAULT_CONFIG,
+  upsertPurchase, accountUUID, Project, ProjectConfig, getCredentials, KeyRecord, DEFAULT_CONFIG, CustomerCenterConfig,
 } from "./store";
 import { ingestAppleTransaction, ingestAppleNotification } from "./apple";
+import { sanitizeRefundControl, refundStats, DEFAULT_REFUND_CONTROL } from "./refund";
 import { ingestGooglePurchase, ingestGoogleNotification } from "./google";
 import { ingestStripeWebhook, createCheckout, createPortal } from "./stripe";
 import { projectMetrics, projectCohorts } from "./metrics";
 import { connectStripe, connectAppStore, connectGooglePlay, markConnected } from "./connect";
-import { sanitizeIntegrations } from "./integrations";
+import { sanitizeIntegrations, fanOut } from "./integrations";
 import { toRevenueCatSubscriber, promotionalDays } from "./rccompat";
 import { DEMO_TOKEN, DEMO_UID } from "./demo";
 import { searchApps, syncTrackers, translateReview, lookupApp, TrackedApp } from "./appstore";
@@ -112,9 +113,50 @@ function sanitizeConfig(input: any, current: ProjectConfig): ProjectConfig {
     if (!["subscriptions", "rankings"].includes(input.mode)) throw new HttpError(400, "invalid_mode");
     (next as any).mode = input.mode;
   }
+  if (input.customerCenter !== undefined) {
+    if (input.customerCenter === null) delete next.customerCenter;
+    else next.customerCenter = sanitizeCustomerCenter(input.customerCenter);
+  }
+  if (input.refundControl !== undefined) {
+    try { (next as any).refundControl = sanitizeRefundControl(input.refundControl); }
+    catch (e) { throw new HttpError(400, (e as Error).message); }
+  }
   if (input.stripe !== undefined) next.stripe = { enabled: Boolean(input.stripe.enabled), prices: input.stripe.prices };
   if (JSON.stringify(next).length > 200000) throw new HttpError(400, "config_too_large");
   return next;
+}
+
+const text = (v: unknown, max: number, code: string) => {
+  if (typeof v !== "string" || !v.trim() || v.length > max) throw new HttpError(400, code);
+  return v.trim();
+};
+
+function sanitizeCustomerCenter(c: any): CustomerCenterConfig {
+  if (typeof c !== "object" || Array.isArray(c)) throw new HttpError(400, "invalid_customer_center");
+  const out: CustomerCenterConfig = {
+    enabled: Boolean(c.enabled),
+    survey: { question: "Pourquoi souhaitez-vous annuler ?", options: ["Trop cher", "Je ne l'utilise pas assez", "Il manque une fonctionnalité", "Problème technique", "Autre"] },
+  };
+  if (c.supportEmail) {
+    const email = String(c.supportEmail).trim();
+    if (email.length > 200 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "invalid_support_email");
+    out.supportEmail = email;
+  }
+  if (c.survey !== undefined) {
+    const opts = c.survey?.options;
+    if (!Array.isArray(opts) || opts.length < 1 || opts.length > 10) throw new HttpError(400, "invalid_survey_options");
+    out.survey = { question: text(c.survey.question, 200, "invalid_survey_question"), options: opts.map(o => text(o, 100, "invalid_survey_option")) };
+  }
+  if (c.retentionOffer) {
+    const r = c.retentionOffer;
+    out.retentionOffer = {
+      message: text(r.message, 500, "invalid_retention_message"),
+      ...(r.productIdApple ? { productIdApple: cleanId(r.productIdApple, 200) } : {}),
+      ...(r.offerIdApple ? { offerIdApple: cleanId(r.offerIdApple, 200) } : {}),
+      ...(r.googleOfferId ? { googleOfferId: cleanId(r.googleOfferId, 200) } : {}),
+    };
+  }
+  return out;
 }
 
 function offeringsFor(project: Project) {
@@ -174,6 +216,28 @@ async function clientProject(req: Request) {
 
 route("GET", "/v1/offerings", async req => offeringsFor(await clientProject(req)));
 
+// ── Customer Center ──
+route("GET", "/v1/customer-center", async req => {
+  const cc = (await clientProject(req)).config.customerCenter;
+  return cc ?? { enabled: false, survey: { question: "", options: [] } };
+});
+
+const FEEDBACK_ACTIONS = ["cancel", "accepted_offer", "refund", "dismissed", "contact_support"];
+route("POST", "/v1/customers/:id/customer-center/feedback", async (req, _res, [id]) => {
+  const project = await clientProject(req);
+  const appUserId = cleanId(decodeURIComponent(id));
+  const action = String(req.body?.action ?? "");
+  if (!FEEDBACK_ACTIONS.includes(action)) throw new HttpError(400, "invalid_action", `action ∈ ${FEEDBACK_ACTIONS.join(", ")}`);
+  const reason = text(req.body?.reason, 200, "invalid_reason");
+  const comment = req.body?.comment ? String(req.body.comment).slice(0, 2000) : undefined;
+  const ref = db.collection(`projects/${project.id}/feedback`).doc();
+  const entry = { appUserId, reason, action, ...(comment ? { comment } : {}), createdAt: Date.now() };
+  await ref.set(entry);
+  const creds = await getCredentials(project.id).catch(() => null);
+  if (creds) await fanOut(project, creds, { id: ref.id, type: "CUSTOMER_CENTER_FEEDBACK", ...entry }, "event");
+  return { ok: true, id: ref.id };
+});
+
 route("GET", "/v1/customers/:id", async (req, _res, [id]) => {
   const project = await clientProject(req);
   const appUserId = cleanId(decodeURIComponent(id));
@@ -209,6 +273,23 @@ route("POST", "/v1/customers/:id/attributes", async (req, _res, [id]) => {
   const clean = Object.fromEntries(Object.entries(attrs).map(([k, v]) => [cleanId(k, 64), v === null ? FieldValue.delete() : String(v).slice(0, 500)]));
   await db.doc(`projects/${project.id}/customers/${appUserId}`).set({ attributes: clean, lastSeenAt: Date.now() }, { merge: true });
   return { ok: true };
+});
+
+/** Signs an Apple promotional offer (retention / win-back) with the project's In-App Purchase key. */
+route("POST", "/v1/customers/:id/offers/apple/sign", async (req, _res, [id]) => {
+  const project = await clientProject(req);
+  const appUserId = cleanId(decodeURIComponent(id));
+  const productId = cleanId(String(req.body?.productId ?? ""), 200), offerId = cleanId(String(req.body?.offerId ?? ""), 200);
+  const bundleId = project.config.apple?.bundleId;
+  const creds = await getCredentials(project.id);
+  if (!creds.apple?.privateKey || !bundleId) throw new HttpError(400, "apple_not_configured", "Upload the In-App Purchase key and set the bundle id");
+  const { PromotionalOfferSignatureCreator } = await import("@apple/app-store-server-library");
+  const { randomUUID } = await import("crypto");
+  const nonce = randomUUID().toLowerCase(), timestamp = Date.now();
+  const appAccountToken = accountUUID(appUserId).toLowerCase();
+  const signature = new PromotionalOfferSignatureCreator(creds.apple.privateKey, creds.apple.keyId, bundleId)
+    .createSignature(productId, offerId, appAccountToken, nonce, timestamp);
+  return { keyIdentifier: creds.apple.keyId, nonce, timestamp, signature, appAccountToken };
 });
 
 route("POST", "/v1/customers/:id/stripe/checkout", async (req, _res, [id]) =>
@@ -426,6 +507,14 @@ route("POST", "/v1/projects/:pid/customers/:id/grant", async (req, _res, [pid, i
   };
   await upsertPurchase(project, appUserId, purchase);
   return customerInfo(project, appUserId);
+});
+
+route("GET", "/v1/projects/:pid/refund-requests", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const snap = await db.collection(`projects/${project.id}/refundRequests`).orderBy("requestedAt", "desc").limit(Math.min(500, Number(req.query.limit ?? 200))).get();
+  const all = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+  const rows = req.query.sandbox === "true" ? all : all.filter(r => !r.isSandbox);
+  return { config: { ...DEFAULT_REFUND_CONTROL, ...((project.config as any).refundControl ?? {}) }, stats: refundStats(rows), requests: rows };
 });
 
 route("GET", "/v1/projects/:pid/events", async (req, _res, [pid]) => {

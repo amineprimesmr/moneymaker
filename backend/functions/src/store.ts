@@ -20,6 +20,14 @@ export interface ProjectConfig {
   stripe?: { enabled?: boolean; prices?: Record<string, { productId: string; periodMonths: number }> };
   integrations?: { appsflyer?: { appId: string; androidAppId?: string } };
   appStore?: { apps: { appId: string; own?: boolean }[] };
+  customerCenter?: CustomerCenterConfig;
+}
+
+export interface CustomerCenterConfig {
+  enabled: boolean;
+  supportEmail?: string;
+  retentionOffer?: { productIdApple?: string; offerIdApple?: string; googleOfferId?: string; message: string };
+  survey: { question: string; options: string[] };
 }
 
 export interface Project {

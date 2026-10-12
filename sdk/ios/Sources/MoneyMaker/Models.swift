@@ -123,3 +123,28 @@ enum JSONValue: Decodable, Hashable {
         }
     }
 }
+
+// MARK: - Customer Center
+
+public struct CustomerCenterConfig: Codable, Hashable, Sendable {
+    public struct RetentionOffer: Codable, Hashable, Sendable {
+        public let productIdApple: String?
+        public let offerIdApple: String?
+        public let googleOfferId: String?
+        public let message: String
+    }
+    public struct Survey: Codable, Hashable, Sendable {
+        public let question: String
+        public let options: [String]
+    }
+    public let enabled: Bool
+    public let supportEmail: String?
+    public let retentionOffer: RetentionOffer?
+    public let survey: Survey
+}
+
+public enum CustomerCenterAction: String, Sendable {
+    case cancel, acceptedOffer = "accepted_offer", refund, dismissed, contactSupport = "contact_support"
+}
+
+struct FeedbackAck: Decodable { let ok: Bool }

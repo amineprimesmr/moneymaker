@@ -1,0 +1,5 @@
+node_modules/
+build/
+# Copied from ../ios and ../android by scripts/sync-native.js (single source of truth)
+ios/MoneyMakerCore/
+android/src/main/java/io/moneymaker/*.kt
