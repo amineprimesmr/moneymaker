@@ -162,6 +162,8 @@ struct HomeSyncBanner: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Lecture explicite de l'état dans le corps : garantit le suivi (Observation) de la synchro.
+        .background { Text(verbatim: "\(phase)\(isSyncVisible)").opacity(0).accessibilityHidden(true) }
         .allowsHitTesting(false)
         .onChange(of: isSyncVisible, initial: true) { _, visible in
             runSequence(visible)
