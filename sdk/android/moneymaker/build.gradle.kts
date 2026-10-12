@@ -26,7 +26,7 @@ afterEvaluate {
         publications {
             create<MavenPublication>("release") {
                 from(components["release"])
-                groupId = "io.moneymaker"; artifactId = "moneymaker"; version = "1.0.0"
+                groupId = "io.moneymaker"; artifactId = "moneymaker"; version = "1.1.0"
             }
         }
     }
