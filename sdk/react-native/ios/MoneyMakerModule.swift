@@ -2,6 +2,12 @@ import ExpoModulesCore
 import StoreKit
 
 public final class MoneyMakerModule: Module {
+  /// Synchronous JS functions run on the JS thread: hop to the main actor (the SDK is @MainActor).
+  static func onMain<T>(_ body: @MainActor () throws -> T) rethrows -> T {
+    if Thread.isMainThread { return try MainActor.assumeIsolated(body) }
+    return try DispatchQueue.main.sync { try MainActor.assumeIsolated(body) }
+  }
+
   public func definition() -> ModuleDefinition {
     Name("MoneyMaker")
 
@@ -9,7 +15,7 @@ public final class MoneyMakerModule: Module {
 
     Constant("defaultBaseUrl") { MoneyMaker.defaultBaseURL.absoluteString }
 
-    Function("configure") { (apiKey: String, appUserId: String?, baseUrl: String?) throws in
+    Function("configure") { (apiKey: String, appUserId: String?, baseUrl: String?) throws in try Self.onMain {
       var url = MoneyMaker.defaultBaseURL
       if let baseUrl, !baseUrl.isEmpty {
         guard let parsed = URL(string: baseUrl) else { throw Self.error("invalid_base_url", "Invalid baseUrl: \(baseUrl)") }
@@ -19,22 +25,24 @@ public final class MoneyMakerModule: Module {
       mm.onCustomerInfoUpdate = { [weak self] info in
         self?.sendEvent("onCustomerInfoUpdated", Self.encode(info))
       }
-    }.runOnQueue(.main)
+    } }
 
-    Function("isConfigured") { MoneyMaker.isConfigured }.runOnQueue(.main)
+    Function("isConfigured") { Self.onMain { MoneyMaker.isConfigured } }
 
-    Function("getAppUserId") { () throws -> String in try Self.mm().appUserID }.runOnQueue(.main)
+    Function("getAppUserId") { () throws -> String in try Self.onMain { try Self.mm().appUserID } }
 
-    Function("isAnonymous") { () throws -> Bool in try Self.mm().isAnonymous }.runOnQueue(.main)
+    Function("isAnonymous") { () throws -> Bool in try Self.onMain { try Self.mm().isAnonymous } }
 
     Function("isEntitled") { (entitlement: String) -> Bool in
-      MoneyMaker.isConfigured ? MoneyMaker.shared.isEntitled(entitlement) : false
-    }.runOnQueue(.main)
+      Self.onMain { MoneyMaker.isConfigured ? MoneyMaker.shared.isEntitled(entitlement) : false }
+    }
 
     Function("getCachedCustomerInfo") { () -> [String: Any]? in
-      guard MoneyMaker.isConfigured, let info = MoneyMaker.shared.customerInfo else { return nil }
-      return Self.encode(info)
-    }.runOnQueue(.main)
+      Self.onMain {
+        guard MoneyMaker.isConfigured, let info = MoneyMaker.shared.customerInfo else { return nil }
+        return Self.encode(info)
+      }
+    }
 
     AsyncFunction("logIn") { (appUserId: String) async throws -> [String: Any] in
       try await Self.wrap { Self.encode(try await Self.mm().logIn(appUserId)) }
