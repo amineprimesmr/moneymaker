@@ -62,7 +62,7 @@ public struct MoneyMakerPaywall<Header: View>: View {
         let tint = config.colors?.accent.flatMap(Color.init(hex:)) ?? accent
         let fg = config.colors?.text.flatMap(Color.init(hex:)) ?? .primary
         let template = config.template ?? .stack
-        let packages = offering.packages.filter { $0.product != nil }
+        let packages = offering.packages.filter { $0.isAvailable }
         ZStack(alignment: .topTrailing) {
             (config.colors?.background.flatMap(Color.init(hex:)) ?? Color.clear).ignoresSafeArea()
             ScrollView {
@@ -149,7 +149,7 @@ public struct MoneyMakerPaywall<Header: View>: View {
             header
             if let offering {
                 VStack(spacing: 10) {
-                    ForEach(offering.packages.filter { $0.product != nil }) { package in
+                    ForEach(offering.packages.filter { $0.isAvailable }) { package in
                         PackageRow(package: package, selected: selected?.id == package.id, accent: accent)
                             .onTapGesture { selected = package }
                     }
@@ -174,8 +174,8 @@ public struct MoneyMakerPaywall<Header: View>: View {
             .font(.footnote).foregroundStyle(.secondary)
         }
         .padding(20)
-        .onAppear { if selected == nil { selected = offering?.packages.last(where: { $0.product != nil }) } }
-        .onChange(of: offering?.id) { _ in selected = offering?.packages.last(where: { $0.product != nil }) }
+        .onAppear { if selected == nil { selected = offering?.packages.last(where: { $0.isAvailable }) } }
+        .onChange(of: offering?.id) { _ in selected = offering?.packages.last(where: { $0.isAvailable }) }
     }
 
     private var ctaTitle: String {

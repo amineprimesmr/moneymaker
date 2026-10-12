@@ -12,6 +12,8 @@ import { ingestAppleTransaction, ingestAppleNotification } from "./apple";
 import { sanitizeRefundControl, refundStats, DEFAULT_REFUND_CONTROL } from "./refund";
 import { ingestGooglePurchase, ingestGoogleNotification } from "./google";
 import { ingestStripeWebhook, createCheckout, createPortal } from "./stripe";
+import { sanitizeWeb, publicOffering, withPrices, webCheckout, webSuccess, webPortal, manageLink, redeemWebPurchase } from "./web";
+import { ingestPaddleWebhook } from "./paddle";
 import { projectMetrics, projectCohorts } from "./metrics";
 import { connectStripe, connectAppStore, connectGooglePlay, markConnected } from "./connect";
 import { sanitizeIntegrations, fanOut } from "./integrations";
@@ -20,18 +22,22 @@ import { sanitizeExports, sanitizeExportSecrets } from "./exports";
 import { toRevenueCatSubscriber, promotionalDays } from "./rccompat";
 import { DEMO_TOKEN, DEMO_UID } from "./demo";
 import { AsyncLocalStorage } from "async_hooks";
+import { getSigningKey, signResponse, SIGNATURE_HEADER, REQUEST_TIME_HEADER, NONCE_HEADER } from "./signing";
 import { Role, roleOf, atLeast, defaultRequired } from "./roles";
 import { audit, listAudit, listMembers, createInvite, deleteInvite, peekInvite, acceptInvite, setMemberRole, removeMember } from "./team";
 import { projectChart } from "./chartsLoader";
 import { chartToCsv, CHART_NAMES } from "./charts";
 import { sanitizeOfferings, sanitizeTargeting, sanitizeExperiments, resolveOfferings, aggregateResults, PAYWALL_EVENT_TYPES, Context } from "./growth";
 import { searchApps, syncTrackers, translateReview, lookupApp, TrackedApp } from "./appstore";
+import { sanitizeAudiences, sanitizeFilters, audienceCsv, customerStatus } from "./audiences";
+import { sanitizeVirtualCurrencies, readWallet, moveWallet, parseAmount, parseIdempotencyKey } from "./wallet";
+import { projectLtv, audienceById, audienceCustomers, loadCustomerRows } from "./segmentsLoader";
 
 /** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
 export const PUBLIC_BASE = process.env.MONEYMAKER_PUBLIC_BASE ?? "https://moneymaker-io.web.app";
 
 type Caller =
-  | { kind: "public"; projectId: string }
+  | { kind: "public"; projectId: string; test?: boolean }
   | { kind: "secret"; projectId: string }
   | { kind: "user"; uid: string; email?: string; emailVerified?: boolean };
 
@@ -44,6 +50,7 @@ async function authenticate(req: Request): Promise<Caller> {
     const rec: KeyRecord | null = await resolveKey(raw);
     if (!rec) throw new HttpError(401, "invalid_api_key");
     if (rec.kind === "pat") return { kind: "user", uid: rec.uid! };
+    if (rec.kind === "test") return { kind: "public", projectId: rec.projectId!, test: true };
     return { kind: rec.kind, projectId: rec.projectId! };
   }
   try {
@@ -154,10 +161,23 @@ function sanitizeConfig(input: any, current: ProjectConfig): ProjectConfig {
     if (input.customerCenter === null) delete next.customerCenter;
     else next.customerCenter = sanitizeCustomerCenter(input.customerCenter);
   }
+  if (input.audiences !== undefined) {
+    try { (next as any).audiences = sanitizeAudiences(input.audiences ?? []); } catch (e) { throw new HttpError(400, (e as Error).message); }
+  }
+  if (input.virtualCurrencies !== undefined) {
+    try { (next as any).virtualCurrencies = sanitizeVirtualCurrencies(input.virtualCurrencies ?? []); } catch (e) { throw new HttpError(400, (e as Error).message); }
+  }
+  if (input.anomalies !== undefined) {
+    const a = input.anomalies ?? {};
+    const threshold = a.threshold === undefined ? 3 : Number(a.threshold);
+    if (!Number.isFinite(threshold) || threshold < 2 || threshold > 6) throw new HttpError(400, "invalid_anomaly_threshold");
+    (next as any).anomalies = { enabled: a.enabled !== false, threshold, weeklySummary: a.weeklySummary !== false };
+  }
   if (input.refundControl !== undefined) {
     try { (next as any).refundControl = sanitizeRefundControl(input.refundControl); }
     catch (e) { throw new HttpError(400, (e as Error).message); }
   }
+  if (input.web !== undefined) { const w = sanitizeWeb(input.web); if (w) (next as any).web = w; else delete (next as any).web; }
   if (input.stripe !== undefined) next.stripe = { enabled: Boolean(input.stripe.enabled), prices: input.stripe.prices };
   if (JSON.stringify(next).length > 200000) throw new HttpError(400, "config_too_large");
   return next;
@@ -299,6 +319,34 @@ route("POST", "/v1/customers/:id/apple", async (req, _res, [id]) => {
   const project = await clientProject(req);
   const r = await ingestAppleTransaction(project, cleanId(decodeURIComponent(id)), req.body?.signedTransaction, req.body?.signedRenewalInfo);
   return customerInfo(project, r.appUserId);
+});
+
+/** Test Store: only with a `mm_test_` key. Grants a sandbox purchase (store "test") without StoreKit / Play. */
+route("POST", "/v1/customers/:id/test-purchase", async (req, _res, [id]) => {
+  const caller = await authenticate(req);
+  if (caller.kind !== "public" || !caller.test) throw new HttpError(403, "test_key_required", "Use a Test Store key (mm_test_…)");
+  const project = await clientProject(req);
+  const appUserId = cleanId(decodeURIComponent(id));
+  const productId = cleanId(String(req.body?.productId ?? ""), 200);
+  const type: Purchase["type"] = ["subscription", "non_consumable", "consumable"].includes(req.body?.type) ? req.body.type : "subscription";
+  const periodMonths = type === "subscription" ? Math.min(12, Math.max(0.25, Number(req.body?.periodMonths ?? 1) || 1)) : 0;
+  const now = Date.now();
+  const { randomUUID } = await import("crypto");
+  const purchase: Purchase = {
+    id: `test_${randomUUID()}`, store: "test", productId, type, status: "active", purchasedAt: now, latestPurchaseAt: now,
+    expiresAt: type === "subscription" ? now + Math.round(periodMonths * 30 * 86400000) : null,
+    willRenew: false, isTrial: false, isSandbox: true, priceMicros: 0, currency: project.config.currency, periodMonths,
+    billingIssue: false, updatedAt: now,
+  };
+  await touchCustomer(project.id, appUserId);
+  await upsertPurchase(project, appUserId, purchase, []);
+  return customerInfo(project, appUserId);
+});
+
+/** Public Ed25519 key that verifies `X-MoneyMaker-Signature` (trusted entitlements). No auth. */
+route("GET", "/v1/signing-key", async () => {
+  const k = await getSigningKey();
+  return { algorithm: "Ed25519", format: "raw", publicKey: k.publicKeyRaw, message: "${nonce}.${X-Request-Time}.${sha256hex(body)}" };
 });
 
 route("POST", "/v1/customers/:id/google", async (req, _res, [id]) => {
@@ -452,11 +500,12 @@ route("GET", "/v1/projects/:pid", async (req, _res, [pid]) => {
   const base = PUBLIC_BASE;
   return {
     ...project,
-    credentials: { integrations: Object.keys(creds.integrations ?? {}), exports: Object.keys((creds as any).exports ?? {}), appStoreConnect: Boolean(creds.appStoreConnect), appsflyer: Boolean(creds.appsflyer), apple: Boolean(creds.apple), google: Boolean(creds.google), stripeKey: Boolean(creds.stripe?.secretKey), stripeWebhook: Boolean(creds.stripe?.webhookSecret) },
+    credentials: { integrations: Object.keys(creds.integrations ?? {}), exports: Object.keys((creds as any).exports ?? {}), appStoreConnect: Boolean(creds.appStoreConnect), appsflyer: Boolean(creds.appsflyer), apple: Boolean(creds.apple), google: Boolean(creds.google), stripeKey: Boolean(creds.stripe?.secretKey), stripeWebhook: Boolean(creds.stripe?.webhookSecret), paddle: Boolean((creds as any).paddle?.webhookSecret) },
     endpoints: {
       appleNotifications: `${base}/v1/webhooks/apple/${project.id}`,
       googleRtdn: `${base}/v1/webhooks/google/${project.id}?token=${creds.googleRtdnToken}`,
       stripeWebhook: `${base}/v1/webhooks/stripe/${project.id}`,
+      paddleWebhook: `${base}/v1/webhooks/paddle/${project.id}`,
     },
     webhookSigningSecret: project.role === "viewer" ? undefined : creds.webhookSigningSecret,
   };
@@ -513,6 +562,14 @@ route("PUT", "/v1/projects/:pid/credentials", async (req, _res, [pid]) => {
     const current = (await getCredentials(project.id)).stripe ?? {};
     update.stripe = { ...current, ...s };
   }
+  if (b.paddle) {
+    const s: Record<string, string> = {};
+    if (b.paddle.apiKey) { if (typeof b.paddle.apiKey !== "string" || b.paddle.apiKey.length < 20 || b.paddle.apiKey.length > 300) throw new HttpError(400, "invalid_paddle_api_key"); s.apiKey = b.paddle.apiKey.trim(); }
+    if (b.paddle.webhookSecret) { if (!/^pdl_ntfset_|^[A-Za-z0-9_]{16,}$/.test(String(b.paddle.webhookSecret))) throw new HttpError(400, "invalid_paddle_webhook_secret"); s.webhookSecret = String(b.paddle.webhookSecret).trim(); }
+    if (b.paddle.environment) s.environment = b.paddle.environment === "sandbox" ? "sandbox" : "production";
+    const current = ((await getCredentials(project.id)) as any).paddle ?? {};
+    update.paddle = { ...current, ...s };
+  }
   await db.doc(`projects/${project.id}/private/credentials`).set(update, { merge: true });
   return { ok: true, updated: Object.keys(update) };
 });
@@ -520,7 +577,7 @@ route("PUT", "/v1/projects/:pid/credentials", async (req, _res, [pid]) => {
 route("POST", "/v1/projects/:pid/keys", async (req, _res, [pid]) => {
   const caller = await authenticate(req);
   const project = await projectFor(caller, pid, false, req.body?.revokeExisting ? "admin" : undefined);
-  const kind = req.body?.kind === "public" ? "public" : "secret";
+  const kind = req.body?.kind === "public" ? "public" : req.body?.kind === "test" ? "test" : "secret";
   auditNote("keys.issue", { kind, revokeExisting: Boolean(req.body?.revokeExisting) });
   if (req.body?.revokeExisting) await revokeProjectKeys(project.id, kind);
   return { kind, key: await issueKey({ kind, projectId: project.id }) };
@@ -1127,7 +1184,8 @@ async function resolvedOfferings(req: Request, project: Project) {
     db.doc(`projects/${project.id}/experimentEnrollments/${e.experimentId}_${encodeURIComponent(appUserId)}`)
       .create({ experimentId: e.experimentId, variant: e.variant, offeringId: e.offeringId, placement: e.placement, appUserId, at: Date.now(), platform: ctx.platform ?? null, country: ctx.country ?? null })
       .catch(() => null)));
-  return { current: r.current, offerings: cfg.offerings, placements: r.placements, experiments: r.experiments };
+  // `entitlements` (entitlement → product ids) lets SDKs compute entitlements offline from local store transactions.
+  return { current: r.current, offerings: cfg.offerings, placements: r.placements, experiments: r.experiments, entitlements: cfg.entitlements ?? {} };
 }
 
 route("POST", "/v1/customers/:id/paywall-events", async (req, _res, [id]) => {
@@ -1176,6 +1234,105 @@ route("GET", "/v1/projects/:pid/experiments/:eid/results", async (req, _res, [pi
   return { experiment: exp, currency: project.config.currency, variants: aggregateResults(exp.variants, enrollments, tx, impressions), paywallEvents: stats.get("variants") ?? {} };
 });
 // ══ end Growth ═════════════════════════════════════════════════════════════════════════
+
+// ── Prédiction de LTV (ltv.ts) ─────────────────────────────────────────────
+route("GET", "/v1/projects/:pid/ltv-prediction", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  return projectLtv(project, String(req.query.groupBy ?? "product"));
+});
+
+// ── Audiences (audiences.ts) ───────────────────────────────────────────────
+const audienceRow = (r: any, now: number) => ({ id: r.id, status: customerStatus(r.purchases, now), country: r.country, firstSeenAt: r.firstSeenAt,
+  lastSeenAt: r.lastSeenAt ?? null, totalSpentMicros: r.totalSpentMicros, activeEntitlements: r.activeEntitlements, appleAdsCampaign: r.appleAds?.campaignId ?? null,
+  products: [...new Set(r.purchases.map((p: any) => p.productId))], stores: [...new Set(r.purchases.map((p: any) => p.store))] });
+
+route("GET", "/v1/projects/:pid/audiences", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const audiences = ((project.config as any).audiences ?? []) as any[];
+  if (req.query.counts === "false" || !audiences.length) return { audiences };
+  const { rows, truncated } = await loadCustomerRows(project);
+  const now = Date.now();
+  const { matchAudience } = await import("./audiences");
+  return { audiences: audiences.map(a => ({ ...a, count: rows.filter(r => matchAudience(a.filters, r, now)).length })), truncated };
+});
+
+/** Filtres non enregistrés (constructeur du dashboard) : nombre + premier aperçu. */
+route("POST", "/v1/projects/:pid/audiences/preview", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid, false, "viewer");
+  const requestCtxStore = requestCtx.getStore(); if (requestCtxStore) requestCtxStore.skipAudit = true;
+  let filters;
+  try { filters = sanitizeFilters(req.body?.filters ?? {}); } catch (e) { throw new HttpError(400, (e as Error).message); }
+  const now = Date.now();
+  const { rows, scanned, truncated } = await audienceCustomers(project, { filters }, now);
+  return { filters, count: rows.length, scanned, truncated, customers: rows.slice(0, 50).map(r => audienceRow(r, now)) };
+});
+
+route("GET", "/v1/projects/:pid/audiences/:aid/customers", async (req, res, [pid, aid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const audience = audienceById(project, cleanId(aid, 64));
+  const now = Date.now();
+  const { rows, scanned, truncated } = await audienceCustomers(project, audience, now);
+  if (req.query.format === "csv") {
+    res.set("Content-Type", "text/csv; charset=utf-8");
+    res.set("Content-Disposition", `attachment; filename="${audience.id}.csv"`);
+    res.status(200).send(audienceCsv(rows, now));
+    return;
+  }
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit ?? 100) || 100));
+  const offset = Math.max(0, Number(req.query.cursor ?? 0) || 0);
+  const page = rows.slice(offset, offset + limit);
+  return { audience, count: rows.length, scanned, truncated, customers: page.map(r => audienceRow(r, now)), nextCursor: offset + limit < rows.length ? String(offset + limit) : null };
+});
+
+// ── Monnaie virtuelle (wallet.ts) ──────────────────────────────────────────
+const currenciesOf = (project: Project) => ((project.config as any).virtualCurrencies ?? []) as { code: string; name: string }[];
+function walletCode(project: Project, raw: string) {
+  const code = decodeURIComponent(raw).toUpperCase();
+  if (!currenciesOf(project).some(c => c.code === code)) throw new HttpError(404, "unknown_virtual_currency");
+  return code;
+}
+async function walletMove(req: Request, id: string, rawCode: string, kind: "spend" | "grant") {
+  const caller = await authenticate(req);
+  if (caller.kind !== "secret") throw new HttpError(403, "secret_key_required", "Server-side only: use the project's secret key (mm_sk_…)");
+  const project = await getProject(caller.projectId);
+  const ctx = requestCtx.getStore(); if (ctx) { ctx.projectId = project.id; ctx.actor = "key:secret"; }
+  const appUserId = cleanId(decodeURIComponent(id)), code = walletCode(project, rawCode);
+  let amount: number, key: string | undefined;
+  try {
+    amount = parseAmount(req.body?.amount);
+    key = kind === "spend" || req.body?.idempotencyKey !== undefined ? parseIdempotencyKey(req.body?.idempotencyKey) : undefined;
+  } catch (e) { throw new HttpError(400, (e as Error).message); }
+  auditNote(`wallet.${kind}`, { appUserId, code, amount });
+  try {
+    const r = await moveWallet(project.id, appUserId, code, amount, kind, key, req.body?.reason ? String(req.body.reason).slice(0, 100) : undefined);
+    return { ...r, wallet: await readWallet(project.id, appUserId, currenciesOf(project) as any) };
+  } catch (e) {
+    const m = (e as Error).message;
+    if (m === "insufficient_balance") throw new HttpError(402, m, "Solde insuffisant");
+    if (m === "idempotency_key_reused") throw new HttpError(409, m, "Clé d'idempotence déjà utilisée pour une autre opération");
+    throw e;
+  }
+}
+
+route("GET", "/v1/customers/:id/wallet", async (req, _res, [id]) => {
+  const project = await clientProject(req);
+  return readWallet(project.id, cleanId(decodeURIComponent(id)), currenciesOf(project) as any);
+});
+route("POST", "/v1/customers/:id/wallet/:code/spend", async (req, _res, [id, code]) => walletMove(req, id, code, "spend"));
+route("POST", "/v1/customers/:id/wallet/:code/grant", async (req, _res, [id, code]) => walletMove(req, id, code, "grant"));
+
+/** Dashboard : solde d'un client vu depuis le projet. */
+route("GET", "/v1/projects/:pid/customers/:id/wallet", async (req, _res, [pid, id]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  return readWallet(project.id, cleanId(decodeURIComponent(id)), currenciesOf(project) as any);
+});
+
+// ── Anomalies (anomalies.ts) ───────────────────────────────────────────────
+route("GET", "/v1/projects/:pid/anomalies", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const snap = await db.collection(`projects/${project.id}/anomalies`).orderBy("at", "desc").limit(Math.min(200, Number(req.query.limit ?? 50) || 50)).get();
+  return { anomalies: snap.docs.map(d => ({ id: d.id, ...d.data() })) };
+});
 
 // ── Charts (RevenueCat parity) ─────────────────────────────────────────────
 route("GET", "/v1/charts", async () => ({ charts: CHART_NAMES }));
@@ -1255,10 +1412,58 @@ route("GET", "/v1/projects/:pid/audit", async (req, _res, [pid]) => {
   return listAudit(project.id, Number(req.query.limit ?? 100), req.query.before ? Number(req.query.before) : undefined);
 });
 
+// ══ Web ══════════════════════════════════════════════════════════════════
+// Hosted web paywall /pay/{pid}/{oid}, success + redemption, customer portal /manage/{pid}, Paddle Billing.
+route("POST", "/v1/webhooks/paddle/:pid", async (req, _res, [pid]) => {
+  const project = await getProject(cleanId(pid));
+  const r = await ingestPaddleWebhook(project, req.rawBody, req.get("paddle-signature"));
+  await markHealth(project.id, "paddleWebhook");
+  return r;
+});
+
+// Public (no key: the hosted page has none). Only sanitized offering + paywall + Stripe price display info.
+route("GET", "/v1/web/:pid/offering/:oid", async (req, _res, [pid, oid]) => {
+  const project = await getProject(cleanId(pid));
+  return withPrices(project, publicOffering(project, cleanId(decodeURIComponent(oid), 64)));
+});
+// Checkout only for a package of that offering (price id never taken from the client).
+route("POST", "/v1/web/:pid/offering/:oid/checkout", async (req, _res, [pid, oid]) =>
+  webCheckout(await getProject(cleanId(pid)), decodeURIComponent(oid), req.body, PUBLIC_BASE));
+route("GET", "/v1/web/:pid/success", async (req, _res, [pid]) =>
+  webSuccess(await getProject(cleanId(pid)), String(req.query.session_id ?? ""), PUBLIC_BASE));
+route("POST", "/v1/web/:pid/portal", async (req, _res, [pid]) => webPortal(await getProject(cleanId(pid)), req.body, PUBLIC_BASE));
+
+// SDK (public key).
+route("POST", "/v1/customers/:id/redeem", async (req, _res, [id]) => {
+  const project = await clientProject(req);
+  const appUserId = cleanId(decodeURIComponent(id));
+  await redeemWebPurchase(project, appUserId, String(req.body?.token ?? ""));
+  return customerInfo(project, appUserId);
+});
+route("POST", "/v1/customers/:id/manage-link", async (req, _res, [id]) =>
+  manageLink(await clientProject(req), cleanId(decodeURIComponent(id)), PUBLIC_BASE));
+// ══ /Web ═════════════════════════════════════════════════════════════════
+
 // ── Dispatcher ─────────────────────────────────────────────────────────────
+/** Routes returning customer info are signed (trusted entitlements, see signing.ts). */
+const SIGNED_ROUTES = new Set([
+  "GET /v1/customers/:id", "POST /v1/customers/:id/apple", "POST /v1/customers/:id/google",
+  "POST /v1/customers/:id/alias", "POST /v1/customers/:id/test-purchase", "POST /v1/customers/:id/redeem",
+]);
+async function sendSigned(req: Request, res: Response, out: unknown) {
+  const body = JSON.stringify(out);
+  const time = Date.now();
+  const nonce = String(req.get(NONCE_HEADER) ?? "").slice(0, 128);
+  res.set(REQUEST_TIME_HEADER, String(time));
+  try { res.set(SIGNATURE_HEADER, signResponse((await getSigningKey()).privateKey, nonce, time, body)); }
+  catch (e) { console.error("signing_failed", e); }
+  res.status(200).type("application/json").send(body);
+}
+
 export async function handle(req: Request, res: Response) {
   res.set("Access-Control-Allow-Origin", "*");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Nonce");
+  res.set("Access-Control-Expose-Headers", "X-MoneyMaker-Signature, X-Request-Time");
   res.set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
   const path = req.path.replace(/^\/api(?=\/)/, "");
@@ -1276,6 +1481,7 @@ export async function handle(req: Request, res: Response) {
           ...(ctx.auditDetails ?? {}),
         });
       }
+      if (!res.headersSent && SIGNED_ROUTES.has(`${method} ${pattern}`)) { await sendSigned(req, res, out ?? { ok: true }); return; }
       if (!res.headersSent) res.status(200).json(out ?? { ok: true });
       return;
     }

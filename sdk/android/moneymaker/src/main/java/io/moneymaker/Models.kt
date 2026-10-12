@@ -14,7 +14,15 @@ data class CustomerInfo(
     val activeEntitlements: List<String>,
     val attributes: Map<String, String>,
     internal val raw: JSONObject,
+    /** Signature check of this response (trusted entitlements). */
+    val verification: VerificationResult = VerificationResult.NOT_REQUESTED,
 ) {
+    /** Same info with every entitlement inactive (enforced mode after failed verification). */
+    internal fun revokingEntitlements() = copy(
+        entitlements = entitlements.mapValues { it.value.copy(active = false) }, activeEntitlements = emptyList(),
+        verification = VerificationResult.FAILED,
+    )
+
     fun isEntitled(id: String, now: Long = System.currentTimeMillis()): Boolean {
         val e = entitlements[id] ?: return false
         return e.active && (e.expiresAt == null || e.expiresAt > now)
@@ -41,7 +49,12 @@ data class CustomerInfo(
     }
 }
 
-data class Package(val id: String, val productIds: Map<String, String>, val metadata: Map<String, String>, val product: ProductDetails?) {
+data class Package(
+    val id: String, val productIds: Map<String, String>, val metadata: Map<String, String>, val product: ProductDetails?,
+    /** Configured with a Test Store key (`mm_test_…`): purchasable without Google Play. */
+    val isTestStore: Boolean = false,
+) {
+    val isAvailable: Boolean get() = product != null || isTestStore
     val formattedPrice: String?
         get() = product?.subscriptionOfferDetails?.firstOrNull()?.pricingPhases?.pricingPhaseList?.lastOrNull()?.formattedPrice
             ?: product?.oneTimePurchaseOfferDetails?.formattedPrice
@@ -64,6 +77,8 @@ data class Offerings(
     /** placementId → resolved offering id (targeting + experiments applied server-side). */
     val placements: Map<String, String> = emptyMap(),
     val experiments: List<ExperimentAssignment> = emptyList(),
+    /** Entitlement → product ids (offline entitlements). */
+    val entitlements: Map<String, List<String>> = emptyMap(),
 ) {
     operator fun get(id: String) = all[id]
     fun offeringForPlacement(placement: String): Offering? = placements[placement]?.let { all[it] } ?: current

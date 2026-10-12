@@ -36,6 +36,10 @@ public struct CustomerInfo: Codable, Hashable, Sendable {
     public let purchases: [PurchaseRecord]
     public let attributes: [String: String]
     public let requestedAt: Date
+    /// Signature check of this response (trusted entitlements). Not part of the wire format.
+    public internal(set) var verification: EntitlementVerificationResult = .notRequested
+
+    enum CodingKeys: String, CodingKey { case appUserId, accountToken, entitlements, activeEntitlements, purchases, attributes, requestedAt }
 
     public func isEntitled(_ id: String) -> Bool {
         guard let e = entitlements[id], e.active else { return false }
@@ -52,6 +56,10 @@ public struct Package: Identifiable, Hashable, Sendable {
     public let productIds: [String: String]
     public let metadata: [String: String]
     public let product: Product?
+    /// True when the SDK is configured with a Test Store key (`mm_test_…`): purchasable without StoreKit.
+    public internal(set) var isTestStore: Bool = false
+    /// Can be shown on a paywall / purchased (real StoreKit product, or Test Store).
+    public var isAvailable: Bool { product != nil || isTestStore }
 
     public var localizedPrice: String { product?.displayPrice ?? "" }
     public var period: Product.SubscriptionPeriod? { product?.subscription?.subscriptionPeriod }
@@ -74,6 +82,8 @@ public struct Offerings: Sendable {
     public var placements: [String: String] = [:]
     /// A/B tests this user is enrolled in for this response.
     public var experiments: [ExperimentAssignment] = []
+    /// Entitlement → product ids (used to compute entitlements offline).
+    public var entitlements: [String: [String]] = [:]
     public subscript(id: String) -> Offering? { all[id] }
     /// Offering to show at a placement (e.g. "onboarding", "settings"). Falls back to `current`.
     public func offering(forPlacement placement: String) -> Offering? { placements[placement].flatMap { all[$0] } ?? current }
@@ -157,6 +167,7 @@ struct OfferingsDTO: Decodable {
     let offerings: [String: OfferingDTO]
     let placements: [String: String?]?
     let experiments: [ExperimentAssignment]?
+    let entitlements: [String: [String]]?
 }
 
 enum JSONValue: Decodable, Hashable {

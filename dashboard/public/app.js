@@ -442,6 +442,11 @@ Remplace toute logique RevenueCat/StoreKit existante, appelle MoneyMaker.configu
     <div class="card"><h2>Migrer depuis RevenueCat</h2><p class="muted">Importe les abonnements et achats en cours de tous tes clients. Clé secrète RevenueCat (Project settings → API keys). Avec une clé v2, tout est listé automatiquement ; avec une ancienne clé v1, colle la liste de tes ids utilisateurs (un par ligne).</p>
       <input id="rcKey" placeholder="sk_…" autocomplete="off"><textarea id="rcIds" style="min-height:60px;margin-top:8px" placeholder="ids utilisateurs (seulement pour une clé v1)"></textarea>
       <button class="primary" id="rcImport" style="margin-top:8px">Importer</button><div id="rcOut"></div></div>
+    <div class="card"><h2>Paddle Billing ${ok(p.credentials.paddle)}</h2><p class="muted">Paddle → Developer tools → Notifications : crée une destination vers l'URL ci-dessous (événements <code>subscription.*</code> et <code>transaction.completed</code>), puis colle sa clé secrète. Passe l'id utilisateur dans <code>customData.app_user_id</code> au checkout Paddle.js.</p>
+      ${copyRow(p.endpoints.paddleWebhook ?? `${location.origin}/v1/webhooks/paddle/${p.id}`)}
+      <input id="pdSecret" placeholder="Clé secrète de la destination (pdl_ntfset_…)" autocomplete="off" style="margin-top:8px"><input id="pdKey" placeholder="Clé API (optionnelle, pdl_…)" autocomplete="off" style="margin-top:8px">
+      <label class="row" style="gap:8px;margin:8px 0"><input type="checkbox" id="pdSandbox" style="width:auto;flex:0"> Environnement sandbox</label>
+      <button class="primary" id="cPaddle">Enregistrer</button><div id="pdOut"></div></div>
     <div class="card"><h2>Tes backends ${ok(p.config.webhooks.length)}</h2><p class="muted">Webhooks signés <code>MoneyMaker-Signature</code> pour chaque événement d'abonnement et chaque alerte de classement (<code>RANKING_*</code>). URLs dans Réglages. Secret de signature :</p>${copyRow(p.webhookSigningSecret, true)}</div>
   </div>
   <div class="card" style="margin-top:12px"><h2>Intégrations</h2><p class="muted">Les événements d'abonnement partent vers ces outils, et les alertes de classement vers Slack et Discord. Laisse un champ vide pour ne rien changer, ou tape <code>-</code> pour déconnecter.</p>
@@ -474,6 +479,11 @@ Remplace toute logique RevenueCat/StoreKit existante, appelle MoneyMaker.configu
   $("#cStripe").onclick = e => busy(e.target, async () => {
     const r = await api(`/v1/projects/${state.projectId}/connect/stripe`, { method: "POST", body: { secretKey: $("#stripeKey").value.trim() } });
     $("#stripeKey").value = ""; out("#stripeOut", `✅ ${esc(r.account)} (${r.livemode ? "live" : "test"}) · webhook créé · ${r.importedSubscriptions} abonnements et ${r.importedInvoices} factures importés`);
+  });
+  $("#cPaddle").onclick = e => busy(e.target, async () => {
+    const paddle = { webhookSecret: $("#pdSecret").value.trim() || undefined, apiKey: $("#pdKey").value.trim() || undefined, environment: $("#pdSandbox").checked ? "sandbox" : "production" };
+    await api(`/v1/projects/${state.projectId}/credentials`, { method: "PUT", body: { paddle } });
+    $("#pdSecret").value = ""; $("#pdKey").value = ""; out("#pdOut", "✅ Paddle enregistré");
   });
   $("#cAsc").onclick = e => busy(e.target, async () => {
     const r = await api(`/v1/projects/${state.projectId}/connect/appstore`, { method: "POST", body: { issuerId: $("#ascIss").value.trim(), keyId: $("#ascKid").value.trim(), privateKey: $("#ascKey").value.trim(), appAppleId: $("#ascApp").value.trim(), setNotificationUrl: $("#ascForce").checked ? true : undefined } });
@@ -570,7 +580,7 @@ const MM_CONNECTORS = [
 
 const statusPill = s => `<span class="pill ${["active"].includes(s) ? "ok" : ["grace", "billing_retry", "paused"].includes(s) ? "warn" : "bad"}">${esc(s)}</span>`;
 async function tabCustomers(el) {
-  el.innerHTML = `<div class="row section"><input id="cid" placeholder="Rechercher un appUserId exact…"><button class="primary" style="flex:0" id="find">Ouvrir</button>
+  el.innerHTML = `<div id="audBox" class="card section"></div><div class="row section"><input id="cid" placeholder="Rechercher un appUserId exact…"><button class="primary" style="flex:0" id="find">Ouvrir</button>
     <label class="row" style="flex:0;white-space:nowrap"><input type="checkbox" id="paying" style="width:auto"> payants</label></div><div id="list" class="card"></div>`;
   $("#find").onclick = () => $("#cid").value.trim() && customerDialog($("#cid").value.trim());
   const load = async () => {
@@ -581,6 +591,70 @@ async function tabCustomers(el) {
     document.querySelectorAll("[data-c]").forEach(r => r.onclick = () => customerDialog(r.dataset.c));
   };
   $("#paying").onchange = load; await load();
+  audiencesSection($("#audBox")).catch(e => $("#audBox").innerHTML = `<div class="empty error">${esc(e.message)}</div>`);
+}
+
+// ── Audiences (segments enregistrés) ───────────────────────────────────────
+const AUD_STATUS = { "": "Tous", active: "Abonné actif", trial: "En essai", churned: "Perdu", billing_issue: "Problème de paiement", never_paid: "Jamais payé" };
+async function audiencesSection(box) {
+  const pid = state.projectId;
+  const { audiences = [] } = await api(`/v1/projects/${pid}/audiences`);
+  const f = (state.audFilters ??= {});
+  const opt = (v, l, sel) => `<option value="${esc(v)}" ${String(v) === String(sel ?? "") ? "selected" : ""}>${esc(l)}</option>`;
+  const d = t => t ? new Date(t).toISOString().slice(0, 10) : "";
+  box.innerHTML = `<h2>Audiences</h2>
+    ${audiences.length ? `<table><tbody>${audiences.map(a => `<tr><td><b>${esc(a.name)}</b> <span class="muted mono">${esc(a.id)}</span></td><td>${a.count ?? "—"} clients</td>
+      <td style="text-align:right"><button class="small" data-audload="${esc(a.id)}">Modifier</button> <button class="small" data-audcsv="${esc(a.id)}">⬇︎ CSV</button> <button class="small danger" data-auddel="${esc(a.id)}">Supprimer</button></td></tr>`).join("")}</tbody></table>` : `<p class="muted">Aucune audience. Compose des filtres, prévisualise, puis enregistre.</p>`}
+    <div class="row" style="flex-wrap:wrap;gap:8px;align-items:end;margin-top:12px">
+      <div class="field"><label>Statut</label><select data-af="status">${Object.entries(AUD_STATUS).map(([v, l]) => opt(v, l, f.status)).join("")}</select></div>
+      <div class="field"><label>Store</label><select data-af="store">${[["", "Tous"], ["app_store", "App Store"], ["play_store", "Google Play"], ["stripe", "Stripe"], ["promotional", "Promo"]].map(([v, l]) => opt(v, l, f.store)).join("")}</select></div>
+      <div class="field"><label>Pays</label><input data-af="country" maxlength="2" placeholder="FR" value="${esc(f.country ?? "")}" style="width:70px"></div>
+      <div class="field"><label>Produit</label><input data-af="productId" value="${esc(f.productId ?? "")}"></div>
+      <div class="field"><label>Accès actif</label><input data-af="entitlement" value="${esc(f.entitlement ?? "")}"></div>
+      <div class="field"><label>Vu après</label><input type="date" data-af="firstSeenAfter" value="${d(f.firstSeenAfter)}"></div>
+      <div class="field"><label>Vu avant</label><input type="date" data-af="firstSeenBefore" value="${d(f.firstSeenBefore)}"></div>
+      <div class="field"><label>Dépensé min.</label><input type="number" min="0" data-af="spentMin" value="${f.spentMinMicros != null ? f.spentMinMicros / 1e6 : ""}" style="width:90px"></div>
+      <div class="field"><label>Attribut (clé=valeur)</label><input data-af="attr" placeholder="plan=pro" value="${esc(Object.entries(f.attributes ?? {}).map(([k, v]) => `${k}=${v}`).join(","))}"></div>
+      <div class="field"><label>Campagne Apple Ads</label><input data-af="appleAdsCampaign" value="${esc(f.appleAdsCampaign ?? "")}" style="width:110px"></div>
+      <button class="small" id="audPrev">Prévisualiser</button></div>
+    <div class="row" style="margin-top:8px"><input id="audName" placeholder="Nom de l'audience" value="${esc(state.audEditing?.name ?? "")}"><button class="primary" id="audSave" style="flex:0;white-space:nowrap">${state.audEditing ? "Mettre à jour" : "Enregistrer l'audience"}</button></div>
+    <div id="audOut"></div>`;
+  const read = () => {
+    const v = k => box.querySelector(`[data-af="${k}"]`).value.trim();
+    const out = {};
+    for (const k of ["status", "store", "productId", "entitlement", "appleAdsCampaign"]) if (v(k)) out[k] = v(k);
+    if (v("country")) out.country = v("country").toUpperCase();
+    if (v("firstSeenAfter")) out.firstSeenAfter = Date.parse(v("firstSeenAfter"));
+    if (v("firstSeenBefore")) out.firstSeenBefore = Date.parse(v("firstSeenBefore"));
+    if (v("spentMin")) out.spentMinMicros = Math.round(Number(v("spentMin")) * 1e6);
+    if (v("attr")) out.attributes = Object.fromEntries(v("attr").split(",").map(p => p.split("=").map(x => x.trim())).filter(([k, val]) => k && val !== undefined));
+    return (state.audFilters = out);
+  };
+  const saveAll = async list => {
+    await api(`/v1/projects/${pid}`, { method: "PATCH", body: { config: { audiences: list.map(({ id, name, filters }) => ({ id, name, filters })) } } });
+    await loadProjects(); state.audEditing = null; audiencesSection(box);
+  };
+  $("#audPrev").onclick = async () => {
+    const r = await api(`/v1/projects/${pid}/audiences/preview`, { method: "POST", body: { filters: read() } });
+    $("#audOut").innerHTML = `<p><b>${r.count}</b> clients${r.truncated ? " (sur les 20 000 plus récents)" : ""}.</p>${r.customers.length ? `<table><thead><tr><th>Client</th><th>Statut</th><th>Pays</th><th>Dépensé</th><th>Produits</th></tr></thead><tbody>${r.customers.map(c =>
+      `<tr class="click" data-c="${esc(c.id)}"><td class="mono">${esc(c.id)}</td><td>${esc(AUD_STATUS[c.status] ?? c.status)}</td><td>${flag(c.country)} ${esc(c.country ?? "")}</td><td>${c.totalSpentMicros ? money(c.totalSpentMicros) : "—"}</td><td class="mono">${esc(c.products.join(", "))}</td></tr>`).join("")}</tbody></table>` : ""}`;
+    box.querySelectorAll("[data-c]").forEach(r => r.onclick = () => customerDialog(r.dataset.c));
+  };
+  $("#audSave").onclick = async () => {
+    const name = $("#audName").value.trim();
+    if (!name) return toast("Donne un nom à l'audience");
+    const filters = read(), editing = state.audEditing;
+    const id = editing?.id ?? (name.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40) || "aud") + "_" + Date.now().toString(36);
+    await saveAll(editing ? audiences.map(a => a.id === id ? { id, name, filters } : a) : [...audiences, { id, name, filters }]).then(() => toast("Audience enregistrée")).catch(e => toast(e.message));
+  };
+  box.querySelectorAll("[data-audload]").forEach(b => b.onclick = () => { const a = audiences.find(x => x.id === b.dataset.audload); state.audFilters = { ...a.filters }; state.audEditing = a; audiencesSection(box); });
+  box.querySelectorAll("[data-auddel]").forEach(b => b.onclick = () => confirm("Supprimer cette audience ?") && saveAll(audiences.filter(a => a.id !== b.dataset.auddel)).catch(e => toast(e.message)));
+  box.querySelectorAll("[data-audcsv]").forEach(b => b.onclick = async () => {
+    const token = await auth.currentUser.getIdToken();
+    const res = await fetch(`/v1/projects/${pid}/audiences/${encodeURIComponent(b.dataset.audcsv)}/customers?format=csv`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return toast("Export impossible");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(await res.blob()); a.download = `${b.dataset.audcsv}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  });
 }
 
 async function customerDialog(id) {
@@ -649,7 +723,7 @@ async function tabSettings(el) {
     <div class="field"><label>Stripe : clé secrète/restreinte · secret webhook</label><div class="row"><input id="sKey" placeholder="rk_live_…"><input id="sWh" placeholder="whsec_…"></div></div>
     <button class="primary" id="saveC">Enregistrer les identifiants</button></div></div>
   <div class="card" style="margin-top:12px"><h2>Clés API</h2><p class="muted">Clé publique (<code>mm_pub_</code>) : dans tes apps. Clé secrète (<code>mm_sk_</code>) : uniquement sur tes serveurs. Elles ne sont affichées qu'une fois.</p>
-    <div class="row"><button id="kPub">Nouvelle clé publique</button><button id="kSec">Nouvelle clé secrète</button><button id="kRot" class="danger">Révoquer et régénérer la secrète</button></div><div id="newKey" style="margin-top:10px"></div></div>`;
+    <div class="row"><button id="kPub">Nouvelle clé publique</button><button id="kTest" title="Clé mm_test_ : le SDK n'utilise ni StoreKit ni Google Play, les achats sont des achats sandbox (store « test »), exclus des métriques">Clé Test Store</button><button id="kSec">Nouvelle clé secrète</button><button id="kRot" class="danger">Révoquer et régénérer la secrète</button></div><div id="newKey" style="margin-top:10px"></div></div>`;
   $("#saveS").onclick = async () => {
     try {
       await api(`/v1/projects/${state.projectId}`, { method: "PATCH", body: { name: $("#name").value, config: {
@@ -673,7 +747,7 @@ async function tabSettings(el) {
     const r = await api(`/v1/projects/${state.projectId}/keys`, { method: "POST", body: { kind, revokeExisting } });
     $("#newKey").innerHTML = `<p class="muted">Copie-la maintenant :</p>${copyRow(r.key)}`;
   };
-  $("#kPub").onclick = () => key("public"); $("#kSec").onclick = () => key("secret"); $("#kRot").onclick = () => key("secret", true);
+  $("#kPub").onclick = () => key("public"); $("#kTest").onclick = () => key("test"); $("#kSec").onclick = () => key("secret"); $("#kRot").onclick = () => key("secret", true);
   el.insertAdjacentHTML("beforeend", `<div class="card" style="margin-top:12px" id="team"></div>`);
   teamSection($("#team")).catch(e => { $("#team").innerHTML = `<h2>Équipe</h2><div class="empty error">${esc(e.message)}</div>`; });
 }
@@ -763,6 +837,25 @@ function seriesBars(series, keys, fmt) {
     }).join(""); }).join("")}</svg>`;
 }
 
+// ── Prédiction LTV (modèle sBG par cohorte) ───────────────────────────────
+const LTV_GROUP_LABEL = { product: "Produit", country: "Pays", store: "Store" };
+const CONF_LABEL = { high: ["ok", "fiable"], medium: ["", "moyenne"], low: ["bad", "faible"] };
+async function ltvSection(box) {
+  const g = (state.ltvGroup ??= "product");
+  box.innerHTML = `<div class="row" style="justify-content:space-between;align-items:center"><h2>Prédiction LTV</h2><div class="row seg">${Object.entries(LTV_GROUP_LABEL).map(([k, l]) => `<button class="small ${k === g ? "primary" : ""}" data-ltvg="${k}">${l}</button>`).join("")}</div></div><div class="empty">Calcul…</div>`;
+  box.querySelectorAll("[data-ltvg]").forEach(b => b.onclick = () => { state.ltvGroup = b.dataset.ltvg; ltvSection(box); });
+  const r = await api(`/v1/projects/${state.projectId}/ltv-prediction?groupBy=${g}`);
+  const label = k => g === "country" ? `${flag(k)} ${esc(countryName(k))}` : `<span class="mono">${esc(k)}</span>`;
+  const spark = curve => { const W = 120, H = 28; const pts = curve.map((v, i) => `${(i / Math.max(1, curve.length - 1) * W).toFixed(1)},${(H - v * H).toFixed(1)}`).join(" "); return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><polyline points="${pts}" fill="none" stroke="#00F19F" stroke-width="1.5"/></svg>`; };
+  box.querySelector(".empty").outerHTML = r.groups.length ? `<p class="muted">Rétention mensuelle observée par cohorte, ajustée par un modèle shifted-beta-geometric (repli géométrique si peu de données), × revenu net par mois payé (remboursements déduits).</p>
+    <div style="overflow-x:auto"><table><thead><tr><th>${LTV_GROUP_LABEL[g]}</th><th>Clients</th><th>Mois observés</th><th>Rétention M1 / M3 / M6</th><th>Courbe</th><th>Churn M1</th><th style="text-align:right">LTV 12 mois</th><th style="text-align:right">LTV 24 mois</th><th>Confiance</th></tr></thead>
+    <tbody>${r.groups.map(x => { const rc = x.retentionCurve, c = CONF_LABEL[x.confidence]; return `<tr><td>${label(x.key)}</td><td>${x.customers}</td><td>${x.observedMonths}</td>
+      <td>${[1, 3, 6].map(i => rc[i] == null ? "—" : pct(rc[i])).join(" / ")}</td><td>${spark(x.predictedCurve)}</td>
+      <td title="${x.churnParams.model === "sbg" ? `α ${x.churnParams.alpha} · β ${x.churnParams.beta}` : "géométrique"}">${pct(x.churnParams.monthlyChurn)} <span class="muted">${x.churnParams.model === "sbg" ? "sBG" : "géo"}</span></td>
+      <td style="text-align:right"><b>${money(x.ltv12, r.currency)}</b></td><td style="text-align:right">${money(x.ltv24, r.currency)}</td><td><span class="pill ${c[0]}">${c[1]}</span></td></tr>`; }).join("")}</tbody></table></div>`
+    : `<div class="empty">Pas encore de paiements pour prédire la LTV.</div>`;
+}
+
 async function tabCharts(el) {
   const c = (state.chart ??= { name: "mrr", days: 90, resolution: "day", store: "", country: "", product: "" }), cur = state.projects.find(p => p.id === state.projectId)?.config?.currency ?? "EUR";
   const opt = (v, l, sel) => `<option value="${esc(v)}" ${v === sel ? "selected" : ""}>${esc(l)}</option>`;
@@ -770,10 +863,11 @@ async function tabCharts(el) {
       <div class="field" style="min-width:220px"><label>Graphique</label><select id="chName">${Object.entries(CHARTS).map(([k, [l]]) => opt(k, l, c.name)).join("")}</select></div>
       <div class="field"><label>Période</label><select id="chDays">${[[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "12 mois"], [730, "24 mois"]].map(([v, l]) => opt(String(v), l, String(c.days))).join("")}</select></div>
       <div class="field"><label>Résolution</label><select id="chRes">${[["day", "Jour"], ["week", "Semaine"], ["month", "Mois"]].map(([v, l]) => opt(v, l, c.resolution)).join("")}</select></div>
-      <div class="field"><label>Store</label><select id="chStore">${[["", "Tous"], ["app_store", "App Store"], ["play_store", "Google Play"], ["stripe", "Stripe"]].map(([v, l]) => opt(v, l, c.store)).join("")}</select></div>
+      <div class="field"><label>Store</label><select id="chStore">${[["", "Tous"], ["app_store", "App Store"], ["play_store", "Google Play"], ["stripe", "Stripe"], ["paddle", "Paddle"]].map(([v, l]) => opt(v, l, c.store)).join("")}</select></div>
       <div class="field"><label>Pays</label><input id="chCountry" maxlength="2" placeholder="FR" value="${esc(c.country)}" style="width:70px"></div>
       <div class="field"><label>Produit</label><input id="chProduct" placeholder="tous" value="${esc(c.product)}"></div>
-      <button id="chCsv" class="small">⬇︎ CSV</button></div></div><div id="chOut"><div class="empty">Chargement…</div></div>`;
+      <button id="chCsv" class="small">⬇︎ CSV</button></div></div><div id="chOut"><div class="empty">Chargement…</div></div><div id="ltvOut" class="card section"></div>`;
+  ltvSection($("#ltvOut")).catch(e => $("#ltvOut").innerHTML = `<div class="empty error">${esc(e.message)}</div>`);
   const read = () => Object.assign(c, { name: $("#chName").value, days: Number($("#chDays").value), resolution: $("#chRes").value, store: $("#chStore").value, country: $("#chCountry").value.trim().toUpperCase(), product: $("#chProduct").value.trim() });
   const qs = (extra = {}) => new URLSearchParams(Object.fromEntries(Object.entries({ days: c.days, resolution: c.resolution, store: c.store, country: c.country, product: c.product, ...extra }).filter(([, v]) => v !== "" && v != null))).toString();
   el.querySelectorAll("select, input").forEach(i => i.onchange = () => { read(); tabCharts(el); });

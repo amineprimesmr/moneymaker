@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paiement</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+:root{--bg:#0b0b0c;--fg:#fff;--accent:#00d084;--muted:rgba(255,255,255,.65);--card:rgba(255,255,255,.07)}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif}
+main{max-width:440px;margin:0 auto;padding:32px 16px 40px;display:flex;flex-direction:column;gap:14px}
+h1{font-size:28px;margin:0;text-align:center}p.sub{color:var(--muted);text-align:center;margin:0}
+.hero{width:100%;border-radius:18px;max-height:220px;object-fit:cover}
+ul.feat{list-style:none;padding:0;margin:4px 0;display:flex;flex-direction:column;gap:8px}ul.feat li:before{content:"✓";color:var(--accent);font-weight:700;margin-right:10px}
+.pkgs{display:flex;flex-direction:column;gap:10px}.tpl-cards .pkgs{flex-direction:row;flex-wrap:wrap}.tpl-cards .pkg{flex:1 1 120px;flex-direction:column;align-items:flex-start}
+.pkg{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 16px;border-radius:14px;background:var(--card);border:2px solid transparent;cursor:pointer;color:inherit;font:inherit;text-align:left;width:100%}
+.pkg[aria-pressed=true]{border-color:var(--accent)}.pkg small{color:var(--muted)}.badge{background:var(--accent);color:#000;border-radius:8px;padding:2px 8px;font-size:12px;font-weight:600}
+.tpl-minimal .hero,.tpl-minimal ul.feat{display:none}
+button.cta{background:var(--accent);color:#000;border:0;border-radius:14px;padding:16px;font-size:17px;font-weight:700;cursor:pointer;width:100%}button.cta:disabled{opacity:.5}
+input{width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:transparent;color:inherit;font:inherit}
+details summary{color:var(--muted);cursor:pointer;font-size:14px}
+.err{background:rgba(255,80,80,.15);border-radius:12px;padding:12px}
+footer{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:13px}footer a{color:var(--muted)}
+#qr{background:#fff;padding:12px;border-radius:12px;align-self:center}
+.link{word-break:break-all;font-size:13px;color:var(--muted);text-align:center}
+a.btn{display:block;text-align:center;text-decoration:none}
+</style>
+</head>
+<body>
+<main id="app"><p class="sub">Chargement…</p></main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="/pay.js"></script>
+</body>
+</html>

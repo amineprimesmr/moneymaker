@@ -2,6 +2,7 @@ import Foundation
 import StoreKit
 import CryptoKit
 import os
+import Network
 
 /// MoneyMaker — subscriptions for App Store, Google Play and Stripe, on your own backend.
 ///
@@ -29,33 +30,76 @@ public final class MoneyMaker: ObservableObject {
     /// Called whenever entitlements change (purchase, renewal, refund pushed by StoreKit, login…).
     public var onCustomerInfoUpdate: ((CustomerInfo) -> Void)?
 
+    /// Ed25519 public key (base64 raw, from `GET /v1/signing-key`) pinned in the app. Set before `configure`.
+    /// When nil, the key is fetched once and pinned on first launch (trust on first use).
+    public static var signingPublicKey: String?
+    /// Key of the hosted MoneyMaker service (moneymaker-io.web.app), pinned by default for that host.
+    static let hostedSigningPublicKey = "9F7dzH51ASV9YKJmckzwJPTmNzoaefMzuOPPz2xXOBA="
+
+    /// Signature checking of customer-info responses (trusted entitlements).
+    public let entitlementVerification: EntitlementVerificationMode
+    /// Configured with a Test Store key (`mm_test_…`): never talks to StoreKit, purchases are sandbox grants.
+    public let isTestStore: Bool
+
     private let api: APIClient
     private let cache: Cache
+    private let verifier: SignatureVerifier
+    private let pending: PendingTransactionQueue
+    private var flushing = false
     private var updatesTask: Task<Void, Never>?
+    private var foregroundObserver: NSObjectProtocol?
+    private let pathMonitor = NWPathMonitor()
     private let log = Logger(subsystem: "MoneyMaker", category: "sdk")
 
     @discardableResult
-    public static func configure(apiKey: String, appUserID: String? = nil, baseURL: URL = defaultBaseURL) -> MoneyMaker {
+    public static func configure(apiKey: String, appUserID: String? = nil, baseURL: URL = defaultBaseURL,
+                                 entitlementVerification: EntitlementVerificationMode = .informational) -> MoneyMaker {
         if let instance { return instance }
-        let mm = MoneyMaker(apiKey: apiKey, appUserID: appUserID, baseURL: baseURL)
+        let mm = MoneyMaker(apiKey: apiKey, appUserID: appUserID, baseURL: baseURL, verification: entitlementVerification)
         instance = mm
         return mm
     }
 
-    private init(apiKey: String, appUserID: String?, baseURL: URL) {
+    private init(apiKey: String, appUserID: String?, baseURL: URL, verification: EntitlementVerificationMode) {
         self.api = APIClient(baseURL: baseURL, apiKey: apiKey)
         self.cache = Cache(namespace: String(apiKey.suffix(8)))
+        self.entitlementVerification = verification
+        self.isTestStore = apiKey.hasPrefix("mm_test_")
+        self.verifier = SignatureVerifier(api: api, hardcodedKey: Self.signingPublicKey ?? (baseURL.host == "moneymaker-io.web.app" ? Self.hostedSigningPublicKey : nil), namespace: String(apiKey.suffix(8)))
+        self.pending = PendingTransactionQueue(namespace: String(apiKey.suffix(8)))
         self.appUserID = appUserID ?? cache.anonymousID
         self.customerInfo = cache.customerInfo(for: self.appUserID)
+        if verification == .enforced, let info = customerInfo, cache.verification(for: info.appUserId) == .failed {
+            self.customerInfo = info.revokingEntitlements()
+        }
+        if isTestStore {
+            Task { [weak self] in _ = try? await self?.refreshCustomerInfo() }
+            return
+        }
         updatesTask = Task { [weak self] in await self?.listenForTransactions() }
         Task { [weak self] in
+            await self?.flushPendingTransactions()
             await self?.syncUnfinishedTransactions()
             await self?.syncPurchases()
             _ = try? await self?.refreshCustomerInfo()
         }
+        #if os(iOS)
+        foregroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in await self?.flushPendingTransactions() }
+        }
+        #endif
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            Task { @MainActor in await self?.flushPendingTransactions() }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "MoneyMaker.network"))
     }
 
-    deinit { updatesTask?.cancel() }
+    deinit {
+        updatesTask?.cancel()
+        pathMonitor.cancel()
+        if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
+    }
 
     // MARK: Identity
 
@@ -69,13 +113,29 @@ public final class MoneyMaker: ObservableObject {
         appUserID = newAppUserID
         let info: CustomerInfo
         if previous.hasPrefix("$anon:") {
-            info = try await api.send("customers/\(previous.urlPath)/alias", body: ["newAppUserId": newAppUserID])
+            info = try await fetchCustomerInfo("customers/\(previous.urlPath)/alias", body: ["newAppUserId": newAppUserID])
         } else {
-            info = try await api.get("customers/\(newAppUserID.urlPath)")
+            info = try await fetchCustomerInfo("customers/\(newAppUserID.urlPath)")
         }
         publish(info)
         await syncPurchases()
         return customerInfo ?? info
+    }
+
+    // MARK: Web purchases
+
+    /// Redeems a web purchase made without an account (link `…?mm_redeem=TOKEN` from the hosted
+    /// `/pay/success` page): the purchase is moved to the current app user. Single use.
+    @discardableResult
+    public func redeemWebPurchase(token: String) async throws -> CustomerInfo {
+        let info = try await fetchCustomerInfo("customers/\(appUserID.urlPath)/redeem", body: ["token": token])
+        publish(info)
+        return info
+    }
+
+    /// Extracts `mm_redeem` from an opened URL (universal link or custom scheme), if any.
+    public static func webRedemptionToken(from url: URL) -> String? {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "mm_redeem" }?.value
     }
 
     /// Switches back to a fresh anonymous id.
@@ -93,9 +153,24 @@ public final class MoneyMaker: ObservableObject {
 
     @discardableResult
     public func refreshCustomerInfo() async throws -> CustomerInfo {
-        let info: CustomerInfo = try await api.get("customers/\(appUserID.urlPath)")
-        publish(info)
-        return info
+        do {
+            let info = try await fetchCustomerInfo("customers/\(appUserID.urlPath)")
+            publish(info)
+            return info
+        } catch let e as MoneyMakerError where e.isRetryable && !isTestStore {
+            // Server unreachable: entitlements from StoreKit, mapped with the cached entitlement map.
+            guard let info = await offlineCustomerInfo() else { throw e }
+            publish(info, persist: false)
+            return info
+        }
+    }
+
+    /// Entitlements computed on device from `Transaction.currentEntitlements` (nil before the first `loadOfferings()`).
+    public func offlineCustomerInfo() async -> CustomerInfo? {
+        guard let map = cache.entitlementMap else { return nil }
+        var txs: [Transaction] = []
+        for await v in Transaction.currentEntitlements { if case .verified(let t) = v { txs.append(t) } }
+        return CustomerInfo.offline(appUserID: appUserID, accountToken: accountToken, entitlementMap: map, transactions: txs, previous: customerInfo)
     }
 
     /// Returns cached info if fresher than 5 minutes, otherwise fetches it.
@@ -109,44 +184,85 @@ public final class MoneyMaker: ObservableObject {
         let _: [String: Bool] = try await api.send("customers/\(appUserID.urlPath)/attributes", body: body)
     }
 
+    // MARK: Virtual currencies
+
+    /// Balances of the virtual currencies configured in the dashboard (credited automatically on purchases).
+    /// Spending is server-side only (secret key): `POST /v1/customers/{id}/wallet/{code}/spend`.
+    public func virtualCurrencies() async throws -> [String: VirtualCurrencyBalance] {
+        let dto: WalletDTO = try await api.get("customers/\(appUserID.urlPath)/wallet")
+        return dto.virtualCurrencies
+    }
+
     // MARK: Offerings
 
     /// Loads the paywall configured in the dashboard and resolves real App Store products/prices.
     @discardableResult
     public func loadOfferings() async throws -> Offerings {
-        let dto: OfferingsDTO = try await api.get("offerings")
+        var q = URLComponents()
+        q.queryItems = [
+            URLQueryItem(name: "appUserId", value: appUserID),
+            URLQueryItem(name: "platform", value: "ios"),
+            Bundle.main.infoDictionary?["CFBundleShortVersionString"].flatMap { $0 as? String }.map { URLQueryItem(name: "appVersion", value: $0) },
+            Locale.current.region.map { URLQueryItem(name: "country", value: $0.identifier) },
+        ].compactMap { $0 }
+        let dto: OfferingsDTO = try await api.get("offerings?\(q.percentEncodedQuery ?? "")")
+        if let map = dto.entitlements { cache.entitlementMap = map }
         let ids = Set(dto.offerings.values.flatMap { $0.packages.compactMap { $0.productIds["app_store"] } })
-        let products = try await Product.products(for: ids)
+        let products = isTestStore ? [] : try await Product.products(for: ids)
         let byId = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0) })
         var all: [String: Offering] = [:]
         for (id, o) in dto.offerings {
             let packages = o.packages.map { p in
-                Package(id: p.id, productIds: p.productIds, metadata: (p.metadata ?? [:]).mapValues(\.stringValue),
-                        product: p.productIds["app_store"].flatMap { byId[$0] })
+                var pkg = Package(id: p.id, productIds: p.productIds, metadata: (p.metadata ?? [:]).mapValues(\.stringValue),
+                                  product: p.productIds["app_store"].flatMap { byId[$0] })
+                pkg.isTestStore = isTestStore
+                return pkg
             }
-            all[id] = Offering(id: id, description: o.description, packages: packages)
+            all[id] = Offering(id: id, description: o.description, packages: packages, paywall: o.paywall)
         }
-        let result = Offerings(current: dto.current.flatMap { all[$0] }, all: all)
+        let result = Offerings(current: dto.current.flatMap { all[$0] }, all: all,
+                               placements: (dto.placements ?? [:]).compactMapValues { $0 },
+                               experiments: dto.experiments ?? [], entitlements: dto.entitlements ?? [:])
         offerings = result
         return result
+    }
+
+    /// Offering resolved for a placement (targeting rules + A/B tests). Call `loadOfferings()` first.
+    public func offering(forPlacement placement: String) -> Offering? { offerings?.offering(forPlacement: placement) }
+
+    /// Records a paywall event (impressions, closes, purchases) for paywall analytics and experiment results.
+    /// `MoneyMakerPaywall` calls this automatically; use it if you build your own paywall UI.
+    public func trackPaywallEvent(_ type: PaywallEventType, offering: Offering, placement: String? = nil) {
+        var body: [String: Any] = ["type": type.rawValue, "offeringId": offering.id]
+        if let placement { body["placement"] = placement }
+        if let exp = offerings?.experiment(offeringId: offering.id, placement: placement) {
+            body["experimentId"] = exp.experimentId
+            body["variant"] = exp.variant
+        }
+        let path = "customers/\(appUserID.urlPath)/paywall-events"
+        let api = self.api
+        Task { let _: FeedbackAck? = try? await api.send(path, body: body) }
     }
 
     // MARK: Purchases
 
     @discardableResult
     public func purchase(_ package: Package) async throws -> PurchaseResult {
+        if isTestStore { return try await testPurchase(productID: package.productIds["app_store"] ?? package.id) }
         guard let product = package.product else { throw MoneyMakerError.productNotFound(package.productIds["app_store"] ?? package.id) }
         return try await purchase(product)
     }
 
     @discardableResult
     public func purchase(productID: String) async throws -> PurchaseResult {
+        if isTestStore { return try await testPurchase(productID: productID) }
         guard let product = try await Product.products(for: [productID]).first else { throw MoneyMakerError.productNotFound(productID) }
         return try await purchase(product)
     }
 
     @discardableResult
     public func purchase(_ product: Product, options: Set<Product.PurchaseOption> = []) async throws -> PurchaseResult {
+        if isTestStore { return try await testPurchase(productID: product.id) }
         var opts = options
         if let token = UUID(uuidString: accountToken) { opts.insert(.appAccountToken(token)) }
         let result = try await product.purchase(options: opts)
@@ -163,6 +279,7 @@ public final class MoneyMaker: ObservableObject {
     /// Re-syncs every purchase the Apple ID owns (call from a "Restore purchases" button).
     @discardableResult
     public func restorePurchases() async throws -> CustomerInfo {
+        if isTestStore { return try await refreshCustomerInfo() }
         try? await AppStore.sync()
         var last: CustomerInfo?
         for await verification in Transaction.currentEntitlements {
@@ -213,16 +330,84 @@ public final class MoneyMaker: ObservableObject {
         return "\(String(a[0..<8]))-\(String(a[8..<12]))-5\(String(a[13..<16]))-\(variant)\(String(a[17..<20]))-\(String(a[20..<32]))"
     }
 
+    /// Posts the transaction; `finish()` only once the server accepted it. On a network / 5xx failure the JWS
+    /// is queued (retried on launch, foreground, network back) and entitlements are computed on device meanwhile.
     private func handle(_ verification: VerificationResult<Transaction>) async throws -> CustomerInfo {
         guard case .verified(let transaction) = verification else { throw MoneyMakerError.unverifiedTransaction }
-        let info = try await post(verification)
-        await transaction.finish()
-        publish(info)
-        return info
+        do {
+            let info = try await post(verification)
+            pending.remove(transaction.id)
+            await transaction.finish()
+            publish(info)
+            return info
+        } catch let e as MoneyMakerError where e.isRetryable {
+            pending.enqueue(.init(transactionID: transaction.id, appUserID: appUserID, jws: verification.jwsRepresentation, queuedAt: Date()))
+            log.info("transaction \(transaction.id) queued for retry: \(e.localizedDescription, privacy: .public)")
+            guard let info = await offlineCustomerInfo() else { throw e }
+            publish(info, persist: false)
+            return info
+        }
     }
 
     private func post(_ verification: VerificationResult<Transaction>) async throws -> CustomerInfo {
-        try await api.send("customers/\(appUserID.urlPath)/apple", body: ["signedTransaction": verification.jwsRepresentation])
+        try await fetchCustomerInfo("customers/\(appUserID.urlPath)/apple", body: ["signedTransaction": verification.jwsRepresentation])
+    }
+
+    /// Re-posts queued transactions, then finishes the StoreKit transactions the server accepted.
+    public func flushPendingTransactions() async {
+        guard !isTestStore, !flushing else { return }
+        let items = pending.items
+        guard !items.isEmpty else { return }
+        flushing = true
+        defer { flushing = false }
+        var accepted = Set<UInt64>()
+        var last: CustomerInfo?
+        for item in items {
+            do {
+                let info = try await fetchCustomerInfo("customers/\(item.appUserID.urlPath)/apple", body: ["signedTransaction": item.jws])
+                accepted.insert(item.transactionID)
+                pending.remove(item.transactionID)
+                last = info
+            } catch let e as MoneyMakerError where e.isRetryable {
+                break // still offline
+            } catch {
+                pending.remove(item.transactionID) // rejected by the server (4xx): retrying won't help
+            }
+        }
+        if !accepted.isEmpty {
+            for await v in Transaction.unfinished {
+                if case .verified(let t) = v, accepted.contains(t.id) { await t.finish() }
+            }
+        }
+        if let last { publish(last) }
+    }
+
+    /// Test Store purchase: sandbox grant on the server, no StoreKit.
+    private func testPurchase(productID: String) async throws -> PurchaseResult {
+        let info = try await fetchCustomerInfo("customers/\(appUserID.urlPath)/test-purchase", body: ["productId": productID])
+        publish(info)
+        return .success(info)
+    }
+
+    /// Fetches customer info with a fresh nonce and checks the response signature per `entitlementVerification`.
+    private func fetchCustomerInfo(_ path: String, body: [String: Any]? = nil) async throws -> CustomerInfo {
+        let nonce = UUID().uuidString.lowercased()
+        let (data, response) = try await api.raw(path, method: body == nil ? "GET" : "POST",
+                                                 body: try body.map { try JSONSerialization.data(withJSONObject: $0) },
+                                                 headers: ["X-Nonce": nonce])
+        var info = try APIClient.decoder.decode(CustomerInfo.self, from: data)
+        guard entitlementVerification != .disabled else { return info }
+        guard let key = await verifier.publicKey() else {
+            if entitlementVerification == .enforced { return info.revokingEntitlements() }
+            return info
+        }
+        let ok = SignatureVerifier.verify(key: key, header: response.value(forHTTPHeaderField: "X-MoneyMaker-Signature"), nonce: nonce,
+                                          requestTime: response.value(forHTTPHeaderField: "X-Request-Time"), body: data)
+        if ok { info.verification = .verified; return info }
+        log.error("customer info signature verification failed for \(path, privacy: .public)")
+        if entitlementVerification == .enforced { return info.revokingEntitlements() }
+        info.verification = .failed
+        return info
     }
 
     private func listenForTransactions() async {
@@ -235,6 +420,7 @@ public final class MoneyMaker: ObservableObject {
     /// Silently posts every purchase the Apple ID currently owns (no password prompt).
     /// Migrates subscribers who bought before MoneyMaker was integrated; cheap and idempotent.
     public func syncPurchases() async {
+        guard !isTestStore else { return }
         var last: CustomerInfo?
         for await verification in Transaction.currentEntitlements {
             if let info = try? await post(verification) { last = info }
@@ -248,10 +434,10 @@ public final class MoneyMaker: ObservableObject {
         }
     }
 
-    private func publish(_ info: CustomerInfo) {
+    private func publish(_ info: CustomerInfo, persist: Bool = true) {
         guard info.appUserId == appUserID else { return }
         customerInfo = info
-        cache.store(info)
+        if persist { cache.store(info) }
         onCustomerInfoUpdate?(info)
     }
 }
@@ -263,6 +449,14 @@ import UIKit
 extension String {
     var urlPath: String { addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? self }
 }
+
+public struct VirtualCurrencyBalance: Codable, Hashable, Sendable {
+    public let code: String
+    public let name: String
+    public let balance: Int
+}
+
+struct WalletDTO: Decodable { let virtualCurrencies: [String: VirtualCurrencyBalance] }
 
 // MARK: - Networking
 
@@ -282,6 +476,12 @@ struct APIClient: Sendable {
     }
 
     private func request<T: Decodable>(_ path: String, method: String, body: Data?) async throws -> T {
+        let (data, _) = try await raw(path, method: method, body: body)
+        return try Self.decoder.decode(T.self, from: data)
+    }
+
+    /// Raw 2xx response (body bytes are needed to verify signatures). Retries network errors / 5xx.
+    func raw(_ path: String, method: String, body: Data?, headers: [String: String] = [:]) async throws -> (Data, HTTPURLResponse) {
         var req = URLRequest(url: URL(string: "\(baseURL.absoluteString)/\(path)")!)
         req.httpMethod = method
         req.httpBody = body
@@ -289,12 +489,13 @@ struct APIClient: Sendable {
         req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("MoneyMaker-iOS/1.0", forHTTPHeaderField: "User-Agent")
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
         var lastError: Error = MoneyMakerError.network("unknown")
         for attempt in 0..<3 {
             do {
                 let (data, response) = try await URLSession.shared.data(for: req)
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                if (200..<300).contains(status) { return try Self.decoder.decode(T.self, from: data) }
+                if (200..<300).contains(status), let http = response as? HTTPURLResponse { return (data, http) }
                 let err = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
                 let e = MoneyMakerError.server(status: status, code: err?["error"] as? String ?? "http_\(status)", message: err?["message"] as? String ?? "")
                 if status < 500 { throw e }
@@ -336,5 +537,16 @@ struct Cache {
         let e = JSONEncoder()
         e.dateEncodingStrategy = .millisecondsSince1970
         if let data = try? e.encode(info) { defaults.set(data, forKey: "mm.\(namespace).info.\(info.appUserId)") }
+        defaults.set(info.verification.rawValue, forKey: "mm.\(namespace).verification.\(info.appUserId)")
+    }
+
+    func verification(for id: String) -> EntitlementVerificationResult? {
+        defaults.string(forKey: "mm.\(namespace).verification.\(id)").flatMap(EntitlementVerificationResult.init(rawValue:))
+    }
+
+    /// Entitlement → product ids, from the last `GET /v1/offerings` (offline entitlements).
+    var entitlementMap: [String: [String]]? {
+        get { defaults.data(forKey: "mm.\(namespace).entitlementMap").flatMap { try? JSONDecoder().decode([String: [String]].self, from: $0) } }
+        nonmutating set { defaults.set(newValue.flatMap { try? JSONEncoder().encode($0) }, forKey: "mm.\(namespace).entitlementMap") }
     }
 }

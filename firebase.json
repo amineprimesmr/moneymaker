@@ -9,7 +9,11 @@
     "public": "dashboard/public",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "cleanUrls": true,
-    "rewrites": [{ "source": "/v1/**", "function": { "functionId": "api", "region": "europe-west1" } }],
+    "rewrites": [
+      { "source": "/v1/**", "function": { "functionId": "api", "region": "europe-west1" } },
+      { "source": "/pay/**", "destination": "/pay.html" },
+      { "source": "/manage/**", "destination": "/manage.html" }
+    ],
     "headers": [{ "source": "**", "headers": [
       { "key": "X-Content-Type-Options", "value": "nosniff" },
       { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }

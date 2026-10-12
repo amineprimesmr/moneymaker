@@ -1,6 +1,6 @@
 // Pure, store-agnostic subscription logic. No Firestore here so it stays unit-testable.
 
-export type StoreName = "app_store" | "play_store" | "stripe" | "promotional";
+export type StoreName = "app_store" | "play_store" | "stripe" | "paddle" | "promotional" | "test"; // "test" = Test Store (mm_test_ keys), always isSandbox
 export type PurchaseType = "subscription" | "non_consumable" | "consumable";
 export type PurchaseStatus = "active" | "grace" | "billing_retry" | "paused" | "expired" | "refunded" | "revoked";
 

@@ -247,4 +247,38 @@ export async function tabGrowth(el, h) {
   q("#exDraft").onclick = () => create("draft");
   q("#exStart").onclick = () => create("running");
   renderVars(); renderExps();
+  webSection(el, h, cfg, offIds, save);
+}
+
+// ══ Web : liens d'achat, paywall web, lien de récupération ══
+function webSection(el, h, cfg, offIds, save) {
+  const { esc, toast, projectId } = h;
+  const web = cfg.web ?? {};
+  const base = location.origin;
+  const box = document.createElement("div");
+  box.className = "card section";
+  box.innerHTML = `<h2>Achats web</h2>
+    <p class="muted">Paywall hébergé (mêmes modèles que l'app) payé via Stripe Checkout : seuls les packages dont <code>productIds.stripe</code> est un <code>price_…</code> sont proposés. Codes promo Stripe acceptés (champ dans Checkout ou <code>&amp;code=PROMO</code>).</p>
+    <div class="row"><div class="field"><label>Offre</label><select id="webOff">${offIds.map(o => `<option>${esc(o)}</option>`).join("")}</select></div>
+      <div class="field"><label>app_user_id (optionnel)</label><input id="webUid" placeholder="laisser vide = acheteur anonyme"></div>
+      <div class="field"><label>Code promo (optionnel)</label><input id="webCode" placeholder="BIENVENUE"></div></div>
+    <div class="row"><input id="webLink" readonly><button id="webCopy" style="flex:0;white-space:nowrap">Copier le lien</button><a id="webOpen" target="_blank" rel="noopener" style="align-self:center;white-space:nowrap">Ouvrir</a></div>
+    <h3 style="margin-top:16px">Récupération dans l'app</h3>
+    <p class="muted">Un acheteur sans compte reçoit un lien <code>…?mm_redeem=TOKEN</code> (+ QR code). Dans l'app : <code>MoneyMaker.shared.redeemWebPurchase(token:)</code>.</p>
+    <div class="row"><div class="field"><label>URL de récupération (lien universel ou schéma)</label><input id="webRedeem" placeholder="monapp://redeem ou https://monapp.com/redeem" value="${esc(web.redemptionUrl ?? "")}"></div>
+      <div class="field"><label>Retour après achat (optionnel)</label><input id="webSuccess" placeholder="https://monapp.com/merci" value="${esc(web.successUrl ?? "")}"></div></div>
+    <label><input type="checkbox" id="webOn" ${web.enabled === false ? "" : "checked"}> Achats web activés</label>
+    <div><button class="primary" id="webSave">Enregistrer</button></div>`;
+  el.appendChild(box);
+  const q = s => box.querySelector(s);
+  const link = () => {
+    const u = new URL(`${base}/pay/${encodeURIComponent(projectId)}/${encodeURIComponent(q("#webOff").value)}`);
+    if (q("#webUid").value.trim()) u.searchParams.set("app_user_id", q("#webUid").value.trim());
+    if (q("#webCode").value.trim()) u.searchParams.set("code", q("#webCode").value.trim());
+    q("#webLink").value = u.toString(); q("#webOpen").href = u.toString();
+  };
+  ["#webOff", "#webUid", "#webCode"].forEach(s => q(s).addEventListener("input", link));
+  link();
+  q("#webCopy").onclick = async () => { try { await navigator.clipboard.writeText(q("#webLink").value); toast("Lien copié"); } catch { q("#webLink").select(); } };
+  q("#webSave").onclick = () => save({ web: { enabled: q("#webOn").checked, redemptionUrl: q("#webRedeem").value.trim() || undefined, successUrl: q("#webSuccess").value.trim() || undefined } }, "Réglages web enregistrés");
 }

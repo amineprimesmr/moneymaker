@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "crypto";
 import {
   Purchase, EventType, computeEntitlements, diffEvents, convertMicros, HttpError, isPurchaseActive, StoreName,
 } from "./engine";
+import { walletOpsFor, readWalletOps, writeWalletOps } from "./wallet";
 
 if (!getApps().length) initializeApp();
 export const db: Firestore = getFirestore();
@@ -59,7 +60,7 @@ export const DEFAULT_CONFIG: ProjectConfig = { currency: "EUR", entitlements: {}
 export const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 export const token = (prefix: string, bytes = 24) => `${prefix}_${randomBytes(bytes).toString("base64url")}`;
 
-export type KeyKind = "public" | "secret" | "pat";
+export type KeyKind = "public" | "secret" | "pat" | "test";
 export interface KeyRecord { kind: KeyKind; projectId?: string; uid?: string; }
 
 export async function resolveKey(raw: string): Promise<KeyRecord | null> {
@@ -68,7 +69,7 @@ export async function resolveKey(raw: string): Promise<KeyRecord | null> {
 }
 
 export async function issueKey(rec: KeyRecord & { label?: string }): Promise<string> {
-  const prefix = rec.kind === "public" ? "mm_pub" : rec.kind === "secret" ? "mm_sk" : "mm_pat";
+  const prefix = rec.kind === "public" ? "mm_pub" : rec.kind === "secret" ? "mm_sk" : rec.kind === "test" ? "mm_test" : "mm_pat";
   const raw = token(prefix);
   await db.doc(`apiKeys/${sha256(raw)}`).set({ ...rec, hint: raw.slice(0, 10) + "…" + raw.slice(-4), createdAt: FieldValue.serverTimestamp() });
   return raw;
@@ -158,6 +159,8 @@ export async function upsertPurchase(
       return { events: [] as EventType[], entitlements: customerSnap.get("entitlements") ?? {} };
     }
     const events = opts.silent ? [] : diffEvents(prev, purchase);
+    // Monnaie virtuelle (wallet.ts) : lectures du journal avant toute écriture de la transaction.
+    const walletOps = await readWalletOps(tx, customerRef, walletOpsFor((project.config as any).virtualCurrencies, purchase, events));
     const purchases = allSnap.docs.map(d => d.data() as Purchase).filter(p => p.id !== purchase.id).concat(purchase);
     const entitlements = computeEntitlements(purchases, project.config.entitlements, now);
 
@@ -194,6 +197,7 @@ export async function upsertPurchase(
       ...(spent ? { totalSpentMicros: FieldValue.increment(spent) } : {}),
     }, { merge: true });
     for (const key of indexKeys) tx.set(indexRef(pid, key), { appUserId });
+    writeWalletOps(tx, customerRef, walletOps, now);
     return { events, entitlements };
   });
 }

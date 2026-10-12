@@ -207,9 +207,18 @@ export async function createCheckout(project: Project, appUserId: string, body: 
     success_url: url(body?.successUrl), cancel_url: url(body?.cancelUrl),
     metadata: meta,
     ...(price.recurring ? { subscription_data: { metadata: meta } } : { payment_intent_data: { metadata: meta } }),
-    allow_promotion_codes: true,
+    ...(typeof body?.email === "string" && body.email ? { customer_email: body.email } : {}),
+    ...(await promoDiscount(stripe, body?.promoCode)),
   });
   return { url: session.url, id: session.id };
+}
+
+/** Explicit promotion code → `discounts`; otherwise let the buyer type one (`allow_promotion_codes`). */
+async function promoDiscount(stripe: Stripe, code: unknown): Promise<Partial<Stripe.Checkout.SessionCreateParams>> {
+  if (typeof code !== "string" || !code.trim()) return { allow_promotion_codes: true };
+  const found = (await stripe.promotionCodes.list({ code: code.trim(), active: true, limit: 1 })).data[0];
+  if (!found) throw new HttpError(400, "invalid_promotion_code", "Code promo inconnu ou expiré");
+  return { discounts: [{ promotion_code: found.id }] };
 }
 
 export async function createPortal(project: Project, appUserId: string, returnUrl: string) {

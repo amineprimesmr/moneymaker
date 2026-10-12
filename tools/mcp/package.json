@@ -1,0 +1,9 @@
+{
+  "name": "moneymaker-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Serveur MCP MoneyMaker (stdio, sans dépendance)",
+  "bin": { "moneymaker-mcp": "index.js" },
+  "engines": { "node": ">=18" }
+}

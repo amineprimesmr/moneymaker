@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mon abonnement</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+:root{--bg:#0b0b0c;--fg:#fff;--muted:rgba(255,255,255,.65);--accent:#00d084}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif}
+main{max-width:420px;margin:0 auto;padding:48px 16px;text-align:center;display:flex;flex-direction:column;gap:14px}
+.err{background:rgba(255,80,80,.15);border-radius:12px;padding:12px}p{color:var(--muted)}
+</style>
+</head>
+<body>
+<main><h1>Mon abonnement</h1><p id="msg">Ouverture du portail de paiement…</p></main>
+<script>
+// /manage/{projectId}?token=… (lien signé généré par POST /v1/customers/:id/manage-link ou la page de succès)
+(async () => {
+  const msg = document.getElementById("msg");
+  const pid = location.pathname.split("/").filter(Boolean)[1];
+  const token = new URLSearchParams(location.search).get("token");
+  const fail = m => { msg.className = "err"; msg.textContent = m; };
+  if (!pid || !token) return fail("Lien invalide ou expiré. Demande un nouveau lien depuis l'app.");
+  try {
+    const r = await fetch(`/v1/web/${encodeURIComponent(pid)}/portal`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error === "invalid_manage_token" ? "Lien invalide ou expiré. Demande un nouveau lien depuis l'app." : j.error === "no_stripe_customer" || j.error === "no_stripe_subscription" ? "Aucun abonnement web trouvé pour ce compte." : (j.message || j.error));
+    location.replace(j.url);
+  } catch (e) { fail(e.message); }
+})();
+</script>
+</body>
+</html>

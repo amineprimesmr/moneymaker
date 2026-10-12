@@ -1,0 +1,9 @@
+{
+  "name": "moneymaker-cli",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CLI MoneyMaker `mm` (sans dépendance)",
+  "bin": { "mm": "mm.js" },
+  "engines": { "node": ">=18" }
+}

@@ -51,6 +51,8 @@ export function describe(project: Project, e: Record<string, any>): string {
     const move = e.prevRank ? ` (avant #${e.prevRank})` : "";
     return `${label} — *${e.appName ?? e.appId}* #${e.rank ?? "–"} ${where}${move}`;
   }
+  // Anomalies et résumé hebdomadaire (anomalies.ts) : titre + texte déjà rédigés.
+  if (typeof e.title === "string" && typeof e.body === "string" && (String(e.type).startsWith("ANOMALY_") || e.type === "WEEKLY_SUMMARY")) return `*${e.title}* — ${e.body}`;
   if (e.type === "CUSTOMER_CENTER_FEEDBACK") return `${label} — *${project.name}* · ${e.action} · « ${e.reason} »${e.comment ? ` — ${String(e.comment).slice(0, 300)}` : ""}`;
   const amount = e.priceMicros && !e.isTrial ? ` · ${money(e.priceMicros, e.currency)}` : "";
   const where = e.country ? ` · ${e.country}` : "";

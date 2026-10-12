@@ -385,12 +385,12 @@ export async function pushRanking(project: Project, a: Record<string, any>): Pro
 }
 
 /** Alerte intelligente (plan.ts) → notification à chaque membre qui l'accepte. */
-export async function pushInsight(project: Project, i: { title: string; body: string; type: string }): Promise<number> {
+export async function pushInsight(project: Project, i: { title: string; body: string; type: string; good?: boolean }): Promise<number> {
   const devices = await devicesFor(project.members);
   let sent = 0;
   await Promise.all(devices.filter(d => d.apnsToken && { ...DEFAULT_PREFS, ...d.prefs }.insights && !(d.prefs?.mutedProjects ?? []).includes(project.id)).map(async d => {
     const r = await apnsSend(d.env, d.apnsToken!, "alert", {
-      aps: { alert: { title: i.title, body: i.body }, "thread-id": `insights-${project.id}`, "interruption-level": i.type === "SALES_SPIKE" || i.type === "FIRST_SALE_COUNTRY" ? "active" : "time-sensitive", category: "EVENT", sound: "default" },
+      aps: { alert: { title: i.title, body: i.body }, "thread-id": `insights-${project.id}`, "interruption-level": i.type === "WEEKLY_SUMMARY" ? "passive" : i.type === "SALES_SPIKE" || i.type === "FIRST_SALE_COUNTRY" || i.good ? "active" : "time-sensitive", category: "EVENT", sound: "default" },
       projectId: project.id, url: `moneymaker://project/${project.id}`,
     });
     if (r.status === 200) sent++;

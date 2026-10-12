@@ -12,6 +12,7 @@ import { computeEntitlements } from "./engine";
 import { fanOut } from "./integrations";
 import { pushEvent, pushRanking, sendDailySummaries, pushInsight } from "./push";
 import { insightsForProject } from "./plan";
+import { anomaliesForProject, weeklySummaryForProject } from "./anomalies";
 import { syncDownloads } from "./downloads";
 import { refreshIcon } from "./icons";
 import { demoTick } from "./demo";
@@ -118,13 +119,41 @@ export const insightsDaily = onSchedule({ schedule: "0 7 * * *", timeZone: "Euro
   for (const d of (await db.collection("projects").select().get()).docs) {
     try {
       const project = await getProject(d.id);
-      for (const i of await insightsForProject(d.id)) {
+      const insights = await insightsForProject(d.id);
+      for (const i of insights) {
         const ref = db.doc(`projects/${d.id}/insights/${new Date(i.at).toISOString().slice(0, 10)}-${i.type}`);
         if ((await ref.get()).exists) continue;
         await ref.set(i);
         await pushInsight(project, i).catch(e => console.error("insight push", e));
       }
+      // Anomalies (z-score sur 28 jours, anomalies.ts). Pas de doublon de push avec SALES_DROP / SALES_SPIKE du même jour.
+      const fired = new Set(insights.map(i => i.type));
+      for (const a of await anomaliesForProject(project)) {
+        const ref = db.doc(`projects/${d.id}/anomalies/${a.date}-${a.metric}`);
+        if ((await ref.get()).exists) continue;
+        const dup = a.metric === "revenue" && (fired.has("SALES_DROP") || fired.has("SALES_SPIKE"));
+        const pushed = dup ? 0 : await pushInsight(project, a).catch(e => { console.error("anomaly push", e); return 0; });
+        const integrations = await fanOut(project, await getCredentials(d.id), a, "alert").catch(() => ({}));
+        await ref.set({ ...a, pushed, integrations });
+      }
     } catch (e) { console.error("insights", d.id, e); }
+  }
+});
+
+/** Résumé hebdomadaire : lundi 8 h (Paris) — revenu vs semaine précédente, MRR, nouveaux abonnés, top pays. */
+export const weeklySummaryPush = onSchedule({ schedule: "0 8 * * 1", timeZone: "Europe/Paris", timeoutSeconds: 300 }, async () => {
+  for (const d of (await db.collection("projects").select().get()).docs) {
+    try {
+      const project = await getProject(d.id);
+      if ((project.config as any).anomalies?.weeklySummary === false) continue;
+      const w = await weeklySummaryForProject(project);
+      const ref = db.doc(`projects/${d.id}/weeklySummaries/${w.weekStart}`);
+      if ((await ref.get()).exists) continue;
+      if (!w.revenueMicros && !w.previousRevenueMicros && !w.newSubscriptions) continue; // business inactif : pas de bruit
+      const pushed = await pushInsight(project, { ...w, type: "WEEKLY_SUMMARY" }).catch(() => 0);
+      const integrations = await fanOut(project, await getCredentials(d.id), { ...w, type: "WEEKLY_SUMMARY" }, "alert").catch(() => ({}));
+      await ref.set({ ...w, pushed, integrations, at: Date.now() });
+    } catch (e) { console.error("weekly", d.id, e); }
   }
 });
 
