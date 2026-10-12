@@ -17,21 +17,29 @@ export async function sendToAppsFlyer(project: Project, creds: Credentials, even
   const customer = (await db.doc(`projects/${project.id}/customers/${event.appUserId}`).get()).data() ?? {};
   const afId = customer.attributes?.$appsflyerId;
   if (!afId) return "no_appsflyer_id";
-  const appId = event.store === "play_store" ? cfg.androidAppId : cfg.appId;
-  if (!appId) return "no_app_id";
+  const android = event.store === "play_store";
+  const rawId = android ? cfg.androidAppId : cfg.appId;
+  if (!rawId) return "no_app_id";
+  // iOS app ids must carry the "id" prefix, otherwise AppsFlyer answers 200 but drops the event.
+  const appId = !android && /^\d+$/.test(String(rawId)) ? `id${rawId}` : String(rawId);
+  const a = customer.attributes ?? {};
   const value: Record<string, unknown> = { af_content_id: event.productId, store: event.store };
   if (REVENUE.has(event.type) && !event.isTrial && event.priceMicros > 0) {
     value.af_revenue = (event.priceMicros / 1e6).toFixed(2);
     value.af_currency = event.currency;
   }
-  const res = await fetch(`https://api2.appsflyer.com/inappevent/${encodeURIComponent(appId)}`, {
+  // https://dev.appsflyer.com/hc/reference/s2s-events-api3-post — header `authentication`, eventValue is a JSON *string*, 1 KB max.
+  const res = await fetch(`https://api3.appsflyer.com/inappevent/${encodeURIComponent(appId)}`, {
     method: "POST", signal: AbortSignal.timeout(10000),
     headers: { "Content-Type": "application/json", authentication: creds.appsflyer.devKey },
     body: JSON.stringify({
       appsflyer_id: afId, customer_user_id: event.appUserId, eventName: name, eventValue: JSON.stringify(value),
       eventTime: new Date(event.at).toISOString().replace("T", " ").slice(0, 23),
-      ...(customer.attributes?.$idfa ? { idfa: customer.attributes.$idfa } : {}),
-      ...(customer.attributes?.$idfv ? { idfv: customer.attributes.$idfv } : {}),
+      ...(value.af_currency ? { eventCurrency: event.currency } : {}),
+      ...(project.config.apple?.bundleId || project.config.google?.packageName ? { bundleIdentifier: android ? project.config.google?.packageName : project.config.apple?.bundleId } : {}),
+      ...(a.$idfa ? { idfa: String(a.$idfa).toUpperCase() } : {}),
+      ...(a.$idfv ? { idfv: String(a.$idfv).toUpperCase() } : {}),
+      ...(a.$ip && /^\d{1,3}(\.\d{1,3}){3}$/.test(a.$ip) ? { ip: a.$ip } : {}),
     }),
   });
   if (!res.ok) throw new Error(`AppsFlyer ${res.status}: ${(await res.text()).slice(0, 200)}`);

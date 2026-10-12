@@ -163,7 +163,7 @@ struct RootTabView: View {
             case .today: tab = 0; homePath = NavigationPath()
             case .feed: tab = 1
             case .globe: tab = 2
-            case .project, .plan: tab = 0; homePath = NavigationPath(); homePath.append(d)
+            case .project, .plan, .charts: tab = 0; homePath = NavigationPath(); homePath.append(d)
             }
         }
     }
@@ -221,6 +221,9 @@ struct OverviewView: View {
             .navigationDestination(for: Router.Destination.self) { d in
                 if case .project(let id) = d, let p = store.overview?.projects.first(where: { $0.projectId == id }) { ProjectView(p: p) }
                 else if case .plan = d { PlanScreen() }
+                else if case .charts(let id) = d, let pid = id ?? store.selectedProject?.projectId ?? store.overview?.projects.first?.projectId {
+                    ChartsScreen(projectId: pid)
+                }
             }
             .toolbar(.hidden, for: .navigationBar)
             .mmPage()
@@ -434,6 +437,7 @@ struct ProjectView: View {
                     StatTile(icon: "sparkle", title: "Nouveaux", value: "\(p.newCustomers)")
                 }
                 .mmAppear(3)
+                GrowthSections(p: p).mmAppear(4)
                 if p.billingIssues > 0 {
                     MMCard(padding: 16, radius: 22, glow: MMColor.orange) {
                         Label("\(p.billingIssues) problème(s) de paiement en cours", systemImage: "exclamationmark.triangle.fill")

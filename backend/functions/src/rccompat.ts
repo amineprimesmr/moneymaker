@@ -5,7 +5,7 @@
 import { Purchase } from "./engine";
 
 const iso = (ms: number | null | undefined) => (ms == null ? null : new Date(ms).toISOString());
-const RC_STORE: Record<string, string> = { app_store: "app_store", play_store: "play_store", stripe: "stripe", paddle: "paddle", promotional: "promotional" };
+const RC_STORE: Record<string, string> = { app_store: "app_store", play_store: "play_store", stripe: "stripe", paddle: "paddle", promotional: "promotional", amazon: "amazon", galaxy: "galaxy", roku: "roku" };
 
 /** MoneyMaker purchases + entitlements → RevenueCat v1 `{ subscriber }` payload. Pure — unit-tested. */
 export function toRevenueCatSubscriber(appUserId: string, purchases: Purchase[], entitlements: Record<string, any>, firstSeenAt?: number | null) {

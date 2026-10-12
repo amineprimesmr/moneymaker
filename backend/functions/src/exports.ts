@@ -95,10 +95,12 @@ export const isDue = (cfg: ExportConfig, now: number) => cfg.schedule === "daily
 
 const sha256hex = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
 const hmac = (k: string | Buffer, s: string) => createHmac("sha256", k).update(s).digest();
+/** SigV4 URI encoding: RFC 3986 unreserved set only (encodeURIComponent leaves !'()* alone). */
+const rfc3986 = (s: string) => encodeURIComponent(s).replace(/[!'()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 /** Signed S3 PutObject request (virtual-hosted style). Pure — unit-tested. */
 export function signS3Put(o: { bucket: string; region: string; key: string; body: string; contentType: string; accessKeyId: string; secretAccessKey: string; now: number }) {
   const host = `${o.bucket}.s3.${o.region}.amazonaws.com`;
-  const path = "/" + o.key.split("/").map(encodeURIComponent).join("/");
+  const path = "/" + o.key.split("/").map(rfc3986).join("/");
   const amzDate = new Date(o.now).toISOString().replace(/[:-]|\.\d{3}/g, ""), date = amzDate.slice(0, 8);
   const payloadHash = sha256hex(o.body);
   const headers: Record<string, string> = { "content-type": o.contentType, host, "x-amz-content-sha256": payloadHash, "x-amz-date": amzDate };

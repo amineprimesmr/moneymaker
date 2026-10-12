@@ -71,6 +71,7 @@ export async function projectMetrics(project: Project, days = 30) {
     db.collection(`projects/${pid}/customers`).count().get(),
     db.collection(`projects/${pid}/daily`).orderBy("date", "desc").limit(Math.min(days, 400)).get(),
   ]);
+  const ads = await import("./ads").then(a => a.adRevenueSince(pid, since)).catch(() => ({ revenueMicros: 0, impressions: 0 }));
   const dl = await downloadsFor(pid, since).catch(() => ({ total: 0, byDay: {}, byCountry: {}, available: false }));
   const purchases = [...purchasesSnap.docs, ...lifetime.docs].map(d => ({ ...(d.data() as Purchase), appUserId: d.get("appUserId") as string }));
   const current = computeMetrics(purchases, p => (p as any).appUserId, project.config.currency, now);
@@ -119,6 +120,9 @@ export async function projectMetrics(project: Project, days = 30) {
       newSubscriptions: (prev.eventCounts.INITIAL_PURCHASE ?? 0) + (prev.eventCounts.TRIAL_CONVERTED ?? 0),
       trialsStarted: prev.eventCounts.TRIAL_STARTED ?? 0, payingCustomers: prev.payingCustomers,
     },
+    /** Revenu publicitaire (ads.ts, devise du projet) et revenu « pub incluse ». */
+    adRevenueMicros: ads.revenueMicros, adImpressions: ads.impressions,
+    revenueInclAdsMicros: cur.netRevenueMicros + ads.revenueMicros,
     downloads: dl.available ? dl.total : null,
     downloadsByDay: dl.byDay,
     downloadsByCountry: dl.byCountry,
@@ -173,9 +177,11 @@ export async function projectCohorts(project: Project, months = 12) {
 export async function snapshotProject(project: Project) {
   const m = await projectMetrics(project, 1);
   const date = dayKey(Date.now() - 60000);
+  // DAU de la veille : clients vus (customers.lastSeenAt) dans les dernières 24 h — sert à l'ARPDAU (ads.ts).
+  const dau = await db.collection(`projects/${project.id}/customers`).where("lastSeenAt", ">=", Date.now() - DAY).count().get().then(s => s.data().count).catch(() => null);
   await db.doc(`projects/${project.id}/daily/${date}`).set({
     date, mrrMicros: m.mrrMicros, activeSubscriptions: m.activeSubscriptions, activeTrials: m.activeTrials,
     activeCustomers: m.activeCustomers, revenueMicros: m.revenueMicros, refundsMicros: m.refundsMicros, currency: m.currency,
-    totalCustomers: m.totalCustomers,
+    totalCustomers: m.totalCustomers, ...(dau !== null ? { dau } : {}),
   });
 }

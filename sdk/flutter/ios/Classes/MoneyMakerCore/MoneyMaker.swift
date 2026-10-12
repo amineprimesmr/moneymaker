@@ -244,6 +244,28 @@ public final class MoneyMaker: ObservableObject {
         Task { let _: FeedbackAck? = try? await api.send(path, body: body) }
     }
 
+    // MARK: Ad revenue (AdMob, AppLovin…)
+
+    /// Logs impression-level ad revenue. Values map 1:1 to Google Mobile Ads' paid event handler:
+    /// `ad.paidEventHandler = { value in MoneyMaker.shared.trackAdRevenue(valueMicros: value.value.multiplying(byPowerOf10: 6).int64Value, currencyCode: value.currencyCode, precision: value.precision.rawValue, adUnitID: ad.adUnitID) }`.
+    /// `precision`: 0 unknown, 1 estimated, 2 publisher provided, 3 precise. `type`: "impression" (default), "click" or "rewarded".
+    public func trackAdRevenue(valueMicros: Int64, currencyCode: String, precision: Int = 0, adUnitID: String,
+                               network: String = "admob", placement: String? = nil, type: String = "impression") {
+        var body: [String: Any] = ["type": type, "network": network, "adUnitId": adUnitID, "revenueMicros": valueMicros,
+                                   "currency": currencyCode, "precision": precision]
+        if let placement { body["placement"] = placement }
+        let path = "customers/\(appUserID.urlPath)/ad-events"
+        let api = self.api
+        Task { let _: FeedbackAck? = try? await api.send(path, body: body) }
+    }
+
+    /// Same as `trackAdRevenue` for an impression (revenue may be 0 when the network reports it separately).
+    public func trackAdImpression(adUnitID: String, network: String = "admob", placement: String? = nil,
+                                  valueMicros: Int64 = 0, currencyCode: String = "USD", precision: Int = 0) {
+        trackAdRevenue(valueMicros: valueMicros, currencyCode: currencyCode, precision: precision, adUnitID: adUnitID,
+                       network: network, placement: placement, type: "impression")
+    }
+
     // MARK: Purchases
 
     @discardableResult

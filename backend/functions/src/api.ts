@@ -14,6 +14,9 @@ import { ingestGooglePurchase, ingestGoogleNotification } from "./google";
 import { ingestStripeWebhook, createCheckout, createPortal } from "./stripe";
 import { sanitizeWeb, publicOffering, withPrices, webCheckout, webSuccess, webPortal, manageLink, redeemWebPurchase } from "./web";
 import { ingestPaddleWebhook } from "./paddle";
+import { ingestAmazonPurchase, ingestAmazonNotification } from "./amazon";
+import { ingestGalaxyPurchase } from "./galaxy";
+import { ingestRokuPurchase, ingestRokuNotification } from "./roku";
 import { projectMetrics, projectCohorts } from "./metrics";
 import { connectStripe, connectAppStore, connectGooglePlay, markConnected } from "./connect";
 import { sanitizeIntegrations, fanOut } from "./integrations";
@@ -30,6 +33,8 @@ import { chartToCsv, CHART_NAMES } from "./charts";
 import { sanitizeOfferings, sanitizeTargeting, sanitizeExperiments, resolveOfferings, aggregateResults, PAYWALL_EVENT_TYPES, Context } from "./growth";
 import { searchApps, syncTrackers, translateReview, lookupApp, TrackedApp } from "./appstore";
 import { sanitizeAudiences, sanitizeFilters, audienceCsv, customerStatus } from "./audiences";
+import { sanitizeAdmobConfig, sanitizeAdEvent, recordAdEvent, handleSsv } from "./ads";
+import { projectBenchmarks } from "./benchmarks";
 import { sanitizeVirtualCurrencies, readWallet, moveWallet, parseAmount, parseIdempotencyKey } from "./wallet";
 import { projectLtv, audienceById, audienceCustomers, loadCustomerRows } from "./segmentsLoader";
 
@@ -167,6 +172,15 @@ function sanitizeConfig(input: any, current: ProjectConfig): ProjectConfig {
   if (input.virtualCurrencies !== undefined) {
     try { (next as any).virtualCurrencies = sanitizeVirtualCurrencies(input.virtualCurrencies ?? []); } catch (e) { throw new HttpError(400, (e as Error).message); }
   }
+  if (input.admob !== undefined) {
+    if (input.admob === null) delete (next as any).admob;
+    else try { (next as any).admob = sanitizeAdmobConfig(input.admob, (((next as any).virtualCurrencies ?? []) as { code: string }[]).map(c => c.code)); }
+    catch (e) { throw new HttpError(400, (e as Error).message); }
+  }
+  if (input.category !== undefined) {
+    if (input.category === null || input.category === "") delete (next as any).category;
+    else (next as any).category = text(input.category, 60, "invalid_category");
+  }
   if (input.anomalies !== undefined) {
     const a = input.anomalies ?? {};
     const threshold = a.threshold === undefined ? 3 : Number(a.threshold);
@@ -263,6 +277,27 @@ route("POST", "/v1/webhooks/google/:pid", async (req, _res, [pid]) => {
   return r;
 });
 
+// Amazon Appstore RTN (SNS HTTPS subscription; SNS signature verified, then the receipt is re-verified with RVS).
+route("POST", "/v1/webhooks/amazon/:pid", async (req, _res, [pid]) => {
+  const project = await getProject(cleanId(pid));
+  const creds = await getCredentials(project.id);
+  if (req.query.token !== creds.googleRtdnToken) throw new HttpError(401, "invalid_notification_token");
+  const r = await ingestAmazonNotification(project, req.rawBody, req.body);
+  await markHealth(project.id, "amazonNotifications", { type: String((r as any).notificationType ?? ((r as any).confirmed !== undefined ? "confirmation" : "")) });
+  return r;
+});
+
+// Roku Pay push notifications (signed JWT, or legacy JSON whose responseKey must be echoed as the body).
+route("POST", "/v1/webhooks/roku/:pid", async (req, res, [pid]) => {
+  const project = await getProject(cleanId(pid));
+  const creds = await getCredentials(project.id);
+  if (req.query.token !== creds.googleRtdnToken) throw new HttpError(401, "invalid_notification_token");
+  const r = await ingestRokuNotification(project, String(req.rawBody ?? ""), typeof req.body === "object" ? req.body : {}, req.get("authorization"));
+  await markHealth(project.id, "rokuNotifications", { type: String(r.transactionType ?? "") });
+  if (r.responseKey) { res.status(200).type("text/plain").send(String(r.responseKey)); return; }
+  return { ok: true };
+});
+
 route("POST", "/v1/webhooks/stripe/:pid", async (req, _res, [pid]) => {
   const project = await getProject(cleanId(pid));
   const r = await ingestStripeWebhook(project, req.rawBody, req.get("stripe-signature"));
@@ -352,6 +387,24 @@ route("GET", "/v1/signing-key", async () => {
 route("POST", "/v1/customers/:id/google", async (req, _res, [id]) => {
   const project = await clientProject(req);
   const r = await ingestGooglePurchase(project, cleanId(decodeURIComponent(id)), req.body);
+  return customerInfo(project, r.appUserId);
+});
+
+route("POST", "/v1/customers/:id/amazon", async (req, _res, [id]) => {
+  const project = await clientProject(req);
+  const r = await ingestAmazonPurchase(project, cleanId(decodeURIComponent(id)), req.body);
+  return customerInfo(project, (r as any).appUserId ?? cleanId(decodeURIComponent(id)));
+});
+
+route("POST", "/v1/customers/:id/galaxy", async (req, _res, [id]) => {
+  const project = await clientProject(req);
+  const r = await ingestGalaxyPurchase(project, cleanId(decodeURIComponent(id)), req.body);
+  return customerInfo(project, r.appUserId);
+});
+
+route("POST", "/v1/customers/:id/roku", async (req, _res, [id]) => {
+  const project = await clientProject(req);
+  const r = await ingestRokuPurchase(project, cleanId(decodeURIComponent(id)), req.body);
   return customerInfo(project, r.appUserId);
 });
 
@@ -477,6 +530,7 @@ route("GET", "/v1/overview", async req => {
   return {
     currency, periodDays: days,
     mrrMicros: sum(p => p.mrrMicros), revenueMicros: sum(p => p.netRevenueMicros),
+    adRevenueMicros: sum(p => p.adRevenueMicros ?? 0), revenueInclAdsMicros: sum(p => p.revenueInclAdsMicros ?? p.netRevenueMicros),
     activeSubscriptions: projects.reduce((a, p) => a + p.activeSubscriptions, 0),
     activeTrials: projects.reduce((a, p) => a + p.activeTrials, 0),
     newCustomers: projects.reduce((a, p) => a + p.newCustomers, 0),
@@ -486,6 +540,7 @@ route("GET", "/v1/overview", async req => {
     projects: projects.map(({ history, revenueByDay, downloadsByDay, ...p }) => ({
       projectId: p.projectId, name: p.name, currency: p.currency, mrrMicros: p.mrrMicros, netRevenueMicros: p.netRevenueMicros,
       activeSubscriptions: p.activeSubscriptions, activeTrials: p.activeTrials, newCustomers: p.newCustomers, trialConversionRate: p.trialConversionRate,
+      adRevenueMicros: p.adRevenueMicros, revenueInclAdsMicros: p.revenueInclAdsMicros,
       churnRate: p.churnRate, billingIssues: p.billingIssues, payingCustomers: p.payingCustomers, downloads: p.downloads,
       hasTrials: p.hasTrials, revenueByCountry: p.revenueByCountry, iconUrl: p.iconUrl, downloadsByDay, revenueByDay,
     })),
@@ -500,14 +555,17 @@ route("GET", "/v1/projects/:pid", async (req, _res, [pid]) => {
   const base = PUBLIC_BASE;
   return {
     ...project,
-    credentials: { integrations: Object.keys(creds.integrations ?? {}), exports: Object.keys((creds as any).exports ?? {}), appStoreConnect: Boolean(creds.appStoreConnect), appsflyer: Boolean(creds.appsflyer), apple: Boolean(creds.apple), google: Boolean(creds.google), stripeKey: Boolean(creds.stripe?.secretKey), stripeWebhook: Boolean(creds.stripe?.webhookSecret), paddle: Boolean((creds as any).paddle?.webhookSecret) },
+    credentials: { integrations: Object.keys(creds.integrations ?? {}), exports: Object.keys((creds as any).exports ?? {}), appStoreConnect: Boolean(creds.appStoreConnect), appsflyer: Boolean(creds.appsflyer), apple: Boolean(creds.apple), google: Boolean(creds.google), stripeKey: Boolean(creds.stripe?.secretKey), stripeWebhook: Boolean(creds.stripe?.webhookSecret), paddle: Boolean((creds as any).paddle?.webhookSecret), amazon: Boolean((creds as any).amazon?.sharedSecret), galaxy: Boolean((creds as any).galaxy?.serviceAccountId), roku: Boolean((creds as any).roku?.devApiKey) },
     endpoints: {
       appleNotifications: `${base}/v1/webhooks/apple/${project.id}`,
       googleRtdn: `${base}/v1/webhooks/google/${project.id}?token=${creds.googleRtdnToken}`,
       stripeWebhook: `${base}/v1/webhooks/stripe/${project.id}`,
       paddleWebhook: `${base}/v1/webhooks/paddle/${project.id}`,
+      amazonNotifications: `${base}/v1/webhooks/amazon/${project.id}?token=${creds.googleRtdnToken}`,
+      rokuNotifications: `${base}/v1/webhooks/roku/${project.id}?token=${creds.googleRtdnToken}`,
     },
     webhookSigningSecret: project.role === "viewer" ? undefined : creds.webhookSigningSecret,
+    amazonConfirmationToken: (creds as any).amazon ? ((await db.doc(`projects/${project.id}`).get()).get("health.amazonNotifications.confirmationToken") ?? null) : null,
   };
 });
 
@@ -569,6 +627,27 @@ route("PUT", "/v1/projects/:pid/credentials", async (req, _res, [pid]) => {
     if (b.paddle.environment) s.environment = b.paddle.environment === "sandbox" ? "sandbox" : "production";
     const current = ((await getCredentials(project.id)) as any).paddle ?? {};
     update.paddle = { ...current, ...s };
+  }
+  if (b.amazon) {
+    const cur = ((await getCredentials(project.id)) as any).amazon ?? {};
+    const a: Record<string, unknown> = { ...cur };
+    if (b.amazon.sharedSecret) { if (typeof b.amazon.sharedSecret !== "string" || b.amazon.sharedSecret.length < 8 || b.amazon.sharedSecret.length > 300) throw new HttpError(400, "invalid_amazon_shared_secret"); a.sharedSecret = b.amazon.sharedSecret.trim(); }
+    if (b.amazon.packageName !== undefined) a.packageName = b.amazon.packageName ? cleanId(String(b.amazon.packageName), 200) : null;
+    if (b.amazon.allowSandbox !== undefined) a.allowSandbox = b.amazon.allowSandbox === true;
+    if (!a.sharedSecret) throw new HttpError(400, "invalid_amazon_shared_secret");
+    update.amazon = a;
+  }
+  if (b.galaxy) {
+    const cur = ((await getCredentials(project.id)) as any).galaxy ?? {};
+    const g: Record<string, unknown> = { ...cur };
+    if (b.galaxy.serviceAccountId) g.serviceAccountId = cleanId(String(b.galaxy.serviceAccountId), 200);
+    if (b.galaxy.privateKey) { if (!/BEGIN (RSA )?PRIVATE KEY/.test(String(b.galaxy.privateKey))) throw new HttpError(400, "invalid_galaxy_private_key"); g.privateKey = String(b.galaxy.privateKey); }
+    if (b.galaxy.packageName) g.packageName = cleanId(String(b.galaxy.packageName), 200);
+    update.galaxy = g;
+  }
+  if (b.roku) {
+    if (typeof b.roku.devApiKey !== "string" || b.roku.devApiKey.trim().length < 8 || b.roku.devApiKey.length > 300) throw new HttpError(400, "invalid_roku_api_key");
+    update.roku = { devApiKey: b.roku.devApiKey.trim() };
   }
   await db.doc(`projects/${project.id}/private/credentials`).set(update, { merge: true });
   return { ok: true, updated: Object.keys(update) };
@@ -763,7 +842,8 @@ rcRoute("GET", "/subscribers/:id/offerings", async (req, _res, [id]) => {
   const project = await rcProject(req);
   await touchCustomer(project.id, cleanId(decodeURIComponent(id)));
   const { current, offerings } = offeringsFor(project);
-  const platform = /android/i.test(String(req.get("x-platform") ?? "")) ? "play_store" : /stripe|web/i.test(String(req.get("x-platform") ?? "")) ? "stripe" : "app_store";
+  const xp = String(req.get("x-platform") ?? "");
+  const platform = /amazon/i.test(xp) ? "amazon" : /galaxy|samsung/i.test(xp) ? "galaxy" : /roku/i.test(xp) ? "roku" : /android/i.test(xp) ? "play_store" : /stripe|web/i.test(String(req.get("x-platform") ?? "")) ? "stripe" : "app_store";
   return {
     current_offering_id: current,
     offerings: Object.entries<any>(offerings ?? {}).map(([identifier, o]) => ({
@@ -794,7 +874,14 @@ rcRoute("POST", "/receipts", async req => {
     const vals = Object.fromEntries(Object.entries<any>(b.attributes).slice(0, 50).map(([k, v]) => [cleanId(k, 64), String(v?.value ?? v).slice(0, 500)]));
     await db.doc(`projects/${project.id}/customers/${appUserId}`).set({ attributes: vals }, { merge: true });
   }
-  if (platform === "stripe" || /^(sub|cs)_/.test(token)) {
+  if (/amazon/.test(platform)) {
+    await ingestAmazonPurchase(project, appUserId, { receiptId: token, amazonUserId: b.store_user_id ?? b.store_user_ID ?? b.amazon_user_id,
+      productId: b.product_ids?.[0] ?? b.product_id, priceMicros: b.price ? Math.round(Number(b.price) * 1e6) : undefined, currency: b.currency });
+  } else if (/galaxy|samsung/.test(platform)) {
+    await ingestGalaxyPurchase(project, appUserId, { purchaseId: token, productId: b.product_ids?.[0] ?? b.product_id, priceMicros: b.price ? Math.round(Number(b.price) * 1e6) : undefined, currency: b.currency });
+  } else if (/roku/.test(platform)) {
+    await ingestRokuPurchase(project, appUserId, { transactionId: token });
+  } else if (platform === "stripe" || /^(sub|cs)_/.test(token)) {
     const { ingestStripeFetchToken } = await import("./stripe");
     await ingestStripeFetchToken(project, appUserId, token);
   } else if (platform === "android" || b.product_ids || b.product_id && !/^ey/.test(token)) {
@@ -1283,6 +1370,34 @@ route("GET", "/v1/projects/:pid/audiences/:aid/customers", async (req, res, [pid
   const page = rows.slice(offset, offset + limit);
   return { audience, count: rows.length, scanned, truncated, customers: page.map(r => audienceRow(r, now)), nextCursor: offset + limit < rows.length ? String(offset + limit) : null };
 });
+
+// ── Publicité (ads.ts) ─────────────────────────────────────────────────────
+/** SDK (clé publique) : revenu publicitaire au niveau de l'impression (paid event handler Google Mobile Ads). */
+route("POST", "/v1/customers/:id/ad-events", async (req, _res, [id]) => {
+  const project = await clientProject(req);
+  const appUserId = cleanId(decodeURIComponent(id));
+  let ev;
+  try { ev = sanitizeAdEvent(req.body ?? {}, appUserId, Date.now()); } catch (e) { throw new HttpError(400, (e as Error).message); }
+  await recordAdEvent(project, ev);
+  return { ok: true };
+});
+
+/** AdMob Server-Side Verification (récompenses) : URL de callback à saisir dans AdMob → ad unit → SSV. */
+route("GET", "/v1/admob/ssv/:pid", async (req, _res, [pid]) => {
+  const project = await getProject(cleanId(decodeURIComponent(pid), 128)).catch(() => { throw new HttpError(404, "project_not_found"); });
+  const raw = String(req.originalUrl ?? req.url ?? "");
+  const qi = raw.indexOf("?");
+  try { return await handleSsv(project, qi >= 0 ? raw.slice(qi + 1) : ""); }
+  catch (e) {
+    const m = (e as Error).message;
+    if (["missing_signature", "missing_key_id", "unknown_key_id", "invalid_signature"].includes(m)) throw new HttpError(m === "invalid_signature" || m === "unknown_key_id" ? 403 : 400, m);
+    if (m === "admob_keys_unavailable") throw new HttpError(503, m);
+    throw e;
+  }
+});
+
+// ── Benchmarks (benchmarks.ts) ─────────────────────────────────────────────
+route("GET", "/v1/projects/:pid/benchmarks", async (req, _res, [pid]) => projectBenchmarks(await projectFor(await authenticate(req), pid)));
 
 // ── Monnaie virtuelle (wallet.ts) ──────────────────────────────────────────
 const currenciesOf = (project: Project) => ((project.config as any).virtualCurrencies ?? []) as { code: string; name: string }[];

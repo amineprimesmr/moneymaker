@@ -13,7 +13,7 @@ export const RESERVED_ATTRIBUTES = [
   "$appsflyerId", "$adjustId", "$branchId", "$fbAnonId", "$kochavaDeviceId", "$tenjinId", "$singularId",
   "$onesignalId", "$onesignalUserId", "$brazeAliasName", "$brazeAliasLabel", "$iterableUserId", "$customerioId",
   "$clevertapId", "$airshipChannelId", "$intercomId", "$mparticleId", "$firebaseAppInstanceId",
-  "$appleAdsToken", "$osVersion", "$appVersion", "$deviceModel", "$locale",
+  "$appleAdsToken", "$airbridgeDeviceId", "$timezone", "$osVersion", "$appVersion", "$deviceModel", "$locale",
 ] as const;
 
 const REVENUE = new Set(["INITIAL_PURCHASE", "RENEWAL", "TRIAL_CONVERTED", "NON_RENEWING_PURCHASE"]);
@@ -31,11 +31,15 @@ const props = (e: any) => clean({
   product_id: e.productId, store: e.store, price: amount(e), currency: e.currency, country: e.country ?? undefined,
   is_trial: Boolean(e.isTrial), event_type: e.type, transaction_id: e.transactionId ?? e.id,
 });
+const isIPv4 = (ip?: string) => Boolean(ip && /^\d{1,3}(\.\d{1,3}){3}$/.test(ip));
+/** ATT status as the 0..3 integer used by Singular / Airbridge (0 not determined, 1 restricted, 2 denied, 3 authorized). */
+const attCode = (s?: string) => ({ notDetermined: 0, not_determined: 0, restricted: 1, denied: 2, authorized: 3 } as Record<string, number>)[s ?? ""] ?? 0;
 const basic = (u: string, p = "") => `Basic ${Buffer.from(`${u}:${p}`).toString("base64")}`;
 
 // ───────────────────────────── Attribution / ads ─────────────────────────────
 
-/** Meta Conversions API, app events. POST graph.facebook.com/{v}/{dataset_id}/events */
+/** Meta Conversions API, app events. POST graph.facebook.com/{v}/{dataset_id}/events
+ * (https://developers.facebook.com/docs/marketing-api/conversions-api/app-events — latest Graph API v26.0, 29 Jul 2026). */
 export interface MetaCfg { datasetId: string; accessToken: string; apiVersion?: string; testEventCode?: string }
 const META_NAMES: Record<string, string> = { TRIAL_STARTED: "StartTrial", TRIAL_CONVERTED: "Subscribe", INITIAL_PURCHASE: "Subscribe", RENEWAL: "Purchase", NON_RENEWING_PURCHASE: "Purchase" };
 export function buildMeta(cfg: MetaCfg, e: any, a: Attrs, app: AppIds): Req | null {
@@ -47,23 +51,24 @@ export function buildMeta(cfg: MetaCfg, e: any, a: Attrs, app: AppIds): Req | nu
   if (!a.$fbAnonId && !madid) return null;
   const ate = p === "android" ? 1 : a.$attConsentStatus === "authorized" ? 1 : 0;
   const pkg = (p === "ios" ? app.bundleId : app.packageName) ?? "";
-  // extinfo: 16 positional fields required for app events (version, package, short/long version, OS version, model, locale, ...).
-  const extinfo = [p === "ios" ? "i2" : "a2", pkg, a.$appVersion ?? "", a.$appVersion ?? "", a.$osVersion ?? "", a.$deviceModel ?? "", a.$locale ?? "", "", "", "", "", "", "", "", "", ""];
+  // extinfo: 16 positional fields, all present (empty string placeholders): 0 version i2/a2, 1 package, 2 short version, 3 long version,
+  // 4 OS version (required), 5 device model, 6 locale, 7 tz abbr, 8 carrier, 9-11 screen w/h/density, 12 cores, 13-14 storage, 15 device timezone.
+  const extinfo = [p === "ios" ? "i2" : "a2", pkg, a.$appVersion ?? "", a.$appVersion ?? "", a.$osVersion ?? "", a.$deviceModel ?? "", a.$locale ?? "", "", "", "", "", "", "", "", "", a.$timezone ?? ""];
   return {
-    url: `https://graph.facebook.com/${cfg.apiVersion ?? "v23.0"}/${encodeURIComponent(cfg.datasetId)}/events`,
+    url: `https://graph.facebook.com/${cfg.apiVersion ?? "v26.0"}/${encodeURIComponent(cfg.datasetId)}/events`,
     body: clean({
       access_token: cfg.accessToken, test_event_code: cfg.testEventCode,
       data: [{
         event_name: name, event_time: secs(e), event_id: e.id, action_source: "app",
         user_data: { anon_id: a.$fbAnonId, madid: ate ? madid : undefined, external_id: [sha(String(e.appUserId))], em: a.$email ? [sha(a.$email)] : undefined, client_ip_address: a.$ip },
-        app_data: { advertiser_tracking_enabled: ate, application_tracking_enabled: ate, extinfo },
+        app_data: clean({ advertiser_tracking_enabled: ate, application_tracking_enabled: ate, extinfo, vendor_id: p === "ios" ? a.$idfv : undefined }),
         custom_data: { currency: e.currency, value: amount(e), content_ids: [e.productId], content_type: "product" },
       }],
     }),
   };
 }
 
-/** Adjust S2S events. POST https://s2s.adjust.com/event (form), Authorization: Bearer <S2S token>. */
+/** Adjust S2S events. POST https://s2s.adjust.com/event (form), Authorization: Bearer <S2S token> (https://dev.adjust.com/en/api/s2s-api/events). */
 export interface AdjustCfg { appToken: string; s2sToken: string; eventTokens: Record<string, string> }
 export function buildAdjust(cfg: AdjustCfg, e: any, a: Attrs): Req | null {
   const token = cfg.eventTokens?.[e.type];
@@ -76,7 +81,7 @@ export function buildAdjust(cfg: AdjustCfg, e: any, a: Attrs): Req | null {
     url: "https://s2s.adjust.com/event", headers: { Authorization: `Bearer ${cfg.s2sToken}` },
     form: clean({
       s2s: "1", app_token: cfg.appToken, event_token: token, created_at_unix: String(secs(e)), environment: e.isSandbox ? "sandbox" : "production",
-      ...ids, ip_address: a.$ip, ...(rev ? { revenue: String(rev), currency: e.currency } : {}),
+      ...ids, ip_address: isIPv4(a.$ip) ? a.$ip : undefined /* IPv4 only */, ...(rev ? { revenue: String(rev), currency: e.currency } : {}),
       callback_params: JSON.stringify({ app_user_id: e.appUserId, product_id: e.productId }),
     }),
   };
@@ -107,55 +112,100 @@ export function buildBranch(cfg: BranchCfg, e: any, a: Attrs): Req | null {
   };
 }
 
-/** Singular S2S events. GET https://s2s.singular.net/api/v1/evt */
+/** Singular S2S events, legacy V1 endpoint (pure server-side). GET https://s2s.singular.net/api/v1/evt.
+ * iOS: idfv always, idfa only when available, att_authorization_status required. */
 export interface SingularCfg { sdkKey: string }
 export function buildSingular(cfg: SingularCfg, e: any, a: Attrs, app: AppIds): Req | null {
   const p = platformOf(e);
   const bundle = p === "ios" ? app.bundleId : app.packageName;
   if (p === "web" || !bundle || !a.$ip) return null;
   const ids = p === "ios" ? { idfa: a.$idfa, idfv: a.$idfv } : { aifa: a.$gpsAdId, andi: a.$androidId };
-  if (!Object.values(ids).some(Boolean)) return null;
+  if (!Object.values(ids).some(Boolean) || (p === "ios" && !a.$idfv)) return null; // IDFV is mandatory on iOS
+  const att = p === "ios" ? { att_authorization_status: String(attCode(a.$attConsentStatus)) } : {};
   const rev = signedAmount(e);
   const q = clean({
     a: cfg.sdkKey, p: p === "ios" ? "iOS" : "Android", i: bundle, ip: a.$ip, ve: a.$osVersion ?? "0", n: eventName(e),
-    ...ids, utime: String(secs(e)), custom_user_id: e.appUserId,
+    ...ids, ...att, utime: String(secs(e)), custom_user_id: e.appUserId,
     ...(rev ? { is_revenue_event: "true", amt: String(rev), cur: e.currency, purchase_product_id: e.productId, purchase_transaction_id: e.transactionId ?? e.id } : {}),
   });
   return { url: `https://s2s.singular.net/api/v1/evt?${new URLSearchParams(q as any)}`, method: "GET" };
 }
 
-/** Kochava server-to-server event. POST https://control.kochava.com/track/json */
+/** Kochava post-install event. POST https://control.kochava.com/track/json
+ * (https://support.kochava.com/server-to-server-integration/post-install-event-setup): device_ver/device_ua required (may be ""), att required on iOS. */
 export interface KochavaCfg { appGuid: string }
 export function buildKochava(cfg: KochavaCfg, e: any, a: Attrs): Req | null {
   const deviceId = a.$kochavaDeviceId;
-  if (!deviceId) return null;
+  if (!deviceId || !a.$ip) return null; // origination_ip is required
   const p = platformOf(e), rev = signedAmount(e);
+  const device_ids = clean(p === "ios" ? { idfa: a.$idfa, idfv: a.$idfv } : { adid: a.$gpsAdId, android_id: a.$androidId });
+  if (!Object.keys(device_ids).length) return null;
   return {
     url: "https://control.kochava.com/track/json",
     body: {
       action: "event", kochava_app_id: cfg.appGuid, kochava_device_id: deviceId,
       data: clean({
-        usertime: secs(e), origination_ip: a.$ip, app_version: a.$appVersion,
-        device_ids: clean(p === "ios" ? { idfa: a.$idfa, idfv: a.$idfv } : { adid: a.$gpsAdId, android_id: a.$androidId }),
-        event_name: eventName(e), event_data: clean({ ...props(e), sum: rev || undefined, currency: rev ? e.currency : undefined, user_id: e.appUserId }),
+        usertime: secs(e), origination_ip: a.$ip, app_version: a.$appVersion, device_ver: "", device_ua: "", device_ids,
+        ...(p === "ios" ? { att: a.$attConsentStatus === "authorized" } : {}), currency: rev ? e.currency : undefined,
+        event_name: eventName(e), event_data: clean({ ...props(e), sum: rev || undefined, user_id: e.appUserId }),
       }),
     },
   };
 }
 
-/** Tenjin S2S purchase. POST https://track.tenjin.com/v0/purchase (endpoint verified; parameter list from Tenjin S2S guide, not live-tested). */
+/** Tenjin S2S purchase. POST https://track.tenjin.com/v0/purchase, Basic <SDK key>: (https://tenjin.com/docs/server-to-server-s2s-setup/#purchase-api).
+ * Required: analytics_installation_id, advertising_id, bundle_id, platform, os_version, sdk_version, product_id, price, quantity, currency; developer_device_id on iOS. */
 export interface TenjinCfg { apiKey: string }
 export function buildTenjin(cfg: TenjinCfg, e: any, a: Attrs, app: AppIds): Req | null {
   if (!isRevenue(e)) return null;
   const p = platformOf(e), bundle = p === "ios" ? app.bundleId : app.packageName;
   const adId = p === "ios" ? a.$idfa : a.$gpsAdId;
-  if (p === "web" || !bundle || !(adId || a.$tenjinId)) return null;
+  if (p === "web" || !bundle || !a.$tenjinId || (p === "ios" && !a.$idfv)) return null;
   return {
     url: "https://track.tenjin.com/v0/purchase", headers: { Authorization: basic(cfg.apiKey) },
     form: clean({
-      bundle_id: bundle, platform: p, advertising_id: adId, analytics_installation_id: a.$tenjinId, developer_device_id: p === "ios" ? a.$idfv : a.$androidId,
-      os_version: a.$osVersion, app_version: a.$appVersion, product_id: e.productId, currency: e.currency, quantity: "1", price: String(amount(e)),
-      transaction_id: e.transactionId ?? e.id,
+      bundle_id: bundle, platform: p, advertising_id: adId || "00000000-0000-0000-0000-000000000000", analytics_installation_id: a.$tenjinId,
+      developer_device_id: p === "ios" ? a.$idfv : a.$androidId, limit_ad_tracking: adId ? "0" : "1",
+      os_version: a.$osVersion ?? "", sdk_version: "moneymaker-s2s-1.0", app_version: a.$appVersion, product_id: e.productId, currency: e.currency, quantity: "1", price: String(amount(e)),
+      ip_address: a.$ip, customer_user_id: e.appUserId,
+    }),
+  };
+}
+
+/** Airbridge S2S in-app event. POST https://api.airbridge.io/events/v2/apps/{app_name}/mobile-app/9360, Bearer API token,
+ * X-Forwarded-For = device IP; eventTimestamp in ms, must be < 24 h old; 1000 req/min
+ * (https://help.airbridge.io/en/references/s2s-event/send-in-app-events). */
+export interface AirbridgeCfg { appName: string; apiToken: string }
+const AIRBRIDGE: Record<string, string> = {
+  TRIAL_STARTED: "airbridge.startTrial", INITIAL_PURCHASE: "airbridge.subscribe", TRIAL_CONVERTED: "airbridge.subscribe",
+  RENEWAL: "airbridge.ecommerce.order.completed", NON_RENEWING_PURCHASE: "airbridge.ecommerce.order.completed", EXPIRATION: "airbridge.unsubscribe",
+};
+/** Deterministic UUID-v4-shaped id from the event id (Airbridge dedupes on eventUUID). */
+const uuidOf = (s: string) => { const h = createHash("sha256").update(s).digest("hex"); return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${"89ab"[parseInt(h[16], 16) % 4]}${h.slice(17, 20)}-${h.slice(20, 32)}`; };
+export function buildAirbridge(cfg: AirbridgeCfg, e: any, a: Attrs, app: AppIds, now = Date.now()): Req | null {
+  const p = platformOf(e);
+  const pkg = p === "ios" ? app.bundleId : app.packageName;
+  const at = Number(e.at ?? now);
+  if (p === "web" || !pkg || now - at > 24 * 3600 * 1000) return null;
+  const category = e.type === "INITIAL_PURCHASE" && e.isTrial ? "airbridge.startTrial" : AIRBRIDGE[e.type] ?? eventName(e);
+  const rev = amount(e);
+  const device = a.$airbridgeDeviceId ? clean({
+    deviceUUID: a.$airbridgeDeviceId, osName: p === "ios" ? "iOS" : "Android", osVersion: a.$osVersion ?? "", deviceModel: a.$deviceModel, locale: a.$locale,
+    ...(p === "ios" ? { ifa: a.$idfa, ifv: a.$idfv, appTrackingTransparency: attCode(a.$attConsentStatus) } : { gaid: a.$gpsAdId }),
+  }) : undefined;
+  return {
+    url: `https://api.airbridge.io/events/v2/apps/${encodeURIComponent(cfg.appName)}/mobile-app/9360`,
+    headers: { Authorization: `Bearer ${cfg.apiToken}`, ...(a.$ip ? { "X-Forwarded-For": a.$ip } : {}) },
+    body: clean({
+      eventUUID: uuidOf(String(e.id)), eventTimestamp: at,
+      user: { externalUserID: String(e.appUserId), externalUserEmail: a.$email }, device,
+      app: { packageName: pkg, version: a.$appVersion },
+      eventData: { goal: clean({
+        category, value: rev || undefined,
+        semanticAttributes: clean({ transactionID: e.transactionId ?? e.id, inAppPurchased: true, currency: rev ? e.currency : undefined,
+          products: [clean({ productID: e.productId, name: e.productId, quantity: 1, price: rev || undefined, currency: rev ? e.currency : undefined })] }),
+        customAttributes: clean({ store: e.store, event_type: e.type, is_trial: Boolean(e.isTrial) }),
+      }) },
     }),
   };
 }
@@ -194,7 +244,7 @@ export function buildOneSignal(cfg: OneSignalCfg, e: any, a: Attrs): Req {
   };
 }
 
-/** Iterable: trackPurchase for revenue, events/track otherwise. */
+/** Iterable: trackPurchase for revenue, events/track otherwise. Header Api-Key; createdAt is a Unix timestamp in seconds (https://api.iterable.com/api/docs). */
 export interface IterableCfg { apiKey: string; region?: "us" | "eu" }
 export function buildIterable(cfg: IterableCfg, e: any, a: Attrs): Req {
   const host = cfg.region === "eu" ? "https://api.eu.iterable.com" : "https://api.iterable.com";
@@ -202,10 +252,10 @@ export function buildIterable(cfg: IterableCfg, e: any, a: Attrs): Req {
   const userId = a.$iterableUserId ?? e.appUserId;
   if (isRevenue(e)) return {
     url: `${host}/api/commerce/trackPurchase`, headers,
-    body: clean({ id: e.id, user: { userId, email: a.$email, preferUserId: true }, total: amount(e), createdAt: Number(e.at ?? Date.now()),
+    body: clean({ id: e.id, user: { userId, email: a.$email, preferUserId: true }, total: amount(e), createdAt: secs(e),
       items: [{ id: e.productId, sku: e.productId, name: e.productId, price: amount(e), quantity: 1 }], dataFields: props(e) }),
   };
-  return { url: `${host}/api/events/track`, headers, body: clean({ id: e.id, userId, email: a.$email, eventName: eventName(e), createdAt: Number(e.at ?? Date.now()), dataFields: props(e) }) };
+  return { url: `${host}/api/events/track`, headers, body: clean({ id: e.id, userId, email: a.$email, eventName: eventName(e), createdAt: secs(e), dataFields: props(e) }) };
 }
 
 /** Customer.io Track API v1: POST /api/v1/customers/{id}/events, Basic site_id:api_key. */
@@ -230,23 +280,26 @@ export function buildCleverTap(cfg: CleverTapCfg, e: any, a: Attrs): Req {
   };
 }
 
-/** Airship custom events. POST https://go.urbanairship.com/api/custom-events (EU: go.airship.eu), Bearer token. */
-export interface AirshipCfg { token: string; region?: "us" | "eu" }
+/** Airship custom events. POST https://go.urbanairship.com/api/custom-events (EU: go.airship.eu), Bearer token + X-UA-Appkey (required),
+ * 1..100 events per request, lowercase event names (https://www.airship.com/docs/developer/rest-api/ua/operations/custom-events/). */
+export interface AirshipCfg { appKey: string; token: string; region?: "us" | "eu" }
 export function buildAirship(cfg: AirshipCfg, e: any, a: Attrs): Req {
   const host = cfg.region === "eu" ? "https://go.airship.eu" : "https://go.urbanairship.com";
   const user = a.$airshipChannelId ? { channel: a.$airshipChannelId } : { named_user_id: e.appUserId };
   return {
-    url: `${host}/api/custom-events`, headers: { Authorization: `Bearer ${cfg.token}`, Accept: "application/vnd.urbanairship+json; version=3" },
+    url: `${host}/api/custom-events`, headers: { Authorization: `Bearer ${cfg.token}`, "X-UA-Appkey": cfg.appKey, Accept: "application/vnd.urbanairship+json; version=3" },
     body: [{ occurred: iso(e).slice(0, 19), user, body: clean({ name: eventName(e), value: amount(e) || undefined, transaction: e.transactionId ?? e.id, properties: props(e) }) }],
   };
 }
 
 /** Intercom data events (POST /events). Contact attributes are updated separately (see sendIntercom). */
+/** Latest stable REST version (https://developers.intercom.com/docs/references/rest-api/api.intercom.io/data-events/createdataevent). Max 10 metadata keys. */
+export const INTERCOM_VERSION = "2.16";
 export interface IntercomCfg { accessToken: string; region?: "us" | "eu" | "au" }
 export const intercomHost = (cfg: IntercomCfg) => (cfg.region === "eu" ? "https://api.eu.intercom.io" : cfg.region === "au" ? "https://api.au.intercom.io" : "https://api.intercom.io");
 export function buildIntercomEvent(cfg: IntercomCfg, e: any, a: Attrs): Req {
   return {
-    url: `${intercomHost(cfg)}/events`, headers: { Authorization: `Bearer ${cfg.accessToken}`, "Intercom-Version": "2.11", Accept: "application/json" },
+    url: `${intercomHost(cfg)}/events`, headers: { Authorization: `Bearer ${cfg.accessToken}`, "Intercom-Version": INTERCOM_VERSION, Accept: "application/json" },
     body: clean({ event_name: eventName(e), created_at: secs(e), user_id: a.$intercomId ?? e.appUserId, metadata: { product_id: e.productId, store: e.store, price: amount(e), currency: e.currency } }),
   };
 }
@@ -275,7 +328,7 @@ export function buildMParticle(cfg: MParticleCfg, e: any, a: Attrs): Req {
   return {
     url: `${host}/v2/events`, headers: { Authorization: basic(cfg.apiKey, cfg.apiSecret) },
     body: clean({
-      environment: e.isSandbox ? "development" : "production",
+      schema_version: 2, environment: e.isSandbox ? "development" : "production", ip: a.$ip,
       user_identities: { customer_id: e.appUserId, email: a.$email },
       ...(a.$mparticleId ? { mpid: a.$mparticleId } : {}),
       device_info: clean({ ios_advertising_id: a.$idfa, ios_idfv: a.$idfv, android_advertising_id: a.$gpsAdId }),
@@ -284,22 +337,24 @@ export function buildMParticle(cfg: MParticleCfg, e: any, a: Attrs): Req {
   };
 }
 
-/** Statsig log_event. POST https://events.statsigapi.net/v1/log_event, header statsig-api-key (server secret). */
+/** Statsig log_event. POST https://events.statsigapi.net/v1/log_event, header statsig-api-key (server secret) + STATSIG-CLIENT-TIME;
+ * `value` is a string (https://docs.statsig.com/api-reference/events/log-custom-events). */
 export interface StatsigCfg { serverSecret: string }
 export function buildStatsig(cfg: StatsigCfg, e: any): Req {
   return {
-    url: "https://events.statsigapi.net/v1/log_event", headers: { "statsig-api-key": cfg.serverSecret },
-    body: { events: [{ eventName: eventName(e), user: { userID: e.appUserId, country: e.country ?? undefined }, value: amount(e) || e.productId, time: Number(e.at ?? Date.now()),
+    url: "https://events.statsigapi.net/v1/log_event", headers: { "statsig-api-key": cfg.serverSecret, "STATSIG-CLIENT-TIME": String(Date.now()) },
+    body: { events: [{ eventName: eventName(e), user: { userID: e.appUserId, country: e.country ?? undefined }, value: String(amount(e) || e.productId), time: Number(e.at ?? Date.now()),
       metadata: Object.fromEntries(Object.entries(props(e)).map(([k, v]) => [k, String(v)])) }] },
   };
 }
 
-/** TelemetryDeck ingestion v2. POST https://nom.telemetrydeck.com/v2/ (clientUser is hashed, as the SDK does). */
-export interface TelemetryDeckCfg { appId: string }
+/** TelemetryDeck ingestion v2. POST https://nom.telemetrydeck.com/v2/namespace/{namespace}/ (or /v2/ without namespace);
+ * clientUser hashed, isTestMode boolean, floatValue top-level number, flat payload (https://telemetrydeck.com/docs/ingest/v2/). */
+export interface TelemetryDeckCfg { appId: string; namespace?: string }
 export function buildTelemetryDeck(cfg: TelemetryDeckCfg, e: any): Req {
   return {
-    url: "https://nom.telemetrydeck.com/v2/",
-    body: [{ appID: cfg.appId, clientUser: createHash("sha256").update(String(e.appUserId)).digest("hex"), type: `MoneyMaker.${e.type}`, isTestMode: e.isSandbox ? "true" : "false",
+    url: cfg.namespace ? `https://nom.telemetrydeck.com/v2/namespace/${encodeURIComponent(cfg.namespace)}/` : "https://nom.telemetrydeck.com/v2/",
+    body: [{ appID: cfg.appId, clientUser: createHash("sha256").update(String(e.appUserId)).digest("hex"), type: `MoneyMaker.${e.type}`, isTestMode: Boolean(e.isSandbox), ...(amount(e) ? { floatValue: amount(e) } : {}),
       payload: clean({ productId: e.productId, store: e.store, price: amount(e), currency: e.currency, country: e.country ?? undefined }) }],
   };
 }

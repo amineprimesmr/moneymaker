@@ -14,7 +14,7 @@ export interface IntegrationSecrets {
   kochava?: C.KochavaCfg & Sbx; tenjin?: C.TenjinCfg & Sbx; braze?: C.BrazeCfg & Sbx; onesignal?: C.OneSignalCfg & Sbx;
   iterable?: C.IterableCfg & Sbx; customerio?: C.CustomerIoCfg & Sbx; clevertap?: C.CleverTapCfg & Sbx; airship?: C.AirshipCfg & Sbx;
   intercom?: C.IntercomCfg & Sbx; ga4?: C.Ga4Cfg & Sbx; mparticle?: C.MParticleCfg & Sbx; statsig?: C.StatsigCfg & Sbx;
-  telemetrydeck?: C.TelemetryDeckCfg & Sbx;
+  telemetrydeck?: C.TelemetryDeckCfg & Sbx; airbridge?: C.AirbridgeCfg & Sbx;
 }
 type Sbx = { sandbox?: boolean };
 
@@ -25,9 +25,9 @@ const SCHEMA: Record<string, Record<string, string>> = {
   branch: { branchKey: "!k" }, singular: { sdkKey: "!k" }, kochava: { appGuid: "!s" }, tenjin: { apiKey: "!k" },
   braze: { restEndpoint: "!u:braze", apiKey: "!k" }, onesignal: { appId: "!s", restApiKey: "!k" },
   iterable: { apiKey: "!k", region: "e:us|eu" }, customerio: { siteId: "!s", apiKey: "!k", region: "e:us|eu" },
-  clevertap: { accountId: "!s", passcode: "!k", region: "s" }, airship: { token: "!k", region: "e:us|eu" },
+  clevertap: { accountId: "!s", passcode: "!k", region: "s" }, airship: { appKey: "!s", token: "!k", region: "e:us|eu" },
   intercom: { accessToken: "!k", region: "e:us|eu|au" }, ga4: { firebaseAppId: "!s", apiSecret: "!k", androidFirebaseAppId: "s" },
-  mparticle: { apiKey: "!k", apiSecret: "!k", pod: "e:us1|us2|eu1|au1" }, statsig: { serverSecret: "!k" }, telemetrydeck: { appId: "!s" },
+  mparticle: { apiKey: "!k", apiSecret: "!k", pod: "e:us1|us2|eu1|au1" }, statsig: { serverSecret: "!k" }, telemetrydeck: { appId: "!s", namespace: "s" }, airbridge: { appName: "!s", apiToken: "!k" },
 };
 export const CONNECTORS = Object.keys(SCHEMA);
 
@@ -92,13 +92,13 @@ export async function fanOut(project: Project, creds: Credentials, e: Record<str
       event: name, properties: { ...props, token: s.mixpanelToken, distinct_id: e.appUserId, time: Math.floor(time / 1000), $insert_id: e.id },
     }])));
     if (s.amplitudeApiKey) jobs.push(run("amplitude", () => post("https://api2.amplitude.com/2/httpapi", {
-      api_key: s.amplitudeApiKey, events: [{ user_id: e.appUserId, event_type: name, time, insert_id: e.id, event_properties: props,
+      api_key: s.amplitudeApiKey, options: { min_id_length: 1 }, events: [{ user_id: e.appUserId, event_type: name, time, insert_id: e.id, event_properties: props,
         ...(e.priceMicros && !e.isTrial ? { revenue: e.priceMicros / 1e6, productId: e.productId } : {}) }],
     })));
     if (s.segmentWriteKey) jobs.push(run("segment", () => post("https://api.segment.io/v1/track", {
       userId: e.appUserId, event: name, properties: { ...props, revenue: props.price }, timestamp: new Date(time).toISOString(), messageId: e.id,
     }, { Authorization: `Basic ${Buffer.from(`${s.segmentWriteKey}:`).toString("base64")}` })));
-    if (s.posthog?.apiKey) jobs.push(run("posthog", () => post(`${(s.posthog!.host ?? "https://eu.i.posthog.com").replace(/\/$/, "")}/capture/`, {
+    if (s.posthog?.apiKey) jobs.push(run("posthog", () => post(`${(s.posthog!.host ?? "https://eu.i.posthog.com").replace(/\/$/, "")}/i/v0/e/`, {
       api_key: s.posthog!.apiKey, event: name, distinct_id: e.appUserId, properties: { ...props, $insert_id: e.id }, timestamp: new Date(time).toISOString(),
     })));
   }
@@ -125,6 +125,7 @@ async function sendConnectors(project: Project, s: IntegrationSecrets, e: Record
     customerio: () => C.buildCustomerIo(x.customerio, e, attrs), clevertap: () => C.buildCleverTap(x.clevertap, e, attrs), airship: () => C.buildAirship(x.airship, e, attrs),
     intercom: () => C.buildIntercomEvent(x.intercom, e, attrs), ga4: () => C.buildGa4(x.ga4, e, attrs), mparticle: () => C.buildMParticle(x.mparticle, e, attrs),
     statsig: () => C.buildStatsig(x.statsig, e), telemetrydeck: () => C.buildTelemetryDeck(x.telemetrydeck, e),
+    airbridge: () => C.buildAirbridge(x.airbridge, e, attrs, app),
   };
   await Promise.all(active.map(async name => {
     try {
@@ -152,7 +153,7 @@ async function send(r: C.Req) {
 
 /** Intercom: find the contact by external_id, then set custom attributes (they must exist in the Intercom workspace). */
 async function intercomAttributes(cfg: C.IntercomCfg, e: any, a: C.Attrs) {
-  const headers = { Authorization: `Bearer ${cfg.accessToken}`, "Intercom-Version": "2.11", "Content-Type": "application/json", Accept: "application/json" };
+  const headers = { Authorization: `Bearer ${cfg.accessToken}`, "Intercom-Version": C.INTERCOM_VERSION, "Content-Type": "application/json", Accept: "application/json" };
   const host = C.intercomHost(cfg);
   const r = await fetch(`${host}/contacts/search`, { method: "POST", headers, signal: AbortSignal.timeout(10000),
     body: JSON.stringify({ query: { field: "external_id", operator: "=", value: a.$intercomId ?? e.appUserId } }) });

@@ -227,3 +227,9 @@ export const scheduledExports = onSchedule({ schedule: "0 3 * * *", timeZone: "U
     await runProjectExports(p.id).catch(e => console.error("exports", p.id, (e as Error).message));
   }
 });
+
+/** Benchmarks anonymisés inter-projets (benchmarks.ts) : percentiles par catégorie × palier de prix, chaque nuit. */
+export const benchmarksNightly = onSchedule({ schedule: "40 2 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "1GiB" }, async () => {
+  const { runBenchmarks } = await import("./benchmarks");
+  console.log("benchmarks", await runBenchmarks());
+});

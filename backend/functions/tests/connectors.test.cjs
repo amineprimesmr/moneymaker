@@ -16,7 +16,7 @@ test("meta: Subscribe with ATE, hashed ids, extinfo; trial → StartTrial; no id
   assert.equal(d.event_name, "Subscribe"); assert.equal(d.action_source, "app");
   assert.equal(d.app_data.advertiser_tracking_enabled, 1); assert.equal(d.app_data.extinfo.length, 16); assert.equal(d.app_data.extinfo[0], "i2");
   assert.equal(d.user_data.madid, "IDFA-1"); assert.equal(d.user_data.external_id[0].length, 64);
-  assert.equal(d.custom_data.value, 9.99);
+  assert.equal(d.custom_data.value, 9.99); assert.match(r.url, /\/v26\.0\//); assert.equal(d.app_data.vendor_id, "IDFV-1"); assert.equal(d.app_data.extinfo[4], "18.0");
   assert.equal(C.buildMeta({ datasetId: "1", accessToken: "t" }, trial, ios, app).body.data[0].event_name, "StartTrial");
   const noAtt = C.buildMeta({ datasetId: "1", accessToken: "t" }, sale, { ...ios, $attConsentStatus: "denied" }, app).body.data[0];
   assert.equal(noAtt.app_data.advertiser_tracking_enabled, 0); assert.equal(noAtt.user_data.madid, undefined);
@@ -31,6 +31,7 @@ test("adjust: mapped token only, revenue, env, ids", () => {
   assert.equal(r.form.event_token, "abc123"); assert.equal(r.form.revenue, "9.99"); assert.equal(r.form.environment, "production"); assert.equal(r.form.idfa, "IDFA-1");
   assert.equal(C.buildAdjust(cfg, trial, ios), null);
   assert.equal(C.buildAdjust(cfg, sale, {}), null);
+  assert.equal(C.buildAdjust(cfg, sale, { ...ios, $ip: "2001:db8::1" }).form.ip_address, undefined); // IPv4 only
 });
 
 test("branch: standard vs custom events", () => {
@@ -43,12 +44,17 @@ test("branch: standard vs custom events", () => {
 
 test("singular, kochava, tenjin", () => {
   const s = C.buildSingular({ sdkKey: "sdk" }, sale, ios, app);
-  assert.equal(s.method, "GET"); assert.match(s.url, /is_revenue_event=true/); assert.match(s.url, /amt=9.99/); assert.match(s.url, /p=iOS/);
+  assert.equal(s.method, "GET"); assert.match(s.url, /is_revenue_event=true/); assert.match(s.url, /amt=9.99/); assert.match(s.url, /p=iOS/); assert.match(s.url, /att_authorization_status=3/);
+  assert.equal(C.buildSingular({ sdkKey: "sdk" }, sale, { ...ios, $idfv: undefined }, app), null); // idfv mandatory on iOS
   assert.equal(C.buildSingular({ sdkKey: "sdk" }, sale, { $idfa: "x" }, app), null); // ip required
   assert.equal(C.buildKochava({ appGuid: "ko" }, sale, ios), null);
-  assert.equal(C.buildKochava({ appGuid: "ko" }, sale, { ...ios, $kochavaDeviceId: "KD" }).body.data.event_data.sum, 9.99);
-  assert.equal(C.buildTenjin({ apiKey: "k" }, sale, ios, app).form.price, "9.99");
-  assert.equal(C.buildTenjin({ apiKey: "k" }, trial, ios, app), null);
+  const k = C.buildKochava({ appGuid: "ko" }, sale, { ...ios, $kochavaDeviceId: "KD" }).body.data;
+  assert.equal(k.event_data.sum, 9.99); assert.equal(k.currency, "EUR"); assert.equal(k.att, true); assert.equal(k.device_ua, "");
+  assert.equal(C.buildKochava({ appGuid: "ko" }, sale, { ...ios, $kochavaDeviceId: "KD", $ip: undefined }), null);
+  assert.equal(C.buildTenjin({ apiKey: "k" }, sale, ios, app), null); // analytics_installation_id required
+  const t = C.buildTenjin({ apiKey: "k" }, sale, { ...ios, $tenjinId: "aiid" }, app).form;
+  assert.equal(t.price, "9.99"); assert.equal(t.sdk_version.length > 0, true); assert.equal(t.developer_device_id, "IDFV-1"); assert.equal(t.transaction_id, undefined);
+  assert.equal(C.buildTenjin({ apiKey: "k" }, trial, { ...ios, $tenjinId: "aiid" }, app), null);
 });
 
 test("braze, onesignal, iterable, customer.io, clevertap, airship, intercom", () => {
@@ -58,13 +64,16 @@ test("braze, onesignal, iterable, customer.io, clevertap, airship, intercom", ()
   const o = C.buildOneSignal({ appId: "app", restApiKey: "k" }, sale, {});
   assert.equal(o.method, "PATCH"); assert.match(o.url, /users\/by\/external_id\/u1$/); assert.equal(o.body.properties.tags.mm_is_subscriber, "true");
   assert.match(C.buildOneSignal({ appId: "app", restApiKey: "k" }, sale, { $onesignalId: "os1" }).url, /by\/onesignal_id\/os1$/);
-  assert.match(C.buildIterable({ apiKey: "k" }, sale, ios).url, /commerce\/trackPurchase$/);
+  const it = C.buildIterable({ apiKey: "k" }, sale, ios);
+  assert.match(it.url, /commerce\/trackPurchase$/); assert.equal(it.body.createdAt, 1_800_000_000); // seconds
   assert.match(C.buildIterable({ apiKey: "k", region: "eu" }, trial, ios).url, /api\.eu\.iterable\.com\/api\/events\/track$/);
   const cio = C.buildCustomerIo({ siteId: "s", apiKey: "k", region: "eu" }, sale, {});
   assert.equal(cio.url, "https://track-eu.customer.io/api/v1/customers/u1/events"); assert.match(cio.headers.Authorization, /^Basic /);
   assert.equal(C.buildCleverTap({ accountId: "a", passcode: "p" }, sale, {}).body.d[0].evtName, "Charged");
-  assert.equal(C.buildAirship({ token: "t" }, sale, {}).body[0].user.named_user_id, "u1");
-  assert.equal(C.buildIntercomEvent({ accessToken: "t" }, sale, {}).body.user_id, "u1");
+  const ua = C.buildAirship({ appKey: "ak", token: "t" }, sale, {});
+  assert.equal(ua.body[0].user.named_user_id, "u1"); assert.equal(ua.headers["X-UA-Appkey"], "ak");
+  const ic = C.buildIntercomEvent({ accessToken: "t" }, sale, {});
+  assert.equal(ic.body.user_id, "u1"); assert.equal(ic.headers["Intercom-Version"], "2.16");
 });
 
 test("ga4, mparticle, statsig, telemetrydeck", () => {
@@ -72,8 +81,25 @@ test("ga4, mparticle, statsig, telemetrydeck", () => {
   assert.match(g.url, /mp\/collect\?firebase_app_id=1%3A2%3Aios%3A3&api_secret=sec/); assert.equal(g.body.app_instance_id, "fai1"); assert.equal(g.body.events[0].name, "purchase");
   assert.equal(C.buildGa4({ firebaseAppId: "x", apiSecret: "s" }, sale, {}), null);
   assert.equal(C.buildMParticle({ apiKey: "k", apiSecret: "s", pod: "eu1" }, sale, {}).url, "https://s2s.eu1.mparticle.com/v2/events");
-  assert.equal(C.buildStatsig({ serverSecret: "secret-x" }, sale).body.events[0].user.userID, "u1");
-  assert.equal(C.buildTelemetryDeck({ appId: "A" }, sale).body[0].clientUser.length, 64);
+  const st = C.buildStatsig({ serverSecret: "secret-x" }, sale);
+  assert.equal(st.body.events[0].user.userID, "u1"); assert.equal(st.body.events[0].value, "9.99"); assert.ok(st.headers["STATSIG-CLIENT-TIME"]);
+  const td = C.buildTelemetryDeck({ appId: "A", namespace: "ns" }, sale);
+  assert.equal(td.body[0].clientUser.length, 64); assert.equal(td.body[0].isTestMode, false); assert.equal(td.body[0].floatValue, 9.99);
+  assert.equal(td.url, "https://nom.telemetrydeck.com/v2/namespace/ns/");
+});
+
+test("airbridge: in-app event v2, categories, 24 h window", () => {
+  const now = sale.at + 1000;
+  const r = C.buildAirbridge({ appName: "myapp", apiToken: "tok" }, sale, { ...ios, $airbridgeDeviceId: "DEV-1" }, app, now);
+  assert.equal(r.url, "https://api.airbridge.io/events/v2/apps/myapp/mobile-app/9360");
+  assert.equal(r.headers.Authorization, "Bearer tok"); assert.equal(r.headers["X-Forwarded-For"], "1.2.3.4");
+  assert.match(r.body.eventUUID, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.equal(r.body.eventTimestamp, sale.at); assert.equal(r.body.app.packageName, "com.x.app");
+  assert.equal(r.body.device.osName, "iOS"); assert.equal(r.body.device.appTrackingTransparency, 3);
+  assert.equal(r.body.eventData.goal.category, "airbridge.subscribe"); assert.equal(r.body.eventData.goal.value, 9.99);
+  assert.equal(r.body.eventData.goal.semanticAttributes.currency, "EUR");
+  assert.equal(C.buildAirbridge({ appName: "a", apiToken: "t" }, trial, ios, app, now).body.eventData.goal.category, "airbridge.startTrial");
+  assert.equal(C.buildAirbridge({ appName: "a", apiToken: "t" }, sale, ios, app, sale.at + 25 * 3600e3), null);
 });
 
 test("apple ads parse", () => {

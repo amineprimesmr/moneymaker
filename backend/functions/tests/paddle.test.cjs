@@ -52,4 +52,6 @@ test("paddle one-time transaction mapping", () => {
   const p = paddleTransactionPurchase({ id: "txn_01", currency_code: "USD", billed_at: "2026-02-01T00:00:00Z", details: { totals: { grand_total: "4999" } }, items: [{ price: { id: "pri_life" } }], address: { country_code: "US" } });
   assert.equal(p.type, "non_consumable"); assert.equal(p.expiresAt, null); assert.equal(p.priceMicros, 49_990_000);
   assert.equal(p.productId, "pri_life"); assert.equal(p.country, "US");
+  // JPY has no minor unit: "4999" = ¥4,999.
+  assert.equal(paddleTransactionPurchase({ id: "txn_02", currency_code: "JPY", details: { totals: { grand_total: "4999" } }, items: [] }).priceMicros, 4_999_000_000);
 });

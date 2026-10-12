@@ -447,6 +447,18 @@ Remplace toute logique RevenueCat/StoreKit existante, appelle MoneyMaker.configu
       <input id="pdSecret" placeholder="Clé secrète de la destination (pdl_ntfset_…)" autocomplete="off" style="margin-top:8px"><input id="pdKey" placeholder="Clé API (optionnelle, pdl_…)" autocomplete="off" style="margin-top:8px">
       <label class="row" style="gap:8px;margin:8px 0"><input type="checkbox" id="pdSandbox" style="width:auto;flex:0"> Environnement sandbox</label>
       <button class="primary" id="cPaddle">Enregistrer</button><div id="pdOut"></div></div>
+    <div class="card"><h2>Amazon Appstore ${ok(p.credentials.amazon)}</h2><p class="muted">Clé partagée (Developer Console → Shared Key) : MoneyMaker vérifie chaque reçu auprès du Receipt Verification Service. Notifications en temps réel : App Services → Real-Time Notifications → ajoute l'URL ci-dessous, puis colle dans la console le jeton de confirmation qui s'affiche ici à réception.</p>
+      ${copyRow(p.endpoints.amazonNotifications ?? "", true)}${p.amazonConfirmationToken ? `<p class="muted" style="margin-top:8px">Jeton de confirmation :</p>${copyRow(p.amazonConfirmationToken)}` : ""}
+      <input id="amzSecret" placeholder="Clé partagée" autocomplete="off" style="margin-top:8px"><input id="amzPkg" placeholder="com.example.app (optionnel)" style="margin-top:8px">
+      <label class="row" style="gap:8px;margin:8px 0"><input type="checkbox" id="amzSandbox" style="width:auto;flex:0"> Accepter le sandbox (App Tester)</label>
+      <button class="primary" id="cAmazon">Enregistrer</button><div id="amzOut"></div></div>
+    <div class="card"><h2>Samsung Galaxy Store ${ok(p.credentials.galaxy)}</h2><p class="muted">Seller Portal → Assistance → API Service : crée un compte de service (scope <code>publishing</code>). Requis pour les abonnements ; les achats uniques sont vérifiés via <code>iap/v6/receipt</code>.</p>
+      <input id="gsSa" placeholder="Service account ID" autocomplete="off"><input id="gsPkg" placeholder="com.example.app" style="margin-top:8px"><textarea id="gsKey" style="min-height:60px;margin-top:8px" placeholder="-----BEGIN PRIVATE KEY-----"></textarea>
+      <button class="primary" id="cGalaxy" style="margin-top:8px">Enregistrer</button><div id="gsOut"></div></div>
+    <div class="card"><h2>Roku Pay ${ok(p.credentials.roku)}</h2><p class="muted">Developer Dashboard → Roku Pay web services → clé API. Colle l'URL ci-dessous comme endpoint des notifications push.</p>
+      ${copyRow(p.endpoints.rokuNotifications ?? "", true)}
+      <input id="rkKey" placeholder="Clé API web services" autocomplete="off" style="margin-top:8px">
+      <button class="primary" id="cRoku" style="margin-top:8px">Enregistrer</button><div id="rkOut"></div></div>
     <div class="card"><h2>Tes backends ${ok(p.config.webhooks.length)}</h2><p class="muted">Webhooks signés <code>MoneyMaker-Signature</code> pour chaque événement d'abonnement et chaque alerte de classement (<code>RANKING_*</code>). URLs dans Réglages. Secret de signature :</p>${copyRow(p.webhookSigningSecret, true)}</div>
   </div>
   <div class="card" style="margin-top:12px"><h2>Intégrations</h2><p class="muted">Les événements d'abonnement partent vers ces outils, et les alertes de classement vers Slack et Discord. Laisse un champ vide pour ne rien changer, ou tape <code>-</code> pour déconnecter.</p>
@@ -479,6 +491,20 @@ Remplace toute logique RevenueCat/StoreKit existante, appelle MoneyMaker.configu
   $("#cStripe").onclick = e => busy(e.target, async () => {
     const r = await api(`/v1/projects/${state.projectId}/connect/stripe`, { method: "POST", body: { secretKey: $("#stripeKey").value.trim() } });
     $("#stripeKey").value = ""; out("#stripeOut", `✅ ${esc(r.account)} (${r.livemode ? "live" : "test"}) · webhook créé · ${r.importedSubscriptions} abonnements et ${r.importedInvoices} factures importés`);
+  });
+  $("#cAmazon").onclick = e => busy(e.target, async () => {
+    const amazon = { sharedSecret: $("#amzSecret").value.trim() || undefined, packageName: $("#amzPkg").value.trim() || undefined, allowSandbox: $("#amzSandbox").checked };
+    await api(`/v1/projects/${state.projectId}/credentials`, { method: "PUT", body: { amazon } });
+    $("#amzSecret").value = ""; out("#amzOut", "✅ Amazon Appstore enregistré");
+  });
+  $("#cGalaxy").onclick = e => busy(e.target, async () => {
+    const galaxy = { serviceAccountId: $("#gsSa").value.trim() || undefined, packageName: $("#gsPkg").value.trim() || undefined, privateKey: $("#gsKey").value.trim() || undefined };
+    await api(`/v1/projects/${state.projectId}/credentials`, { method: "PUT", body: { galaxy } });
+    $("#gsKey").value = ""; out("#gsOut", "✅ Galaxy Store enregistré");
+  });
+  $("#cRoku").onclick = e => busy(e.target, async () => {
+    await api(`/v1/projects/${state.projectId}/credentials`, { method: "PUT", body: { roku: { devApiKey: $("#rkKey").value.trim() } } });
+    $("#rkKey").value = ""; out("#rkOut", "✅ Roku Pay enregistré");
   });
   $("#cPaddle").onclick = e => busy(e.target, async () => {
     const paddle = { webhookSecret: $("#pdSecret").value.trim() || undefined, apiKey: $("#pdKey").value.trim() || undefined, environment: $("#pdSandbox").checked ? "sandbox" : "production" };
@@ -570,12 +596,13 @@ const MM_CONNECTORS = [
   ["iterable", "Iterable", [["apiKey", "Server-side API key", "clé"], ["region", "Région (us / eu)", "us"]]],
   ["customerio", "Customer.io", [["siteId", "Site ID", "site id"], ["apiKey", "Track API key", "clé"], ["region", "Région (us / eu)", "us"]]],
   ["clevertap", "CleverTap", [["accountId", "Account ID", "XXX-XXX-XXXX"], ["passcode", "Passcode", "passcode"], ["region", "Région (eu1, us1, in1, sg1…)", "eu1"]]],
-  ["airship", "Airship", [["token", "Bearer token", "jeton"], ["region", "Région (us / eu)", "us"]]],
+  ["airship", "Airship", [["appKey", "App key", "clé d'app"], ["token", "Bearer token", "jeton"], ["region", "Région (us / eu)", "us"]]],
+  ["airbridge", "Airbridge", [["appName", "Nom de l'app Airbridge", "monapp"], ["apiToken", "Jeton API S2S", "jeton"]]],
   ["intercom", "Intercom", [["accessToken", "Access token", "dG9r…"], ["region", "Région (us / eu / au)", "us"]]],
   ["ga4", "Firebase / Google Analytics 4", [["firebaseAppId", "Firebase App ID (iOS)", "1:123:ios:abc"], ["androidFirebaseAppId", "Firebase App ID Android (optionnel)", "1:123:android:abc"], ["apiSecret", "Measurement Protocol API secret", "secret"]]],
   ["mparticle", "mParticle", [["apiKey", "Server key", "us1-…"], ["apiSecret", "Server secret", "secret"], ["pod", "Pod (us1, us2, eu1, au1)", "us1"]]],
   ["statsig", "Statsig", [["serverSecret", "Server secret key", "secret-…"]]],
-  ["telemetrydeck", "TelemetryDeck", [["appId", "App ID", "XXXXXXXX-…"]]],
+  ["telemetrydeck", "TelemetryDeck", [["appId", "App ID", "XXXXXXXX-…"], ["namespace", "Namespace (optionnel)", "com.monapp"]]],
 ];
 
 const statusPill = s => `<span class="pill ${["active"].includes(s) ? "ok" : ["grace", "billing_retry", "paused"].includes(s) ? "warn" : "bad"}">${esc(s)}</span>`;
@@ -607,7 +634,7 @@ async function audiencesSection(box) {
       <td style="text-align:right"><button class="small" data-audload="${esc(a.id)}">Modifier</button> <button class="small" data-audcsv="${esc(a.id)}">⬇︎ CSV</button> <button class="small danger" data-auddel="${esc(a.id)}">Supprimer</button></td></tr>`).join("")}</tbody></table>` : `<p class="muted">Aucune audience. Compose des filtres, prévisualise, puis enregistre.</p>`}
     <div class="row" style="flex-wrap:wrap;gap:8px;align-items:end;margin-top:12px">
       <div class="field"><label>Statut</label><select data-af="status">${Object.entries(AUD_STATUS).map(([v, l]) => opt(v, l, f.status)).join("")}</select></div>
-      <div class="field"><label>Store</label><select data-af="store">${[["", "Tous"], ["app_store", "App Store"], ["play_store", "Google Play"], ["stripe", "Stripe"], ["promotional", "Promo"]].map(([v, l]) => opt(v, l, f.store)).join("")}</select></div>
+      <div class="field"><label>Store</label><select data-af="store">${[["", "Tous"], ["app_store", "App Store"], ["play_store", "Google Play"], ["stripe", "Stripe"], ["paddle", "Paddle"], ["amazon", "Amazon"], ["galaxy", "Galaxy Store"], ["roku", "Roku"], ["promotional", "Promo"]].map(([v, l]) => opt(v, l, f.store)).join("")}</select></div>
       <div class="field"><label>Pays</label><input data-af="country" maxlength="2" placeholder="FR" value="${esc(f.country ?? "")}" style="width:70px"></div>
       <div class="field"><label>Produit</label><input data-af="productId" value="${esc(f.productId ?? "")}"></div>
       <div class="field"><label>Accès actif</label><input data-af="entitlement" value="${esc(f.entitlement ?? "")}"></div>
@@ -815,6 +842,7 @@ const CHARTS = {
   churn: ["Churn", "line"], refund_rate: ["Taux de remboursement", "line"], refunds: ["Remboursements", "bars"],
   realized_ltv_per_customer: ["LTV réalisée par client", "line"], realized_ltv_per_paying_customer: ["LTV réalisée par client payant", "line"],
   non_subscription_purchases: ["Achats hors abonnement", "bars"], subscription_status: ["Statut des abonnements", "bars"], paywall: ["Paywall", "line"],
+  ad_revenue: ["Revenus publicitaires", "bars"], ad_impressions: ["Impressions publicitaires", "bars"], ad_ecpm: ["eCPM publicitaire", "line"], arpdau: ["ARPDAU (pub)", "line"],
 };
 const MOVE_KEYS = { active_subscriptions_movement: ["new", "reactivated", "churned"], mrr_movement: ["new", "reactivated", "churned"], active_trials_movement: ["new", "converted", "expired"], subscription_status: ["active", "cancelled_active", "grace", "billing_retry"] };
 const MOVE_LABEL = { new: "Nouveaux", reactivated: "Réactivés", churned: "Perdus", converted: "Convertis", expired: "Expirés", active: "Actifs", cancelled_active: "Annulés (encore actifs)", grace: "Période de grâce", billing_retry: "Relance de paiement", revenue: "Revenus", refunds: "Remboursements", net: "Net", transactions: "Transactions", amount: "Montant", customers: "Clients", payingCustomers: "Clients payants", converted: "Convertis", started: "Essais démarrés", stillActive: "Toujours actifs", cancelled: "Annulés", pending: "En cours", churned: "Perdus", impressions: "Affichages", conversions: "Achats", purchaseStarts: "Achats commencés", closes: "Fermetures", immature: "Trop récents", cohorts: "Cohortes", expired: "Expirés", conversionDays: "Fenêtre (jours)" };
@@ -840,6 +868,30 @@ function seriesBars(series, keys, fmt) {
 // ── Prédiction LTV (modèle sBG par cohorte) ───────────────────────────────
 const LTV_GROUP_LABEL = { product: "Produit", country: "Pays", store: "Store" };
 const CONF_LABEL = { high: ["ok", "fiable"], medium: ["", "moyenne"], low: ["bad", "faible"] };
+// ── Benchmarks anonymisés (percentiles inter-projets, benchmarks.ts) ─────
+const BENCH_LABEL = {
+  trial_conversion_rate: ["Conversion des essais", "ratio"], monthly_churn: ["Churn mensuel", "ratio"], refund_rate: ["Taux de remboursement", "ratio"],
+  arppu: ["ARPPU (30 j)", "micros"], realized_ltv_12m: ["LTV réalisée 12 mois", "micros"], initial_conversion: ["Conversion initiale", "ratio"], mrr_growth_30d: ["Croissance du MRR (30 j)", "ratio"],
+};
+const BENCH_TIER = { lt3: "< 3 €/mois", "3to8": "3–8 €/mois", "8to15": "8–15 €/mois", gte15: "≥ 15 €/mois", all: "tous prix", unknown: "prix inconnu" };
+async function benchmarksSection(box) {
+  box.innerHTML = `<h2>Benchmarks</h2><div class="empty">Calcul…</div>`;
+  const r = await api(`/v1/projects/${state.projectId}/benchmarks`);
+  const fmt = (v, u) => v == null ? "—" : u === "micros" ? money(v, r.currency) : pct(v);
+  const rows = Object.entries(BENCH_LABEL).map(([k, [label, u]]) => {
+    const m = r.metrics?.[k] ?? { status: "insufficient_data" };
+    if (m.status !== "ok") return `<tr><td>${label}</td><td>${fmt(m.value, u)}</td><td colspan="3" class="muted">Données insuffisantes (moins de 5 apps comparables)</td></tr>`;
+    const p = m.percentiles, s = m.score;
+    const cls = s == null ? "" : s >= 60 ? "ok" : s < 35 ? "bad" : "";
+    return `<tr><td>${label}${m.higherIsBetter ? "" : ' <span class="muted">(plus bas = mieux)</span>'}</td><td><b>${fmt(m.value, u)}</b></td>
+      <td>${m.percentileRank == null ? "—" : `<span class="pill ${cls}">P${m.percentileRank}</span>`}</td>
+      <td class="muted">${fmt(p.p25, u)} · <b>${fmt(p.p50, u)}</b> · ${fmt(p.p75, u)}</td>
+      <td class="muted">${esc(m.bucket.category === "all" ? "Toutes catégories" : m.bucket.category)} · ${esc(BENCH_TIER[m.bucket.tier] ?? m.bucket.tier)} · ${m.bucket.projects} apps</td></tr>`;
+  }).join("");
+  box.innerHTML = `<h2>Benchmarks</h2><p class="muted">Ton app comparée aux autres apps MoneyMaker (données anonymisées, ≥ 30 clients payants, au moins 5 apps par groupe). Catégorie : <b>${esc(r.category === "all" ? "toutes" : r.category)}</b> · palier : <b>${esc(BENCH_TIER[r.priceTier] ?? r.priceTier)}</b>${r.eligible ? "" : " · ton app n'entre pas encore dans le panel"}. Montants en EUR, mis à jour chaque nuit.</p>
+    <div style="overflow-x:auto"><table><thead><tr><th>Métrique</th><th>Toi</th><th>Rang</th><th>P25 · médiane · P75</th><th>Groupe comparé</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
 async function ltvSection(box) {
   const g = (state.ltvGroup ??= "product");
   box.innerHTML = `<div class="row" style="justify-content:space-between;align-items:center"><h2>Prédiction LTV</h2><div class="row seg">${Object.entries(LTV_GROUP_LABEL).map(([k, l]) => `<button class="small ${k === g ? "primary" : ""}" data-ltvg="${k}">${l}</button>`).join("")}</div></div><div class="empty">Calcul…</div>`;
@@ -863,10 +915,11 @@ async function tabCharts(el) {
       <div class="field" style="min-width:220px"><label>Graphique</label><select id="chName">${Object.entries(CHARTS).map(([k, [l]]) => opt(k, l, c.name)).join("")}</select></div>
       <div class="field"><label>Période</label><select id="chDays">${[[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "12 mois"], [730, "24 mois"]].map(([v, l]) => opt(String(v), l, String(c.days))).join("")}</select></div>
       <div class="field"><label>Résolution</label><select id="chRes">${[["day", "Jour"], ["week", "Semaine"], ["month", "Mois"]].map(([v, l]) => opt(v, l, c.resolution)).join("")}</select></div>
-      <div class="field"><label>Store</label><select id="chStore">${[["", "Tous"], ["app_store", "App Store"], ["play_store", "Google Play"], ["stripe", "Stripe"], ["paddle", "Paddle"]].map(([v, l]) => opt(v, l, c.store)).join("")}</select></div>
+      <div class="field"><label>Store</label><select id="chStore">${[["", "Tous"], ["app_store", "App Store"], ["play_store", "Google Play"], ["stripe", "Stripe"], ["paddle", "Paddle"], ["amazon", "Amazon"], ["galaxy", "Galaxy Store"], ["roku", "Roku"]].map(([v, l]) => opt(v, l, c.store)).join("")}</select></div>
       <div class="field"><label>Pays</label><input id="chCountry" maxlength="2" placeholder="FR" value="${esc(c.country)}" style="width:70px"></div>
       <div class="field"><label>Produit</label><input id="chProduct" placeholder="tous" value="${esc(c.product)}"></div>
-      <button id="chCsv" class="small">⬇︎ CSV</button></div></div><div id="chOut"><div class="empty">Chargement…</div></div><div id="ltvOut" class="card section"></div>`;
+      <button id="chCsv" class="small">⬇︎ CSV</button></div></div><div id="chOut"><div class="empty">Chargement…</div></div><div id="benchOut" class="card section"></div><div id="ltvOut" class="card section"></div>`;
+  benchmarksSection($("#benchOut")).catch(e => $("#benchOut").innerHTML = `<div class="empty error">${esc(e.message)}</div>`);
   ltvSection($("#ltvOut")).catch(e => $("#ltvOut").innerHTML = `<div class="empty error">${esc(e.message)}</div>`);
   const read = () => Object.assign(c, { name: $("#chName").value, days: Number($("#chDays").value), resolution: $("#chRes").value, store: $("#chStore").value, country: $("#chCountry").value.trim().toUpperCase(), product: $("#chProduct").value.trim() });
   const qs = (extra = {}) => new URLSearchParams(Object.fromEntries(Object.entries({ days: c.days, resolution: c.resolution, store: c.store, country: c.country, product: c.product, ...extra }).filter(([, v]) => v !== "" && v != null))).toString();

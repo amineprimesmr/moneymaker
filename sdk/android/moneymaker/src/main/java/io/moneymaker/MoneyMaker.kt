@@ -266,6 +266,25 @@ class MoneyMaker private constructor(
         runCatching { api.post("customers/${enc(appUserId)}/paywall-events", body) }
     }
 
+    // ── Ad revenue (AdMob, AppLovin…) ────────────────────────────────────
+    /**
+     * Impression-level ad revenue. Values map 1:1 to Google Mobile Ads' OnPaidEventListener:
+     * `ad.onPaidEventListener = OnPaidEventListener { v -> scope.launch { MoneyMaker.shared.trackAdRevenue(v.valueMicros, v.currencyCode, v.precisionType, ad.adUnitId) } }`.
+     * precision: 0 unknown, 1 estimated, 2 publisher provided, 3 precise. type: "impression" (default), "click", "rewarded".
+     */
+    suspend fun trackAdRevenue(valueMicros: Long, currencyCode: String, precision: Int = 0, adUnitId: String,
+                               network: String = "admob", placement: String? = null, type: String = "impression") {
+        val body = JSONObject().put("type", type).put("network", network).put("adUnitId", adUnitId)
+            .put("revenueMicros", valueMicros).put("currency", currencyCode).put("precision", precision)
+        placement?.let { body.put("placement", it) }
+        runCatching { api.post("customers/${enc(appUserId)}/ad-events", body) }
+    }
+
+    /** Impression without (or before) a paid value. */
+    suspend fun trackAdImpression(adUnitId: String, network: String = "admob", placement: String? = null,
+                                  valueMicros: Long = 0, currencyCode: String = "USD", precision: Int = 0) =
+        trackAdRevenue(valueMicros, currencyCode, precision, adUnitId, network, placement, "impression")
+
     // ── Purchases ────────────────────────────────────────────────────────
     suspend fun purchase(activity: Activity, pkg: Package, offerToken: String? = null): PurchaseResult {
         if (isTestStore) return testPurchase(pkg.productIds["play_store"] ?: pkg.id)
@@ -368,6 +387,15 @@ class MoneyMaker private constructor(
             pending.enqueue(PendingPurchaseQueue.Item(p.purchaseToken, appUserId, body))
             offlineCustomerInfo()?.let { publish(it, persist = false) } ?: throw e
         }
+    }
+
+    /**
+     * Posts a purchase from another store to `POST /v1/customers/{id}/{store}` (store = "amazon", "galaxy", "roku")
+     * and publishes the verified customer info. Used by optional modules such as `moneymaker-amazon`.
+     */
+    suspend fun syncStorePurchase(store: String, body: JSONObject): CustomerInfo {
+        require(store in setOf("amazon", "galaxy", "roku")) { "Unsupported store: $store" }
+        return publish(fetchCustomerInfo("customers/${enc(appUserId)}/$store", body))
     }
 
     private suspend fun syncExistingPurchases() {

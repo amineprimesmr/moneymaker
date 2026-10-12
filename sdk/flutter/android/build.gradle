@@ -38,6 +38,6 @@ android {
 }
 
 dependencies {
-    implementation 'com.github.amineprimesmr:moneymaker:1.1.0'
+    implementation 'com.github.amineprimesmr:moneymaker:1.1.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
 }

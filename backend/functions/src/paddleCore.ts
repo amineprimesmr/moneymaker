@@ -25,6 +25,9 @@ export function verifyPaddleSignature(rawBody: Buffer | string, header: string |
   });
 }
 
+/** Paddle amounts are strings in the currency's lowest denomination; JPY/KRW have no minor unit. */
+const ZERO_DECIMAL = new Set(["JPY", "KRW"]);
+export const paddleMinorToMicros = (minor: unknown, currency: string) => Math.round(Number(minor ?? 0) * (ZERO_DECIMAL.has(currency.toUpperCase()) ? 1e6 : 1e4));
 const ms = (iso: unknown) => (typeof iso === "string" && iso ? Date.parse(iso) : NaN);
 const INTERVAL_MONTHS: Record<string, number> = { day: 1 / 30, week: 0.25, month: 1, year: 12 };
 export const periodMonthsOf = (cycle: any) => cycle?.interval ? (INTERVAL_MONTHS[cycle.interval] ?? 0) * Number(cycle.frequency ?? 1) : 0;
@@ -55,7 +58,7 @@ export function paddleSubscriptionPurchase(s: any, now = Date.now()): Purchase {
     purchasedAt: started, latestPurchaseAt: latest, expiresAt: s.status === "canceled" ? Math.min(expiresAt, Number.isFinite(canceledAt) ? canceledAt : expiresAt) : expiresAt,
     willRenew: s.status !== "canceled" && s.scheduled_change?.action !== "cancel" && s.status !== "paused",
     isTrial: s.status === "trialing", isSandbox: false,
-    priceMicros: Math.round(unit * Number(item.quantity ?? 1) * 10000), currency: String(s.currency_code ?? price.unit_price?.currency_code ?? "EUR").toUpperCase(),
+    priceMicros: paddleMinorToMicros(unit * Number(item.quantity ?? 1), String(s.currency_code ?? price.unit_price?.currency_code ?? "EUR")), currency: String(s.currency_code ?? price.unit_price?.currency_code ?? "EUR").toUpperCase(),
     periodMonths: periodMonthsOf(s.billing_cycle ?? price.billing_cycle), billingIssue: s.status === "past_due",
     updatedAt: ms(s.updated_at) || now,
   };
@@ -69,7 +72,8 @@ export function paddleTransactionPurchase(t: any, now = Date.now()): Purchase {
   return {
     id: String(t.id), store: "paddle", productId: String(price.id ?? "paddle_one_time"), type: "non_consumable", status: "active",
     purchasedAt: at, latestPurchaseAt: at, expiresAt: null, willRenew: false, isTrial: false, isSandbox: false,
-    priceMicros: Math.round(total * 10000), currency: String(t.currency_code ?? "EUR").toUpperCase(), periodMonths: 0, billingIssue: false,
+    priceMicros: paddleMinorToMicros(total, String(t.currency_code ?? "EUR")), currency: String(t.currency_code ?? "EUR").toUpperCase(), periodMonths: 0, billingIssue: false,
+    // Webhook payloads only carry address_id; country is present only if the caller enriched `address` (GET /addresses or include=address).
     updatedAt: ms(t.updated_at) || now, country: t.address?.country_code ?? null,
   };
 }

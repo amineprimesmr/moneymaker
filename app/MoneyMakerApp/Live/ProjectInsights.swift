@@ -25,6 +25,7 @@ struct ProjectInsights: View {
                         .font(MMFont.system(14, .medium)).foregroundStyle(MMColor.orange)
                 }
             }
+            GrowthSections(p: p)
             if !apps.isEmpty {
                 MMLabel(text: "App Store").padding(.horizontal, 4).padding(.top, 8)
                 ForEach(apps) { TrackedAppCard(app: $0) }

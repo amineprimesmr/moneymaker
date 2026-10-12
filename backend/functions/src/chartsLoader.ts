@@ -7,7 +7,10 @@ const LOOKBACK = 400 * DAY; // first-payment / prior-churn context before the wi
 
 /** Loads the collections a chart needs and runs the pure computation (charts.ts). */
 export async function projectChart(project: Project, name: string, q: Record<string, unknown>) {
-  if (!(CHART_NAMES as readonly string[]).includes(name)) throw new HttpError(404, "unknown_chart", `Graphiques : ${CHART_NAMES.join(", ")}`);
+  // Graphiques publicitaires (ads.ts) : agrégats adDaily, pas de reconstruction depuis les achats.
+  const { AD_CHART_NAMES, projectAdChart } = await import("./ads");
+  if ((AD_CHART_NAMES as readonly string[]).includes(name)) return projectAdChart(project, name, q);
+  if (!(CHART_NAMES as readonly string[]).includes(name)) throw new HttpError(404, "unknown_chart", `Graphiques : ${[...CHART_NAMES, ...AD_CHART_NAMES].join(", ")}`);
   const now = Date.now();
   const days = Math.min(1095, Math.max(1, Number(q.days ?? 30) || 30));
   const resolution: Resolution = q.resolution === "week" || q.resolution === "month" ? q.resolution : "day";

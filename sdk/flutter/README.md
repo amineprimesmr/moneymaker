@@ -13,7 +13,7 @@ dependencies:
 ```
 
 - iOS 16+. The Swift SDK is vendored in the pod (`tool/sync_native_sources.sh`).
-- Android minSdk 23. The plugin pulls `com.github.amineprimesmr:moneymaker:1.1.0` from JitPack. If your app's `settings.gradle` uses `RepositoriesMode.FAIL_ON_PROJECT_REPOS`, add `maven { url 'https://jitpack.io' }` there.
+- Android minSdk 23. The plugin pulls `com.github.amineprimesmr:moneymaker:1.1.1` from JitPack. If your app's `settings.gradle` uses `RepositoriesMode.FAIL_ON_PROJECT_REPOS`, add `maven { url 'https://jitpack.io' }` there.
 
 **Use**
 
