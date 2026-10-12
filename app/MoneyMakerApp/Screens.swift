@@ -479,9 +479,9 @@ struct ProjectView: View {
             .padding(.horizontal, 16).padding(.bottom, 40)
         }
         .scrollIndicators(.hidden)
+        .islandRefreshable(.home) { await load(); return true }
         .navigationBarTitleDisplayMode(.inline)
         .mmPage()
-        .refreshable { await load() }
         .task { await load() }
     }
 

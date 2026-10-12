@@ -210,9 +210,9 @@ struct FeedScreen: View {
             .padding(.horizontal, 16).padding(.bottom, 40)
         }
         .scrollIndicators(.hidden)
+        .islandRefreshable(.home) { await load(); return true }
         .navigationBarTitleDisplayMode(.inline)
         .mmPage()
-        .refreshable { await load() }
         .task { events = store.feed; await load() }
         .onReceive(NotificationCenter.default.publisher(for: .mmLiveEvent)) { _ in Task { await load() } }
         .onChange(of: store.viewIds) { _, _ in Task { await load() } }
