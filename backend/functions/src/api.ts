@@ -502,25 +502,117 @@ route("GET", "/v1/projects/:pid/setup", async (req, _res, [pid]) => {
 });
 
 // ── RevenueCat-compatible API (secret key): existing backends switch base URL + key ──
-route("GET", "/v1/rc/v1/subscribers/:id", async (req, _res, [id]) => {
+// ── RevenueCat REST API v1 compatibility ──────────────────────────────────
+// Mounted at /v1/rc/v1/* and at /v1/* (so RevenueCat's SDK `proxyURL` / server code can point here).
+// Public key: read subscriber, offerings, attributes, receipts. Secret key: everything.
+async function rcProject(req: Request, secretOnly = false) {
   const caller = await authenticate(req);
-  if (caller.kind !== "secret") throw new HttpError(403, "secret_key_required");
-  const project = await getProject(caller.projectId);
-  const appUserId = cleanId(decodeURIComponent(id));
+  if (caller.kind === "user" || (secretOnly && caller.kind !== "secret")) throw new HttpError(403, "secret_key_required");
+  return getProject(caller.projectId);
+}
+
+async function rcSubscriber(project: Project, appUserId: string) {
   const ref = db.doc(`projects/${project.id}/customers/${appUserId}`);
   const [snap, purchases] = await Promise.all([ref.get(), ref.collection("purchases").get()]);
   const list = purchases.docs.map(d => d.data() as Purchase);
   const { computeEntitlements } = await import("./engine");
-  return toRevenueCatSubscriber(appUserId, list, computeEntitlements(list, project.config.entitlements), snap.get("firstSeenAt"));
+  const out = toRevenueCatSubscriber(appUserId, list, computeEntitlements(list, project.config.entitlements), snap.get("firstSeenAt"));
+  const updated = snap.get("attributesUpdatedAt") ?? {};
+  out.subscriber.subscriber_attributes = Object.fromEntries(Object.entries<any>(snap.get("attributes") ?? {})
+    .map(([k, v]) => [k, { value: v, updated_at_ms: updated[k] ?? snap.get("updatedAt") ?? Date.now() }]));
+  return out;
+}
+
+const rcRoute = (method: string, path: string, h: Handler) => { route(method, `/v1/rc/v1${path}`, h); route(method, `/v1${path}`, h); };
+
+rcRoute("GET", "/subscribers/:id", async (req, _res, [id]) => {
+  const project = await rcProject(req);
+  const appUserId = cleanId(decodeURIComponent(id));
+  await touchCustomer(project.id, appUserId);
+  return rcSubscriber(project, appUserId);
 });
 
-route("POST", "/v1/rc/v1/subscribers/:id/entitlements/:ent/promotional", async (req, _res, [id, ent]) => {
-  const caller = await authenticate(req);
-  if (caller.kind !== "secret") throw new HttpError(403, "secret_key_required");
-  const project = await getProject(caller.projectId);
+rcRoute("DELETE", "/subscribers/:id", async (req, _res, [id]) => {
+  const project = await rcProject(req, true);
+  const appUserId = cleanId(decodeURIComponent(id));
+  await db.recursiveDelete(db.doc(`projects/${project.id}/customers/${appUserId}`));
+  return { app_user_id: appUserId, deleted: true };
+});
+
+rcRoute("POST", "/subscribers/:id/attributes", async (req, _res, [id]) => {
+  const project = await rcProject(req);
+  const appUserId = cleanId(decodeURIComponent(id));
+  const attrs = req.body?.attributes;
+  if (!attrs || typeof attrs !== "object" || Object.keys(attrs).length > 50) throw new HttpError(400, "invalid_attributes");
+  const values: Record<string, unknown> = {}, times: Record<string, number> = {};
+  for (const [k, raw] of Object.entries<any>(attrs)) {
+    const key = cleanId(k, 64), v = raw && typeof raw === "object" && "value" in raw ? raw.value : raw;
+    values[key] = v === null || v === "" ? FieldValue.delete() : String(v).slice(0, 500);
+    times[key] = Number(raw?.updated_at_ms) || Date.now();
+  }
+  await db.doc(`projects/${project.id}/customers/${appUserId}`).set({ attributes: values, attributesUpdatedAt: times, lastSeenAt: Date.now() }, { merge: true });
+  return {};
+});
+
+rcRoute("GET", "/subscribers/:id/offerings", async (req, _res, [id]) => {
+  const project = await rcProject(req);
+  await touchCustomer(project.id, cleanId(decodeURIComponent(id)));
+  const { current, offerings } = offeringsFor(project);
+  const platform = /android/i.test(String(req.get("x-platform") ?? "")) ? "play_store" : /stripe|web/i.test(String(req.get("x-platform") ?? "")) ? "stripe" : "app_store";
+  return {
+    current_offering_id: current,
+    offerings: Object.entries<any>(offerings ?? {}).map(([identifier, o]) => ({
+      identifier, description: o?.description ?? identifier, metadata: o?.metadata ?? null,
+      packages: (o?.packages ?? []).map((p: any) => ({
+        identifier: p.id, platform_product_identifier: p.productIds?.[platform] ?? Object.values(p.productIds ?? {})[0] ?? null,
+      })),
+    })),
+  };
+});
+
+rcRoute("POST", "/subscribers/:id/alias", async (req, _res, [id]) => {
+  const project = await rcProject(req);
+  const from = cleanId(decodeURIComponent(id)), to = cleanId(String(req.body?.new_app_user_id ?? ""));
+  await mergeCustomers(project, from, to);
+  return rcSubscriber(project, to);
+});
+
+/** RevenueCat `POST /receipts`: store detected from X-Platform or the token shape. */
+rcRoute("POST", "/receipts", async req => {
+  const project = await rcProject(req);
+  const b = req.body ?? {};
+  const appUserId = cleanId(String(b.app_user_id ?? ""));
+  const token = String(b.fetch_token ?? "");
+  if (!appUserId || !token) throw new HttpError(400, "invalid_receipt", "app_user_id and fetch_token are required");
+  const platform = String(req.get("x-platform") ?? "").toLowerCase();
+  if (b.attributes && typeof b.attributes === "object") {
+    const vals = Object.fromEntries(Object.entries<any>(b.attributes).slice(0, 50).map(([k, v]) => [cleanId(k, 64), String(v?.value ?? v).slice(0, 500)]));
+    await db.doc(`projects/${project.id}/customers/${appUserId}`).set({ attributes: vals }, { merge: true });
+  }
+  if (platform === "stripe" || /^(sub|cs)_/.test(token)) {
+    const { ingestStripeFetchToken } = await import("./stripe");
+    await ingestStripeFetchToken(project, appUserId, token);
+  } else if (platform === "android" || b.product_ids || b.product_id && !/^ey/.test(token)) {
+    const g = { purchaseToken: token, productId: String(b.product_ids?.[0] ?? b.product_id ?? ""),
+      priceMicros: b.price ? Math.round(Number(b.price) * 1e6) : undefined, currency: b.currency };
+    // RevenueCat's Android SDK doesn't say whether the token is a subscription: try both.
+    const first = b.normal_duration || b.product_type === "subs" ? "subscription" : "inapp";
+    await ingestGooglePurchase(project, appUserId, { ...g, type: first })
+      .catch(() => ingestGooglePurchase(project, appUserId, { ...g, type: first === "inapp" ? "subscription" : "inapp" }));
+  } else if (token.split(".").length === 3) {
+    await ingestAppleTransaction(project, appUserId, token);
+  } else {
+    throw new HttpError(422, "legacy_receipt_unsupported", "Send the StoreKit 2 signed transaction (JWS) as fetch_token; base64 app receipts are not supported");
+  }
+  return rcSubscriber(project, appUserId);
+});
+
+rcRoute("POST", "/subscribers/:id/entitlements/:ent/promotional", async (req, _res, [id, ent]) => {
+  const project = await rcProject(req, true);
   const appUserId = cleanId(decodeURIComponent(id)), entitlement = cleanId(decodeURIComponent(ent), 64);
   const days = promotionalDays(req.body?.duration);
-  if (days === undefined) throw new HttpError(400, "invalid_duration");
+  const endMs = Number(req.body?.end_time_ms);
+  if (days === undefined && !endMs) throw new HttpError(400, "invalid_duration");
   const now = Date.now();
   const ref = db.doc(`projects/${project.id}/customers/${appUserId}/purchases/promo_${entitlement}`);
   const prev = (await ref.get()).data() as Purchase | undefined;
@@ -528,13 +620,29 @@ route("POST", "/v1/rc/v1/subscribers/:id/entitlements/:ent/promotional", async (
   const from = prev?.expiresAt && prev.expiresAt > now ? prev.expiresAt : now;
   await upsertPurchase(project, appUserId, {
     id: `promo_${entitlement}`, store: "promotional", productId: `promo:${entitlement}`, type: "non_consumable", status: "active",
-    purchasedAt: prev?.purchasedAt ?? now, latestPurchaseAt: now, expiresAt: days === null ? null : from + days * 86400000,
+    purchasedAt: prev?.purchasedAt ?? now, latestPurchaseAt: now, expiresAt: endMs || (days === null ? null : from + days! * 86400000),
     willRenew: false, isTrial: false, isSandbox: false, priceMicros: 0, currency: project.config.currency, periodMonths: 0, billingIssue: false, updatedAt: now,
   });
-  const purchases = (await db.collection(`projects/${project.id}/customers/${appUserId}/purchases`).get()).docs.map(d => d.data() as Purchase);
-  const { computeEntitlements } = await import("./engine");
-  return toRevenueCatSubscriber(appUserId, purchases, computeEntitlements(purchases, project.config.entitlements));
+  return rcSubscriber(project, appUserId);
 });
+
+rcRoute("POST", "/subscribers/:id/entitlements/:ent/revoke_promotionals", async (req, _res, [id, ent]) => {
+  const project = await rcProject(req, true);
+  const appUserId = cleanId(decodeURIComponent(id)), entitlement = cleanId(decodeURIComponent(ent), 64);
+  const ref = db.doc(`projects/${project.id}/customers/${appUserId}/purchases/promo_${entitlement}`);
+  const prev = (await ref.get()).data() as Purchase | undefined;
+  if (prev) {
+    const now = Date.now();
+    await upsertPurchase(project, appUserId, { ...prev, status: "revoked", expiresAt: now, updatedAt: now });
+  }
+  return rcSubscriber(project, appUserId);
+});
+
+for (const action of ["revoke", "refund", "defer"]) {
+  rcRoute("POST", `/subscribers/:id/subscriptions/:pid/${action}`, async () => {
+    throw new HttpError(501, "not_supported", `Use the store console to ${action} this subscription; MoneyMaker picks the change up from store notifications.`);
+  });
+}
 
 // ── Connections (one step per store) ──────────────────────────────────────
 route("POST", "/v1/projects/:pid/connect/stripe", async (req, _res, [pid]) => {

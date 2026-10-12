@@ -82,8 +82,8 @@ export async function oneTimeOwner(project: Project, ch: Stripe.Charge) {
     ?? (ch.customer ? `$stripe:${ch.customer}` : ch.billing_details?.email ? `$email:${ch.billing_details.email.toLowerCase()}` : `$stripe:${ch.id}`);
 }
 
-export async function storeSubscription(project: Project, sub: Stripe.Subscription, stripe?: Stripe, opts: { silent?: boolean } = {}) {
-  let appUserId = appUserIdFrom(sub.metadata) ?? await lookupIndex(project.id, `stripe:${sub.id}`, `stripe_cus:${sub.customer}`);
+export async function storeSubscription(project: Project, sub: Stripe.Subscription, stripe?: Stripe, opts: { silent?: boolean; appUserId?: string } = {}) {
+  let appUserId = opts.appUserId ?? appUserIdFrom(sub.metadata) ?? await lookupIndex(project.id, `stripe:${sub.id}`, `stripe_cus:${sub.customer}`);
   let country: string | null = null;
   if (stripe && typeof sub.customer === "string") {
     const c = await stripe.customers.retrieve(sub.customer).catch(() => null);
@@ -177,6 +177,19 @@ export async function ingestStripeWebhook(project: Project, rawBody: Buffer, sig
 }
 
 /** Hosted Checkout for web / external purchase links. */
+/** RevenueCat-style `POST /receipts` for Stripe: fetch_token = subscription id (sub_…) or Checkout Session id (cs_…). */
+export async function ingestStripeFetchToken(project: Project, appUserId: string, token: string) {
+  const { stripe } = await stripeFor(project);
+  let subId = token;
+  if (token.startsWith("cs_")) {
+    const cs = await stripe.checkout.sessions.retrieve(token);
+    subId = typeof cs.subscription === "string" ? cs.subscription : cs.subscription?.id ?? "";
+  }
+  if (!subId.startsWith("sub_")) throw new HttpError(400, "invalid_fetch_token", "Stripe fetch_token must be sub_… or cs_…");
+  const sub = await stripe.subscriptions.retrieve(subId);
+  await storeSubscription(project, sub, stripe, { appUserId });
+}
+
 export async function createCheckout(project: Project, appUserId: string, body: any) {
   const { stripe } = await stripeFor(project);
   const priceId = String(body?.priceId ?? "");

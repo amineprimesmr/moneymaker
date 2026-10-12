@@ -53,9 +53,16 @@ You need from the user: a PUBLIC key (`mm_pub_…`, safe to ship in apps) and th
 `POST /v1/projects/{id}/import/revenuecat` `{ "secretKey": "sk_…", "appUserIds": ["uid1", …] (only for legacy v1 keys) }` → `{ jobId }`; poll `GET /v1/projects/{id}/import/{jobId}` → `{ status: queued|running|done|failed, result: { customers, purchases } }`. Imports current subscriptions and lifetime purchases (sandbox excluded). When the real store purchase later reaches MoneyMaker (SDK or notification) the imported copy is replaced, never double-counted. One-time payments (Checkout, Payment Links, charges) are imported and tracked too. Stripe customers are linked through metadata `app_user_id`, `firebaseUID`, `user_id` or `uid`.
 
 ## RevenueCat-compatible API (migrate a backend by changing base URL + key)
-Base URL `https://moneymaker-io.web.app/v1/rc`, auth `Authorization: Bearer mm_sk_…` (secret key):
-- `GET /v1/rc/v1/subscribers/{app_user_id}` → RevenueCat v1 `{ subscriber: { entitlements, subscriptions, non_subscriptions, … } }`.
-- `POST /v1/rc/v1/subscribers/{app_user_id}/entitlements/{entitlement}/promotional` `{ "duration": "monthly" | "yearly" | "lifetime" | … }` (stacks like RevenueCat).
+Base URL `https://moneymaker-io.web.app/v1/rc` (every route is also served without `/rc`, e.g. `/v1/subscribers/{id}`). Auth `Authorization: Bearer mm_pub_…` (public key, read + receipts + attributes, like RevenueCat's SDK key) or `mm_sk_…` (secret key, everything):
+- `GET /v1/rc/v1/subscribers/{app_user_id}` → RevenueCat v1 `{ subscriber: { entitlements, subscriptions, non_subscriptions, subscriber_attributes, … } }`.
+- `DELETE /v1/rc/v1/subscribers/{app_user_id}` (secret) → `{ app_user_id, deleted: true }` (GDPR).
+- `POST /v1/rc/v1/subscribers/{app_user_id}/attributes` `{ "attributes": { "$email": { "value": "…", "updated_at_ms": … } } }` (null/"" deletes).
+- `GET /v1/rc/v1/subscribers/{app_user_id}/offerings` → `{ current_offering_id, offerings: [{ identifier, description, metadata, packages: [{ identifier, platform_product_identifier }] }] }` (store chosen from `X-Platform: ios|android|stripe`).
+- `POST /v1/rc/v1/subscribers/{app_user_id}/alias` `{ "new_app_user_id": "…" }`.
+- `POST /v1/rc/v1/receipts` `{ app_user_id, fetch_token, product_ids?, price?, currency?, attributes? }`: Apple = StoreKit 2 signed transaction (JWS); Google = purchase token (`X-Platform: android`); Stripe = `sub_…` or `cs_…`. Base64 StoreKit 1 receipts → 422 `legacy_receipt_unsupported`.
+- `POST /v1/rc/v1/subscribers/{app_user_id}/entitlements/{entitlement}/promotional` (secret) `{ "duration": "daily" … "lifetime" }` or `{ "end_time_ms": … }` (stacks like RevenueCat).
+- `POST /v1/rc/v1/subscribers/{app_user_id}/entitlements/{entitlement}/revoke_promotionals` (secret).
+- `POST …/subscriptions/{product_id}/revoke|refund|defer` → 501 `not_supported` (do it in the store console; notifications sync the result).
 - Webhooks in RevenueCat format: `PATCH` config `{ "webhooks": [{ "id": "rc", "url": "https://…", "format": "revenuecat" }] }` and set the header your receiver checks with `PUT …/credentials { "webhookAuthorization": { "rc": "Bearer <secret>" } }`. Bodies are `{ api_version, event: { type, app_user_id, product_id, period_type, price, is_trial_conversion, … } }`.
 During a migration, read both RevenueCat and MoneyMaker and keep the entitlement expiring last (old app versions still buy through RevenueCat).
 
