@@ -1,22 +1,9 @@
 {
   "$schema": "https://stripe.com/stripe-app.schema.json",
   "id": "io.moneymaker.stripe",
-  "version": "0.1.0",
   "name": "MoneyMaker",
+  "version": "0.1.1",
   "icon": "./icon.png",
-  "distribution_type": "private",
-  "stripe_api_access_type": "platform",
-  "sandbox_install_compatible": true,
-  "permissions": [
-    {
-      "permission": "customer_read",
-      "purpose": "Afficher, sur la fiche d'un client Stripe, son statut MoneyMaker (accès, abonnements tous stores, LTV). / Show the MoneyMaker status (entitlements, cross-store subscriptions, LTV) on a Stripe customer page."
-    },
-    {
-      "permission": "secret_write",
-      "purpose": "Stocker de façon chiffrée la clé secrète MoneyMaker du compte dans le Secret Store Stripe. / Store the account's MoneyMaker secret key encrypted in the Stripe Secret Store."
-    }
-  ],
   "ui_extension": {
     "views": [
       {
@@ -39,10 +26,24 @@
       "purpose": "Récupérer les données MoneyMaker (statut client, métriques) et offrir des accès promotionnels via l'API MoneyMaker. / Fetch MoneyMaker data (customer status, metrics) and grant promotional access through the MoneyMaker API."
     }
   },
+  "extensions": null,
+  "permissions": [
+    {
+      "permission": "customer_read",
+      "purpose": "Afficher, sur la fiche d'un client Stripe, son statut MoneyMaker (accès, abonnements tous stores, LTV). / Show the MoneyMaker status (entitlements, cross-store subscriptions, LTV) on a Stripe customer page."
+    },
+    {
+      "permission": "secret_write",
+      "purpose": "Stocker de façon chiffrée la clé secrète MoneyMaker du compte dans le Secret Store Stripe. / Store the account's MoneyMaker secret key encrypted in the Stripe Secret Store."
+    }
+  ],
   "post_install_action": {
     "type": "settings"
   },
   "constants": {
     "API_BASE": "https://moneymaker-io.web.app/v1/stripe-app"
-  }
+  },
+  "distribution_type": "private",
+  "stripe_api_access_type": "platform",
+  "sandbox_install_compatible": true
 }

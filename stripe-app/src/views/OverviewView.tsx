@@ -1,17 +1,9 @@
-import { Badge, Box, ContextView, Divider, Inline, List, ListItem } from "@stripe/ui-extension-sdk/ui";
+import { Badge, Box, ContextView, Divider, List, ListItem, PropertyList, PropertyListItem } from "@stripe/ui-extension-sdk/ui";
 import type { ExtensionContextValue } from "@stripe/ui-extension-sdk/context";
 import { strings, money, storeLabel, type Strings } from "../lib/i18n";
 import type { OverviewResponse } from "../lib/moneymaker";
 import { useMoneyMaker } from "../lib/useMoneyMaker";
 import { Loading, MissingKey, ErrorState } from "../lib/StateViews";
-
-const Metric = ({ label, value, hint }: { label: string; value: string; hint?: string }) => (
-  <Box css={{ stack: "y", gap: "xxsmall", padding: "medium", borderRadius: "medium", keyline: "neutral", width: "1/2" }}>
-    <Box css={{ font: "caption", color: "secondary" }}>{label}</Box>
-    <Box css={{ font: "heading", fontWeight: "bold" }}>{value}</Box>
-    {hint ? <Box css={{ font: "caption", color: "secondary" }}>{hint}</Box> : null}
-  </Box>
-);
 
 const pctDelta = (cur: number, prev: number | null) => {
   if (!prev) return undefined;
@@ -46,20 +38,17 @@ const Overview = ({ data, t, locale }: { data: OverviewResponse; t: Strings; loc
     .sort((a, b) => (data.revenueByStore[b] ?? 0) - (data.revenueByStore[a] ?? 0));
   return (
     <Box css={{ stack: "y", gap: "large" }}>
-      <Box css={{ stack: "y", gap: "small" }}>
-        <Inline css={{ gap: "small" }}>
-          <Metric label={t.mrr} value={money(data.mrrMicros, cur, locale)} />
-          <Metric label={t.revenue28d} value={money(data.revenue28dMicros, cur, locale)} hint={delta ? `${delta} ${t.vsPrevious}` : undefined} />
-        </Inline>
-        <Inline css={{ gap: "small" }}>
-          <Metric label={t.activeSubs} value={String(data.activeSubscriptions)} />
-          <Metric label={t.trials} value={String(data.activeTrials)} />
-        </Inline>
-        <Inline css={{ gap: "small" }}>
-          <Metric label={t.activeCustomers} value={String(data.activeCustomers)} />
-          <Metric label={t.newCustomers} value={String(data.newCustomers28d)} />
-        </Inline>
+      <Box css={{ stack: "y", gap: "xxsmall" }}>
+        <Box css={{ font: "caption", color: "secondary" }}>{t.mrr}</Box>
+        <Box css={{ font: "title", fontWeight: "bold" }}>{money(data.mrrMicros, cur, locale)}</Box>
       </Box>
+      <PropertyList>
+        <PropertyListItem label={t.revenue28d} value={`${money(data.revenue28dMicros, cur, locale)}${delta ? ` (${delta})` : ""}`} />
+        <PropertyListItem label={t.activeSubs} value={String(data.activeSubscriptions)} />
+        <PropertyListItem label={t.trials} value={String(data.activeTrials)} />
+        <PropertyListItem label={t.activeCustomers} value={String(data.activeCustomers)} />
+        <PropertyListItem label={t.newCustomers} value={String(data.newCustomers28d)} />
+      </PropertyList>
       <Divider />
       <Box css={{ stack: "y", gap: "small" }}>
         <Box css={{ font: "heading" }}>{t.byStore}</Box>

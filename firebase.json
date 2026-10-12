@@ -2,25 +2,89 @@
   "functions": {
     "source": "backend/functions",
     "runtime": "nodejs22",
-    "predeploy": ["npm --prefix \"$RESOURCE_DIR\" test"]
+    "predeploy": [
+      "npm --prefix \"$RESOURCE_DIR\" test"
+    ]
   },
-  "firestore": { "rules": "backend/firestore.rules", "indexes": "backend/firestore.indexes.json" },
+  "firestore": {
+    "rules": "backend/firestore.rules",
+    "indexes": "backend/firestore.indexes.json"
+  },
   "hosting": {
     "public": "dashboard/public",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "cleanUrls": true,
     "rewrites": [
-      { "source": "/v1/**", "function": { "functionId": "api", "region": "europe-west1" } },
-      { "source": "/pay/**", "destination": "/pay.html" },
-      { "source": "/manage/**", "destination": "/manage.html" }
+      {
+        "source": "/v1/**",
+        "function": {
+          "functionId": "api",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/pay/**",
+        "destination": "/pay.html"
+      },
+      {
+        "source": "/manage/**",
+        "destination": "/manage.html"
+      }
     ],
-    "headers": [{ "source": "**", "headers": [
-      { "key": "X-Content-Type-Options", "value": "nosniff" },
-      { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
-    ]}]
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(html|js|css|txt)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
+    ]
   },
   "emulators": {
-    "functions": { "port": 5101 }, "firestore": { "port": 8181 }, "hosting": { "port": 5100 }, "auth": { "port": 9199 },
-    "ui": { "enabled": false }, "singleProjectMode": true
+    "functions": {
+      "port": 5101
+    },
+    "firestore": {
+      "port": 8181
+    },
+    "hosting": {
+      "port": 5100
+    },
+    "auth": {
+      "port": 9199
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true
   }
 }
