@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0095B39F4DF4E19D7F6A24E0 /* LiveServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F8C9B2ECD231050E024974A /* LiveServices.swift */; };
+		0685C8C572EF2ACAF31FAB44 /* chime.caf in Resources */ = {isa = PBXBuildFile; fileRef = 372A2BB96C797580EEC4C82F /* chime.caf */; };
 		0A6A777943ADFDD061F9E1AE /* WebSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA79FE47B32710C507EFC77 /* WebSignIn.swift */; };
 		0E0DF9F55F63CCCFC43BAF97 /* Finance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9CEEAB6A0F6F975061B40D2 /* Finance.swift */; };
 		19BDD03E12EDAD86DDEBBDE9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1097FC8E56F8174FC341976B /* Assets.xcassets */; };
@@ -19,17 +20,15 @@
 		425C064EB8D2A265790D5C41 /* MMLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */; };
 		4794E62556120F3F01B74FEE /* MMTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDD82E7144DFCD2E9CEB2649 /* MMTabBar.swift */; };
 		5136F7DBC24F48EC3D6CA704 /* cash.caf in Resources */ = {isa = PBXBuildFile; fileRef = 1C16D5B2A5EFA0E3324011BA /* cash.caf */; };
-		D8682AD3DA314401B4326DB0 /* pop.caf in Resources */ = {isa = PBXBuildFile; fileRef = 905B4E4D867B470A8580C11B /* pop.caf */; };
-		33D8D1ADD5A443A490F77611 /* levelup.caf in Resources */ = {isa = PBXBuildFile; fileRef = 76932BACF046462E95615AB2 /* levelup.caf */; };
-		6283EE5969794E8182FE0C8C /* chime.caf in Resources */ = {isa = PBXBuildFile; fileRef = F31D3C79C1C940919FB36114 /* chime.caf */; };
-		B19FFE66A2F0415BA380FDB6 /* coin.caf in Resources */ = {isa = PBXBuildFile; fileRef = C413B459B0174F91BDE3AB49 /* coin.caf */; };
 		524AAF5826767D1D2CB7D926 /* Growth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3363C1059D0F3A8BB7B01D0E /* Growth.swift */; };
 		59ECB948AB8D8B9A1D53DB82 /* SyncIslandThreshold.metal in Sources */ = {isa = PBXBuildFile; fileRef = 788A031366AAAAB5EC2FB323 /* SyncIslandThreshold.metal */; };
 		5CEDC2CFC73F062E994B9B48 /* MMLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */; };
+		6AEB914EAE0C6F91F7B661D2 /* levelup.caf in Resources */ = {isa = PBXBuildFile; fileRef = D388B48B0EC4821BE9AE43EB /* levelup.caf */; };
 		6C437D9CEE116445C4FB19A9 /* MoneyMakerWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7462A45DA2C0BCD45AD96986 /* MoneyMakerWidgets.swift */; };
 		7373A56139635C616E4FEEB0 /* land.json in Resources */ = {isa = PBXBuildFile; fileRef = A925D692B3BCE98ECBB2187E /* land.json */; };
 		7811B4F791C9B3EBBC5C17E9 /* SideMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD9FF9FB850F74B6132F8088 /* SideMenu.swift */; };
 		7A09B8560251703819AC48BC /* LiveScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82382FF73CC673CD177B62B /* LiveScreens.swift */; };
+		7ED6C0FF4A3CEFA3B9A620A2 /* pop.caf in Resources */ = {isa = PBXBuildFile; fileRef = 922606E4EBCE1695E58333B6 /* pop.caf */; };
 		8EFD41694F6ACF6B5C362766 /* MoneyMakerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */; };
 		9E22F7E452E61C7687F22A70 /* Globe.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6EDB0BDEE53E198B5CA131 /* Globe.swift */; };
 		9FB0842E3D9190DD976971E0 /* MoneyMakerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */; };
@@ -43,6 +42,7 @@
 		E41FCBB3965C52B9646B6A79 /* ProjectInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */; };
 		ED2ECE641415901FA314EA93 /* DashboardWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 911E11FF37AB7E13CD4D68BF /* DashboardWidget.swift */; };
 		F8CBAA134547ECEA85DA0F72 /* LiveWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1097A42E4D78F9B3FE75803 /* LiveWidgets.swift */; };
+		FD7A4899CEF8F43A0B4427DE /* coin.caf in Resources */ = {isa = PBXBuildFile; fileRef = 2E1FFF3CE007852CF4BF785F /* coin.caf */; };
 		FF6CF15644F82D3C4793F7B6 /* MMTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B41F707AED2D8405F6A5A /* MMTheme.swift */; };
 /* End PBXBuildFile section */
 
@@ -82,13 +82,11 @@
 		1097FC8E56F8174FC341976B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPermissionView.swift; sourceTree = "<group>"; };
 		1C16D5B2A5EFA0E3324011BA /* cash.caf */ = {isa = PBXFileReference; path = cash.caf; sourceTree = "<group>"; };
-		905B4E4D867B470A8580C11B /* pop.caf */ = {isa = PBXFileReference; path = pop.caf; sourceTree = "<group>"; };
-		76932BACF046462E95615AB2 /* levelup.caf */ = {isa = PBXFileReference; path = levelup.caf; sourceTree = "<group>"; };
-		F31D3C79C1C940919FB36114 /* chime.caf */ = {isa = PBXFileReference; path = chime.caf; sourceTree = "<group>"; };
-		C413B459B0174F91BDE3AB49 /* coin.caf */ = {isa = PBXFileReference; path = coin.caf; sourceTree = "<group>"; };
 		21F9030100E848B1A39A4B16 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		2B505E5DB6CC437E02CFFDC2 /* BusinessSideBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessSideBar.swift; sourceTree = "<group>"; };
+		2E1FFF3CE007852CF4BF785F /* coin.caf */ = {isa = PBXFileReference; path = coin.caf; sourceTree = "<group>"; };
 		3363C1059D0F3A8BB7B01D0E /* Growth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Growth.swift; sourceTree = "<group>"; };
+		372A2BB96C797580EEC4C82F /* chime.caf */ = {isa = PBXFileReference; path = chime.caf; sourceTree = "<group>"; };
 		45EBE436171160AF8EA3DF70 /* MoneyMaker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MoneyMaker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A389B5ED64940A8BC40C6A3 /* MoneyMakerWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MoneyMakerWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7462A45DA2C0BCD45AD96986 /* MoneyMakerWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyMakerWidgets.swift; sourceTree = "<group>"; };
@@ -96,6 +94,7 @@
 		7F8C9B2ECD231050E024974A /* LiveServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveServices.swift; sourceTree = "<group>"; };
 		8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyMakerClient.swift; sourceTree = "<group>"; };
 		911E11FF37AB7E13CD4D68BF /* DashboardWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardWidget.swift; sourceTree = "<group>"; };
+		922606E4EBCE1695E58333B6 /* pop.caf */ = {isa = PBXFileReference; path = pop.caf; sourceTree = "<group>"; };
 		98A641DEF15038E8304BEEE0 /* CachedImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedImage.swift; sourceTree = "<group>"; };
 		A0766FA3E98182D13451DA68 /* ScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotTests.swift; sourceTree = "<group>"; };
 		A33B41F707AED2D8405F6A5A /* MMTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMTheme.swift; sourceTree = "<group>"; };
@@ -105,6 +104,7 @@
 		AD9FF9FB850F74B6132F8088 /* SideMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideMenu.swift; sourceTree = "<group>"; };
 		C73C4CE142E8383DF54EED22 /* MoneyMaker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MoneyMaker.entitlements; sourceTree = "<group>"; };
 		C7D2D93D296848814FDB457A /* MoneyMakerUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MoneyMakerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D388B48B0EC4821BE9AE43EB /* levelup.caf */ = {isa = PBXFileReference; path = levelup.caf; sourceTree = "<group>"; };
 		DDD82E7144DFCD2E9CEB2649 /* MMTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMTabBar.swift; sourceTree = "<group>"; };
 		DF8864A5BC74A1FB07813601 /* MMEffects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMEffects.swift; sourceTree = "<group>"; };
 		E69CC078545BF8CD48C90C01 /* Widgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Widgets.entitlements; sourceTree = "<group>"; };
@@ -221,12 +221,12 @@
 			isa = PBXGroup;
 			children = (
 				1C16D5B2A5EFA0E3324011BA /* cash.caf */,
-				905B4E4D867B470A8580C11B /* pop.caf */,
-				76932BACF046462E95615AB2 /* levelup.caf */,
-				F31D3C79C1C940919FB36114 /* chime.caf */,
-				C413B459B0174F91BDE3AB49 /* coin.caf */,
+				372A2BB96C797580EEC4C82F /* chime.caf */,
+				2E1FFF3CE007852CF4BF785F /* coin.caf */,
 				F8609E850E6E511A47AC0F87 /* countries.json */,
 				A925D692B3BCE98ECBB2187E /* land.json */,
+				D388B48B0EC4821BE9AE43EB /* levelup.caf */,
+				922606E4EBCE1695E58333B6 /* pop.caf */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -341,12 +341,12 @@
 			files = (
 				19BDD03E12EDAD86DDEBBDE9 /* Assets.xcassets in Resources */,
 				5136F7DBC24F48EC3D6CA704 /* cash.caf in Resources */,
-				D8682AD3DA314401B4326DB0 /* pop.caf in Resources */,
-				33D8D1ADD5A443A490F77611 /* levelup.caf in Resources */,
-				6283EE5969794E8182FE0C8C /* chime.caf in Resources */,
-				B19FFE66A2F0415BA380FDB6 /* coin.caf in Resources */,
+				0685C8C572EF2ACAF31FAB44 /* chime.caf in Resources */,
+				FD7A4899CEF8F43A0B4427DE /* coin.caf in Resources */,
 				24B06FD26A971ACE214EAB40 /* countries.json in Resources */,
 				7373A56139635C616E4FEEB0 /* land.json in Resources */,
+				6AEB914EAE0C6F91F7B661D2 /* levelup.caf in Resources */,
+				7ED6C0FF4A3CEFA3B9A620A2 /* pop.caf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -454,7 +454,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 5;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = F2CJGJ69XU;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -647,7 +647,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 5;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = F2CJGJ69XU;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

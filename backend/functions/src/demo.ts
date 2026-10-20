@@ -15,7 +15,8 @@ const PRODUCTS = [
   { id: "focus.annual", price: 39.99, months: 12, w: 35 },
   { id: "focus.lifetime", price: 79.99, months: 0, w: 10 },
 ];
-const STORES = [["app_store", 70], ["play_store", 20], ["stripe", 10]] as const;
+const STORES = [["app_store", 85], ["stripe", 15]] as const;
+const SEED_VERSION = 2;   // à incrémenter pour forcer la régénération
 const COUNTRIES = [["FR", 34], ["US", 18], ["DE", 9], ["GB", 8], ["CA", 6], ["BE", 6], ["CH", 5], ["ES", 4], ["IT", 4], ["JP", 3], ["NL", 3]] as const;
 
 function pick<T>(rnd: () => number, items: readonly (readonly [T, number])[]): T {
@@ -71,7 +72,7 @@ export async function seedDemo(now = Date.now()) {
   const ref = db.doc(`projects/${DEMO_PID}`);
   await db.recursiveDelete(ref);
   await ref.set({
-    name: "Focus Timer", members: [DEMO_UID], ownerUid: DEMO_UID, demo: true, seededAt: now,
+    name: "Focus Timer", members: [DEMO_UID], ownerUid: DEMO_UID, demo: true, seededAt: now, seedVersion: SEED_VERSION,
     config: { ...DEFAULT_CONFIG, currency: "EUR" },
   });
   const rnd = rng(42), w = db.bulkWriter();
@@ -85,7 +86,7 @@ export async function seedDemo(now = Date.now()) {
 /** Toutes les heures : 0 à 2 nouvelles ventes ; régénère tout tous les 30 jours. */
 export async function demoTick(now = Date.now()) {
   const snap = await db.doc(`projects/${DEMO_PID}`).get();
-  if (!snap.exists || now - (snap.get("seededAt") ?? 0) > 30 * DAY) return seedDemo(now);
+  if (!snap.exists || now - (snap.get("seededAt") ?? 0) > 30 * DAY || snap.get("seedVersion") !== SEED_VERSION) return seedDemo(now);
   const rnd = rng(now % 4294967296), w = db.bulkWriter();
   const count = rnd() < 0.3 ? 0 : rnd() < 0.7 ? 1 : 2;
   for (let k = 0; k < count; k++) addSale(w, rnd, now, now - Math.floor(rnd() * 3600000), `t${now}_${k}`, false);

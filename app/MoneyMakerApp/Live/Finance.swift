@@ -147,10 +147,10 @@ struct NetCard: View {
         let micro = w.settings.structure.hasPrefix("micro")
         let rows: [(String, Int, Color, Bool, String)] = [
             ("Brut payé par les clients", w.grossMicros, MMColor.ink, false, "Ce que tes clients ont payé, toutes ventes confondues."),
-            (franchise ? "TVA collectée par Apple / Google" : "TVA et taxes", -w.vatMicros, MMColor.ink3, true,
+            (franchise ? "TVA collectée par les stores" : "TVA et taxes", -w.vatMicros, MMColor.ink3, true,
              franchise ? "Les stores prélèvent la TVA du pays du client avant de te payer. Sur Stripe, en franchise, tu n'en factures pas."
                        : "TVA comprise dans tes prix : collectée par les stores, à reverser toi-même pour Stripe."),
-            ("Commission App Store / Google Play", -w.storeFeesMicros, MMColor.orange, true, "15 % (Small Business / Google) ou 30 %."),
+            ("Commission des stores", -w.storeFeesMicros, MMColor.orange, true, "15 % (Small Business Program) ou 30 %."),
             ("Frais de paiement Stripe", -w.paymentFeesMicros, MMColor.orange, true, "≈ 1,5 % + 0,25 € par paiement (carte européenne)."),
             ("CA net encaissé", w.netRevenueMicros, MMColor.blue, false, micro ? "Base de calcul de tes cotisations URSSAF." : "Ce qui arrive réellement sur ton compte, hors TVA."),
             ("Charges", -w.expensesMicros, MMColor.ink3, true, "Estimation en % de tes charges."),
@@ -174,6 +174,8 @@ struct NetCard: View {
                 }
                 .padding(.vertical, 8)
             }
+            Text("Estimations indicatives selon tes réglages, à valider avec ton expert-comptable : ce n'est pas un conseil fiscal.")
+                .font(MMFont.system(11)).foregroundStyle(MMColor.ink3).padding(.top, 6)
             if !w.byStore.isEmpty {
                 HStack(spacing: 8) {
                     ForEach(w.byStore.sorted { $0.value.grossMicros > $1.value.grossMicros }, id: \.key) { k, v in
@@ -191,7 +193,7 @@ struct NetCard: View {
     }
 
     private func storeName(_ k: String) -> String {
-        ["app_store": "App Store", "play_store": "Google Play", "stripe": "Stripe", "promotional": "Offert"][k] ?? k
+        ["app_store": "App Store", "play_store": "Autre store", "stripe": "Stripe", "promotional": "Offert"][k] ?? k
     }
 }
 
@@ -271,7 +273,7 @@ struct FinanceSettingsSection: View {
                             }
                             .buttonStyle(.plain)
                             if showAdvanced {
-                                percent("Commission Google Play", "googleRate", s.googleRate)
+                                percent("Commission autre store", "googleRate", s.googleRate)
                                 percent("Frais Stripe (%)", "stripePercent", s.stripePercent, step: 0.001)
                                 percent("Cotisations sociales", "socialRate", s.socialRate, step: 0.001)
                                 percent("Versement libératoire", "incomeTaxRate", s.incomeTaxRate, step: 0.001)
@@ -315,7 +317,7 @@ struct FinanceSettingsSection: View {
         var parts = [w.presets?[s.structure]?.label ?? s.structure]
         if s.vatFranchise ?? s.structure.hasPrefix("micro") { parts.append("franchise de TVA") }
         let p = s.processors
-        let procs = [p?.appStore == true ? "App Store" : nil, p?.googlePlay == true ? "Google Play" : nil, p?.stripe == true ? "Stripe" : nil].compactMap { $0 }
+        let procs = [p?.appStore == true ? "App Store" : nil, p?.googlePlay == true ? "Autre store" : nil, p?.stripe == true ? "Stripe" : nil].compactMap { $0 }
         if !procs.isEmpty { parts.append(procs.joined(separator: ", ")) }
         return parts.joined(separator: " · ")
     }
@@ -393,10 +395,10 @@ struct TaxProfileSheet: View {
                 Section {
                     Toggle("App Store", isOn: $appStore)
                     if appStore { Toggle("Programme Small Business (15 %)", isOn: $smallBusiness) }
-                    Toggle("Google Play", isOn: $googlePlay)
+                    Toggle("Autre store", isOn: $googlePlay)
                     Toggle("Stripe", isOn: $stripe)
                 } header: { Text("Moyens d'encaissement") } footer: {
-                    Text("Pré-rempli d'après tes connexions. App Store : 15 % avec le Small Business Program (moins d'1 M$/an), sinon 30 %. Google Play : 15 %. Stripe : ≈ 1,5 % + 0,25 € par paiement.")
+                    Text("Pré-rempli d'après tes connexions. App Store : 15 % avec le Small Business Program (moins d'1 M$/an), sinon 30 %. Autre store : 15 %. Stripe : ≈ 1,5 % + 0,25 € par paiement.")
                 }
             }
             .scrollContentBackground(.hidden)

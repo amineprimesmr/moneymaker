@@ -1,6 +1,6 @@
 //
 //  WebSignIn.swift
-//  MoneyMaker — connexion depuis l'app (Google ou e-mail, création de compte incluse).
+//  MoneyMaker — connexion depuis l'app (e-mail, création de compte incluse).
 //
 //  Session web sécurisée du système (ASWebAuthenticationSession) sur /app-login : l'utilisateur
 //  s'identifie, la page crée un jeton personnel « iPhone » et le renvoie à moneymaker://auth.
@@ -29,7 +29,7 @@ final class WebSignIn: NSObject, ASWebAuthenticationPresentationContextProviding
             done(.success(token))
         }
         s.presentationContextProvider = self
-        s.prefersEphemeralWebBrowserSession = false   // garde la session Google du navigateur
+        s.prefersEphemeralWebBrowserSession = false   // garde la session du navigateur
         session = s
         s.start()
     }

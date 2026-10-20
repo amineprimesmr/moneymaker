@@ -9,7 +9,7 @@ import XCTest
 final class ScreenshotTests: XCTestCase {
     func testAppStoreScreenshots() throws {
         let token = ProcessInfo.processInfo.environment["MM_TOKEN"] ?? ""
-        try XCTSkipIf(!token.hasPrefix("mm_pat_"), "MM_TOKEN manquant")
+        try XCTSkipIf(!(token.hasPrefix("mm_pat_") || token == "mm_demo"), "MM_TOKEN manquant")
         let app = XCUIApplication()
         app.launchEnvironment["MM_UI_TEST_TOKEN"] = token
         app.launch()

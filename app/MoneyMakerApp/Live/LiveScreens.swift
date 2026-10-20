@@ -332,7 +332,7 @@ struct LiveSettingsView: View {
                     }
                     .mmAppear(3)
 
-                    FinanceSettingsSection().mmAppear(4)
+                    if !store.isDemo { FinanceSettingsSection().mmAppear(4) }
 
                     section("Compte") {
                         link("Dashboard web", "safari.fill", "https://moneymaker-io.web.app")
@@ -340,23 +340,30 @@ struct LiveSettingsView: View {
                         link("Aide et contact", "questionmark.circle.fill", "https://moneymaker-io.web.app/support")
                         divider
                         link("Confidentialité et conditions", "hand.raised.fill", "https://moneymaker-io.web.app/privacy")
+                        if !store.isDemo {
                         divider
                         toggle("Inclure les achats sandbox", "hammer.fill", MMColor.ink2,
                                get: { $0.sandbox }, set: { $0.sandbox = $1 })
+                        }
                     }
                     .mmAppear(5)
 
                     VStack(spacing: 10) {
                         Button { dismiss(); store.signOut() } label: {
-                            Text("Se déconnecter").font(MMFont.system(15, .medium)).foregroundStyle(MMColor.red)
+                            Text(store.isDemo ? "Quitter la démo" : "Se déconnecter").font(MMFont.system(15, .medium)).foregroundStyle(MMColor.red)
                                 .frame(maxWidth: .infinity).padding(.vertical, 14)
                                 .background(MMColor.red.opacity(0.12), in: Capsule())
                         }
                         .buttonStyle(MMPressStyle())
-                        Button { confirmDelete = true } label: {
-                            Text(deleting ? "Suppression…" : "Supprimer mon compte").font(MMFont.system(13)).foregroundStyle(MMColor.ink3)
+                        if store.isDemo {
+                            Text("Mode démo en lecture seule. Crée un compte pour connecter tes apps ; tu pourras le supprimer ici à tout moment.")
+                                .font(MMFont.system(12)).foregroundStyle(MMColor.ink3).multilineTextAlignment(.center)
+                        } else {
+                            Button { confirmDelete = true } label: {
+                                Text(deleting ? "Suppression…" : "Supprimer mon compte").font(MMFont.system(13)).foregroundStyle(MMColor.ink3)
+                            }
+                            .disabled(deleting)
                         }
-                        .disabled(deleting)
                     }
                     .mmAppear(6)
 

@@ -21,7 +21,10 @@ struct RootView: View {
         .task {
             #if DEBUG
             // Tests UI (captures App Store) : jeton fourni par l'environnement de lancement.
-            if store.token == nil, let t = ProcessInfo.processInfo.environment["MM_UI_TEST_TOKEN"], t.hasPrefix("mm_pat_") { await store.signIn(t) }
+            // Jeton gardé en mémoire seulement : la session enregistrée sur l'iPhone n'est pas touchée.
+            if let t = ProcessInfo.processInfo.environment["MM_UI_TEST_TOKEN"], t.hasPrefix("mm_pat_") || t == "mm_demo" {
+                store.token = t; await store.refresh()
+            }
             #endif
         }
     }
@@ -41,7 +44,7 @@ struct SignInView: View {
             Spacer()
             Image("Logo").resizable().scaledToFit().frame(width: 250)
                 .mmAppear(0)
-            Text("Tous tes revenus App Store, Google Play et Stripe, en direct.")
+            Text("Tous les revenus de tes apps et de Stripe, en direct.")
                 .font(MMFont.system(15)).foregroundStyle(MMColor.ink2).multilineTextAlignment(.center)
                 .padding(.top, 22).padding(.horizontal, 12).mmAppear(1)
             Spacer()
