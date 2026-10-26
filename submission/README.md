@@ -22,7 +22,7 @@ Re-vérifier avant d'envoyer : `cd backend/functions && node tests/mcp-prod-chec
 | Support | https://moneymaker-io.web.app/support |
 | Logo | `dashboard/public/icon-512.png` (512×512) |
 | Catégorie | Finance / Business analytics |
-| Outils | 60 : 42 lecture (`readOnlyHint`), 13 écriture, 5 suppressions (`destructiveHint`, `confirm: true`). Liste : `/mcp-docs` |
+| Outils | 68 : 43 lecture (`readOnlyHint`), 20 écriture, 5 suppressions (`destructiveHint`, `confirm: true`). Liste : `/mcp-docs` |
 
 **Description courte (EN)** : Revenue and subscription analytics for your apps — MRR, subscribers, customers, App Store rankings, reviews and finance.
 

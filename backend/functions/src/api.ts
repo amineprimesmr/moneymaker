@@ -1121,6 +1121,23 @@ route("DELETE", "/v1/devices/:id", async (req, _res, [id]) => {
   return { ok: true };
 });
 
+// Push de test sur tous les appareils du compte (onboarding depuis un assistant, qui ne connaît pas les ids).
+route("POST", "/v1/devices/test", async req => {
+  const uid = requireUser(await authenticate(req));
+  const { apnsSend, apnsConfigured } = await import("./push");
+  const devices = (await db.collection(`users/${uid}/devices`).get()).docs.map(d => d.data()).filter(d => d.apnsToken);
+  if (!devices.length) throw new HttpError(400, "no_device", "Installe l'app MoneyMaker sur iPhone, connecte-toi et autorise les notifications.");
+  if (!(await apnsConfigured())) throw new HttpError(503, "apns_not_configured", "La clé APNs n'est pas encore configurée côté serveur.");
+  let sent = 0;
+  for (const d of devices) {
+    const r = await apnsSend(d.env, d.apnsToken, "alert", {
+      aps: { alert: { title: "+9,99 € · MoneyMaker", subtitle: "Notification de test", body: "Nouvel abonné · mensuel · 🇫🇷 FR" }, sound: saleSoundFile(d.prefs ?? {}), "thread-id": "test", category: "SALE" },
+    });
+    if (r.status === 200) sent++;
+  }
+  return { ok: sent > 0, devices: devices.length, sent };
+});
+
 route("POST", "/v1/devices/:id/test", async (req, _res, [id]) => {
   const uid = requireUser(await authenticate(req));
   const { apnsSend, apnsConfigured } = await import("./push");
