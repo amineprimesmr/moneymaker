@@ -5,17 +5,22 @@ import type { Request } from "firebase-functions/v2/https";
 import type { Response } from "express";
 import { HttpError } from "../engine";
 import { resolveKey } from "../store";
-import { ORIGIN, ACCESS_PREFIX } from "./policy";
-import { authorizationMetadata, resourceMetadata, rateLimit, register, beginAuthorization, previewRequest, firebaseUser, approve, exchange,
+import { ORIGIN, ORIGINS, ACCESS_PREFIX, originFor } from "./policy";
+import { authorizationMetadataFor, resourceMetadataFor, rateLimit, register, beginAuthorization, previewRequest, firebaseUser, approve, exchange,
   resolveAccessToken, revokeToken, listGrants, revokeGrant } from "./oauth";
 import { TOOLS, toolList, needsConfirm, Call } from "./tools";
 
 export type Dispatch = (method: string, path: string, opts: { query?: Record<string, unknown>; body?: unknown; authorization: string; ip?: string })
   => Promise<{ status: number; body: any }>;
 
+/** Jetons publics de vérification de domaine OpenAI (Apps SDK), un par domaine. */
+const OPENAI_CHALLENGES: Record<string, string> = {
+  "https://moneymaker-io.web.app": "WBrPp0z6EIdlZrpaVYxETi47ToeYz7Phg8Wt5yYs8iw",
+  ...JSON.parse(process.env.OPENAI_APPS_CHALLENGES ?? "{}"),
+};
 const SERVER = { name: "moneymaker", title: "MoneyMaker", version: "2.0.0", websiteUrl: `${ORIGIN}/mcp-docs` };
 const VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
-const ALLOWED_ORIGINS = [ORIGIN, "https://moneymaker-io.firebaseapp.com", "https://claude.ai", "https://claude.com", "https://chatgpt.com", "https://chat.openai.com"];
+const ALLOWED_ORIGINS = [...ORIGINS, "https://moneymaker-io.firebaseapp.com", "https://claude.ai", "https://claude.com", "https://chatgpt.com", "https://chat.openai.com"];
 const MAX_TEXT = 300_000;
 const INSTRUCTIONS = [
   "Données de revenus et d'abonnements MoneyMaker de l'utilisateur (apps iOS/Android/web).",
@@ -26,7 +31,7 @@ const INSTRUCTIONS = [
   "Pour update_project et update_offerings, lis la configuration actuelle d'abord : chaque champ envoyé remplace la valeur entière.",
 ].join("\n");
 
-export const isMcpPath = (path: string) => path === "/mcp" || path.startsWith("/.well-known/oauth-") || path.startsWith("/oauth/");
+export const isMcpPath = (path: string) => path === "/mcp" || path.startsWith("/.well-known/oauth-") || path === "/.well-known/openai-apps-challenge" || path.startsWith("/oauth/");
 
 export interface Identity { authorization: string; write: boolean }
 
@@ -108,10 +113,12 @@ export async function handleMcp(req: Request, res: Response, path: string, dispa
   res.set("Access-Control-Expose-Headers", "WWW-Authenticate, MCP-Session-Id");
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
   const ip = req.ip ?? "unknown";
+  const base = originFor(req.get("x-forwarded-host"));
   try {
     if ((req.rawBody?.length ?? 0) > 256 * 1024) throw new HttpError(413, "request_too_large");
-    if (path === "/.well-known/oauth-authorization-server" && req.method === "GET") { res.json(authorizationMetadata); return; }
-    if (path.startsWith("/.well-known/oauth-protected-resource") && req.method === "GET") { res.json(resourceMetadata); return; }
+    if (path === "/.well-known/openai-apps-challenge") { res.type("text/plain").send(OPENAI_CHALLENGES[base] ?? ""); return; }
+    if (path === "/.well-known/oauth-authorization-server" && req.method === "GET") { res.json(authorizationMetadataFor(base)); return; }
+    if (path.startsWith("/.well-known/oauth-protected-resource") && req.method === "GET") { res.json(resourceMetadataFor(base)); return; }
     if (path === "/mcp") {
       if (req.method !== "POST") { res.set("Allow", "POST"); res.status(405).json({ error: "method_not_allowed" }); return; }
       const id = await identify(req.get("authorization"));
@@ -128,7 +135,7 @@ export async function handleMcp(req: Request, res: Response, path: string, dispa
     }
     await rateLimit(`ip:${ip}`, 120);
     if (path === "/oauth/register" && req.method === "POST") { await rateLimit(`register:${ip}`, 10); res.status(201).json(await register(req.body)); return; }
-    if (path === "/oauth/authorize" && req.method === "GET") { res.redirect(302, await beginAuthorization(req.query)); return; }
+    if (path === "/oauth/authorize" && req.method === "GET") { res.redirect(302, await beginAuthorization(req.query, base)); return; }
     if (path === "/oauth/request" && req.method === "GET") { res.json(await previewRequest(req.query.request)); return; }
     if (path === "/oauth/token" && req.method === "POST") { res.json(await exchange(req.body)); return; }
     if (path === "/oauth/revoke" && req.method === "POST") { await revokeToken(req.body); res.status(200).json({}); return; }
@@ -139,7 +146,7 @@ export async function handleMcp(req: Request, res: Response, path: string, dispa
   } catch (e) {
     const err = e instanceof HttpError ? e : new HttpError(500, "temporarily_unavailable");
     if (!(e instanceof HttpError)) console.error("mcp", (e as Error).message);
-    if (err.status === 401) res.set("WWW-Authenticate", `Bearer resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource/mcp", error="invalid_token"`);
+    if (err.status === 401) res.set("WWW-Authenticate", `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource/mcp", error="invalid_token"`);
     // OAuth (RFC 6749 §5.2) : { error } ; jamais de corps de requête ni de jeton dans les journaux.
     if (!res.headersSent) res.status(err.status).json({ error: err.code });
   }

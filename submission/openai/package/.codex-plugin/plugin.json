@@ -1,0 +1,105 @@
+{
+  "name": "moneymaker",
+  "version": "1.0.0",
+  "description": "Revenue and subscription analytics for your apps: MRR, subscribers, customers, App Store rankings, reviews and finance.",
+  "author": {
+    "name": "Process",
+    "email": "amine.ennasri.pro@gmail.com",
+    "url": "https://usemoneymaker.com"
+  },
+  "homepage": "https://usemoneymaker.com/mcp-docs",
+  "mcpServers": "./.mcp.json",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "MoneyMaker",
+    "shortDescription": "Your app revenue in one place",
+    "longDescription": "MoneyMaker tracks in-app subscription revenue across the App Store, Google Play, Stripe, Paddle, Amazon and Roku. Ask about MRR, revenue, active subscribers, trials, churn, LTV and cohorts across all your apps; open a customer's full history; follow App Store rankings, ratings and reviews; see VAT, store fees and net income; and get anomaly alerts. With write access, the assistant can create a business and connect App Store Connect, Google Play, Stripe, RevenueCat and PostHog, and update offerings, tracked apps, alerts, expenses, promotional access and team invitations — each change runs with your role and is recorded in the audit log; deletions require explicit confirmation. Store credentials are never returned. Read-only access is available at sign-in.",
+    "developerName": "Process",
+    "category": "Data & Analytics",
+    "capabilities": [
+      "Read revenue and subscription metrics",
+      "Read customers and transactions",
+      "Read App Store rankings and reviews",
+      "Read finance and alerts",
+      "Connect stores and update configuration with your approval"
+    ],
+    "websiteURL": "https://usemoneymaker.com",
+    "supportURL": "https://usemoneymaker.com/support",
+    "privacyPolicyURL": "https://usemoneymaker.com/privacy",
+    "termsOfServiceURL": "https://usemoneymaker.com/terms",
+    "defaultPrompt": [
+      "How much did I make this week across all my apps?",
+      "Why did my MRR change this month?",
+      "Show my latest App Store reviews."
+    ],
+    "composerIcon": "./assets/icon.png",
+    "composerIconDark": "./assets/icon-dark.png",
+    "logo": "./assets/icon.png",
+    "logoDark": "./assets/icon-dark.png"
+  },
+  "extensions": {
+    "com.openai": {
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "List businesses",
+              "prompt": "List my MoneyMaker businesses.",
+              "tools_triggered": "list_projects",
+              "expected_behavior": "Return the demo business \"Focus Timer (demo)\" with its id, role and currency."
+            },
+            {
+              "description": "Read key metrics",
+              "prompt": "What is my MRR and how many active subscribers do I have?",
+              "tools_triggered": "get_overview, get_metrics",
+              "expected_behavior": "Return MRR in EUR (micro-units divided by 1,000,000) and the active subscriber count of the demo business, without invented numbers."
+            },
+            {
+              "description": "Read a chart",
+              "prompt": "Show the MRR chart for the last 30 days.",
+              "tools_triggered": "get_chart",
+              "expected_behavior": "Return the 30-day MRR series and its summary for Focus Timer (demo)."
+            },
+            {
+              "description": "Read App Store reviews",
+              "prompt": "Show the App Store reviews of Focus Timer.",
+              "tools_triggered": "list_tracked_apps, list_app_reviews",
+              "expected_behavior": "Return the five demo reviews of the tracked app with rating, country and text."
+            },
+            {
+              "description": "Write with approval",
+              "prompt": "Give customer reviewer_user_1 7 days of premium.",
+              "tools_triggered": "grant_entitlement",
+              "expected_behavior": "Describe the change, ask for approval, then grant 7 days of the premium entitlement and confirm."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Destructive action without confirmation",
+              "prompt": "Delete the Hosting expense."
+            },
+            {
+              "description": "Read-only connection cannot write",
+              "prompt": "Rename my business to Test (connected with read-only access)."
+            },
+            {
+              "description": "No access to another account's data",
+              "prompt": "Show the metrics of project xyz that I don't own."
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "No purchases, checkout or payments in the plugin. It reads and configures the user's own MoneyMaker account."
+      },
+      "publication": {
+        "release_notes": "Initial submission: 68 tools (43 read-only, 20 write, 5 destructive requiring confirm=true), OAuth 2.1 with dynamic client registration and PKCE, read-only or read-write consent, revocation at /connect. Includes the moneymaker-data and moneymaker-setup skills.",
+        "translations": {
+          "fr-FR": {
+            "subtitle": "Les revenus de tes apps",
+            "description": "MoneyMaker suit les revenus d'abonnements de tes apps (App Store, Google Play, Stripe, Paddle, Amazon, Roku). Demande ton MRR, tes revenus, abonnés, essais, churn, LTV et cohortes ; ouvre l'historique d'un client ; suis classements, notes et avis App Store ; vois TVA, commissions et net. Avec l'accès en écriture, l'assistant crée un business, connecte les stores et modifie la configuration avec ton accord ; chaque modification est journalisée et les suppressions exigent une confirmation. Les clés des stores ne sont jamais renvoyées."
+          }
+        }
+      }
+    }
+  }
+}

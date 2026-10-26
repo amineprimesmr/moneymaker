@@ -20,6 +20,13 @@
     "cleanUrls": true,
     "rewrites": [
       {
+        "source": "/.well-known/openai-apps-challenge",
+        "function": {
+          "functionId": "api",
+          "region": "europe-west1"
+        }
+      },
+      {
         "source": "/mcp",
         "function": {
           "functionId": "api",

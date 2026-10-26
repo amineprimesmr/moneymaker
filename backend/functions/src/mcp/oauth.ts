@@ -4,7 +4,7 @@ import { getAuth } from "firebase-admin/auth";
 import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../store";
 import { HttpError } from "../engine";
-import { ACCESS_PREFIX, ORIGIN, RESOURCE, SCOPES, Scope, hash, opaque, scopes, redirectAllowed, redirectMatches, clientName, loopback, pkce, safeID } from "./policy";
+import { ACCESS_PREFIX, ORIGIN, ORIGINS, SCOPES, Scope, hash, opaque, scopes, redirectAllowed, redirectMatches, clientName, loopback, pkce, safeID } from "./policy";
 
 const ACCESS_TTL = 3600_000;
 const GRANT_TTL = 90 * 86400_000;
@@ -13,19 +13,21 @@ const grantRef = (uid: string, id: string) => db.doc(`users/${uid}/mcpGrants/${i
 const expiry = (ms: number) => Timestamp.fromMillis(Date.now() + ms);
 const fail = (code = "invalid_request", status = 400): never => { throw new HttpError(status, code); };
 /** Les clients peuvent omettre l'indicateur de ressource RFC 8707 ; s'il est envoyé, il doit désigner ce serveur. */
-const resourceOK = (value: unknown) => value === undefined || value === "" || value === RESOURCE || value === ORIGIN;
+const resourceOK = (value: unknown) => value === undefined || value === "" || ORIGINS.some(o => value === o || value === `${o}/mcp`);
 
-export const authorizationMetadata = {
-  issuer: ORIGIN, authorization_endpoint: `${ORIGIN}/oauth/authorize`, token_endpoint: `${ORIGIN}/oauth/token`,
-  registration_endpoint: `${ORIGIN}/oauth/register`, revocation_endpoint: `${ORIGIN}/oauth/revoke`,
+export const authorizationMetadataFor = (o: string) => ({
+  issuer: o, authorization_endpoint: `${o}/oauth/authorize`, token_endpoint: `${o}/oauth/token`,
+  registration_endpoint: `${o}/oauth/register`, revocation_endpoint: `${o}/oauth/revoke`,
   scopes_supported: SCOPES, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"],
   token_endpoint_auth_methods_supported: ["none"], code_challenge_methods_supported: ["S256"],
-  service_documentation: `${ORIGIN}/mcp-docs`,
-};
-export const resourceMetadata = {
-  resource: RESOURCE, authorization_servers: [ORIGIN], scopes_supported: SCOPES, bearer_methods_supported: ["header"],
-  resource_name: "MoneyMaker", resource_documentation: `${ORIGIN}/mcp-docs`,
-};
+  service_documentation: `${o}/mcp-docs`,
+});
+export const resourceMetadataFor = (o: string) => ({
+  resource: `${o}/mcp`, authorization_servers: [o], scopes_supported: SCOPES, bearer_methods_supported: ["header"],
+  resource_name: "MoneyMaker", resource_documentation: `${o}/mcp-docs`,
+});
+export const authorizationMetadata = authorizationMetadataFor(ORIGIN);
+export const resourceMetadata = resourceMetadataFor(ORIGIN);
 
 export async function rateLimit(key: string, maximum: number) {
   const ref = bucket("limits").doc(hash(`${key}:${Math.floor(Date.now() / 60000)}`));
@@ -64,11 +66,11 @@ async function authorization(params: any) {
 }
 
 /** GET /oauth/authorize → page de consentement /connect?request=… (10 min). */
-export async function beginAuthorization(params: any) {
+export async function beginAuthorization(params: any, origin = ORIGIN) {
   const request = await authorization(params);
   const id = opaque();
   await bucket("requests").doc(hash(id)).set({ ...request, expiresAt: expiry(600000) });
-  return `${ORIGIN}/connect?request=${encodeURIComponent(id)}`;
+  return `${origin}/connect?request=${encodeURIComponent(id)}`;
 }
 async function requestData(id: unknown) {
   if (!safeID(id)) fail();

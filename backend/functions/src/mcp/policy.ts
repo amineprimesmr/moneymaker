@@ -3,6 +3,13 @@ import { createHash, randomBytes, timingSafeEqual } from "crypto";
 
 export const ORIGIN = (process.env.MONEYMAKER_PUBLIC_BASE ?? "https://moneymaker-io.web.app").replace(/\/$/, "");
 export const RESOURCE = `${ORIGIN}/mcp`;
+/** Domaines publics servant le même connecteur (Firebase Hosting) ; les métadonnées OAuth suivent celui appelé. */
+export const ORIGINS = [...new Set([ORIGIN, "https://usemoneymaker.com", "https://moneymaker-io.web.app"])];
+/** Origine publique de la requête (en-tête x-forwarded-host de Hosting), sinon ORIGIN. */
+export function originFor(host?: string): string {
+  const o = host ? `https://${host.split(",")[0].trim().toLowerCase()}` : "";
+  return ORIGINS.includes(o) ? o : ORIGIN;
+}
 export const SCOPES = ["moneymaker:read", "moneymaker:write"] as const;
 export type Scope = typeof SCOPES[number];
 /** Préfixe des jetons d'accès OAuth : reconnus par authenticate() comme une session utilisateur. */
