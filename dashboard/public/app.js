@@ -127,6 +127,7 @@ async function renderOverview(main) {
   const o = await api(`/v1/overview?days=${state.days}`);
   const c = o.currency;
   main.innerHTML = `<div class="head"><div><h1>Vue globale</h1><p class="muted">${state.projects.length} business · mis à jour ${date(o.generatedAt)}</p></div>${daysPicker()}</div>
+  <div class="card section" id="assistantBanner"></div>
   <div class="kpis">${kpi("MRR total", money(o.mrrMicros, c), `ARR ${money(o.mrrMicros * 12, c)}`, true)}${kpi(`Revenu ${state.days} j`, money(o.revenueMicros, c), "net des remboursements")}
   ${kpi("Abonnés actifs", o.activeSubscriptions)}${kpi("Essais en cours", o.activeTrials)}${kpi(`Nouveaux clients ${state.days} j`, o.newCustomers)}</div>
   <div class="card"><table><thead><tr><th>Business</th><th>MRR</th><th>Revenu ${state.days} j</th><th>Abonnés</th><th>Essais</th><th>Conversion essai</th><th>Churn</th></tr></thead><tbody>
@@ -135,6 +136,7 @@ async function renderOverview(main) {
   <div class="card" style="margin-top:12px"><h2>Dernières alertes App Store</h2><div id="ovAlerts" class="muted">Chargement…</div></div>`;
   api("/v1/alerts").then(({ alerts }) => { $("#ovAlerts").outerHTML = alerts.length ? `<table>${alerts.slice(0, 15).map(alertRow).join("")}</table>` : `<p class="muted">Aucune alerte — ajoute tes apps dans l'onglet App Store d'un business.</p>`; }).catch(() => null);
   bindDays();
+  assistantCard($("#assistantBanner"), { banner: true }).catch(() => $("#assistantBanner")?.remove());
   document.querySelectorAll("[data-open]").forEach(r => r.onclick = () => openProject(r.dataset.open));
 }
 
@@ -781,9 +783,44 @@ async function tabSettings(el) {
   teamSection($("#team")).catch(e => { $("#team").innerHTML = `<h2>Équipe</h2><div class="empty error">${esc(e.message)}</div>`; });
 }
 
+// ── Assistants (Claude, ChatGPT) : connecteur MCP en un clic ─────────────
+const MCP_URL = `${location.origin}/mcp`;
+const ASSISTANTS = [
+  ["claude", "Ajouter à Claude", "https://claude.ai/customize/connectors"],
+  ["chatgpt", "Ajouter à ChatGPT", "https://chatgpt.com/#settings/Connectors"],
+];
+async function assistantCard(el, { banner = false } = {}) {
+  const { grants = [] } = await api("/oauth/grants").catch(() => ({}));
+  const live = grants.filter(g => !g.revoked && Date.parse(g.expiresAt) > Date.now());
+  if (banner && (live.length || localStorage.getItem("mmHideAssistant"))) { el.remove(); return; }
+  el.innerHTML = `<h2>Parle à tes revenus dans Claude ou ChatGPT</h2>
+    <p class="muted">« Combien j'ai gagné cette semaine ? », « Pourquoi mon MRR baisse ? »… Clique, colle l'adresse (déjà copiée) dans le champ URL, puis <b>Se connecter</b> → <b>Autoriser</b>.</p>
+    <div class="row" style="flex-wrap:wrap">${ASSISTANTS.map(([id, label]) => `<button class="primary" data-assistant="${id}">${label}</button>`).join("")}
+      <button data-assistant="code">Claude Code</button>${banner ? `<button data-hide>Plus tard</button>` : ""}</div>
+    <div id="assistantHelp" style="margin-top:10px"></div>
+    ${live.length ? `<p class="muted" style="margin-top:10px">Connecté : ${live.map(g => esc(g.name)).join(", ")} · <a href="/connect">gérer</a></p>` : ""}`;
+  const copy = async text => { try { await navigator.clipboard.writeText(text); toast("Adresse copiée"); } catch {} };
+  el.querySelectorAll("[data-assistant]").forEach(b => b.onclick = async () => {
+    const a = ASSISTANTS.find(x => x[0] === b.dataset.assistant);
+    if (!a) {
+      const cmd = `claude mcp add --transport http moneymaker ${MCP_URL}`;
+      await copy(cmd);
+      el.querySelector("#assistantHelp").innerHTML = `<p class="muted">Commande copiée : colle-la dans ton terminal, puis <code>/mcp</code> → Authenticate.</p>${copyRow(cmd)}`;
+      return;
+    }
+    await copy(MCP_URL);
+    window.open(a[2], "_blank", "noopener");
+    el.querySelector("#assistantHelp").innerHTML = a[0] === "claude"
+      ? `<p class="muted">Dans Claude : bouton <b>+ Ajouter</b> en haut à droite → <b>Ajouter un connecteur personnalisé</b> → nom MoneyMaker → colle l'URL → <b>Ajouter</b> → <b>Se connecter</b>.</p>${copyRow(MCP_URL)}`
+      : `<p class="muted">Dans ChatGPT : <b>Paramètres avancés</b> → active le mode développeur → <b>Créer</b> → colle l'URL, authentification OAuth → <b>Se connecter</b>.</p>${copyRow(MCP_URL)}`;
+  });
+  el.querySelector("[data-hide]")?.addEventListener("click", () => { try { localStorage.setItem("mmHideAssistant", "1"); } catch {} el.remove(); });
+}
+
 // ── Account / tokens ────────────────────────────────────────────────────
 async function renderAccount(main) {
   main.innerHTML = `<div class="head"><div><h1>Compte & accès</h1><p class="muted">${esc(auth.currentUser.email ?? auth.currentUser.uid)}</p></div></div>
+  <div class="card section" id="assistants"></div>
   <div class="card section"><h2>Jeton personnel (app iPhone, widgets, agents, scripts)</h2>
     <p class="muted">Un jeton <code>mm_pat_</code> lit tous tes business. Colle-le dans l'app MoneyMaker sur iPhone pour les widgets, ou donne-le à ton agent pour qu'il crée et configure des projets.</p>
     <div class="row"><input id="label" placeholder="Nom du jeton (ex. iPhone)"><button class="primary" style="flex:0;white-space:nowrap" id="mk">Créer un jeton</button></div><div id="tok" style="margin-top:12px"></div></div>
@@ -797,6 +834,7 @@ async function renderAccount(main) {
     if (!res.ok) return toast("Export impossible");
     Object.assign(document.createElement("a"), { href: URL.createObjectURL(await res.blob()), download: `moneymaker-${month}.csv` }).click();
   };
+  assistantCard($("#assistants"));
   $("#mk").onclick = async () => { const r = await api("/v1/tokens", { method: "POST", body: { label: $("#label").value || "token" } }); $("#tok").innerHTML = `<p class="muted">Affiché une seule fois :</p>${copyRow(r.token)}`; };
 }
 

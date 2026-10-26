@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Connecter un assistant · MoneyMaker</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="stylesheet" href="/app.css">
+<style>
+  .wl-hero { padding-top: 56px; }
+  .done { text-align: center; color: var(--muted); }
+  .scope { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; text-align: left; }
+  .scope input { margin-top: 3px; accent-color: #fff; }
+  .scope b { display: block; color: #fff; font-weight: 600; }
+  .scope span { color: var(--muted); font-size: 13px; }
+  .grant { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); text-align: left; }
+  .grant small { color: var(--muted); display: block; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+</style>
+</head>
+<body>
+<div class="wl-screen">
+  <section class="wl-hero">
+    <h1 class="wl-title wl-logo"><img src="/logo.png" alt="MoneyMaker" width="720" height="249"></h1>
+    <p class="wl-sub" id="sub">Connecte MoneyMaker à ton assistant.</p>
+    <div class="wl-card-shell">
+      <span class="spin"></span><span class="spin blur"></span>
+      <div class="wl-card" id="card">
+        <span class="wl-card-glow"></span><span class="wl-card-edge"></span>
+        <div id="body" class="stack"><p class="done">Chargement…</p></div>
+        <p id="err" class="error" role="status"></p>
+      </div>
+    </div>
+  </section>
+</div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword,
+  browserLocalPersistence, setPersistence, signOut } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const SCOPES = {
+  "moneymaker:read": ["Lire tes données", "Revenus, abonnés, clients, transactions, classements, avis, finance, configuration et équipe de tous tes business."],
+  "moneymaker:write": ["Modifier avec ton accord", "Créer ou configurer un business, offerings, apps suivies, alertes, dépenses, accès clients, équipe. L'assistant demande avant chaque modification ; les suppressions exigent ta confirmation explicite."],
+};
+const config = await fetch("/__/firebase/init.json").then(r => r.json());
+const auth = getAuth(initializeApp(config));
+await setPersistence(auth, browserLocalPersistence);
+const requestId = new URLSearchParams(location.search).get("request");
+let pending = null;
+const fail = e => { $("#err").textContent = typeof e === "string" ? e : ({ "auth/invalid-credential": "E-mail ou mot de passe incorrect.",
+  "auth/popup-closed-by-user": "Fenêtre de connexion fermée.", "auth/too-many-requests": "Trop d'essais, réessaie dans un instant." }[e.code] ?? e.message); };
+const api = async (path, user, opts = {}) => {
+  const res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", ...(user ? { Authorization: `Bearer ${await user.getIdToken()}` } : {}) } });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error({ expired_request: "Cette demande a expiré : relance la connexion depuis ton assistant.", unauthorized: "Session expirée : reconnecte-toi." }[j.error] ?? j.error ?? "Erreur");
+  return j;
+};
+
+function loginForm() {
+  $("#body").innerHTML = `
+    <button type="button" id="google" class="wide">Continuer avec Google</button>
+    <form id="form" class="stack">
+      <div class="wl-field"><span class="spin"></span><input id="email" type="email" placeholder="ton@email.com" autocomplete="email" required></div>
+      <div class="wl-field"><span class="spin"></span><input id="password" type="password" placeholder="Mot de passe" autocomplete="current-password" required></div>
+      <button class="primary wide wl-submit" type="submit">Se connecter</button>
+    </form>`;
+  $("#google").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(fail);
+  $("#form").onsubmit = e => { e.preventDefault(); $("#err").textContent = ""; signInWithEmailAndPassword(auth, $("#email").value.trim(), $("#password").value).catch(fail); };
+}
+
+function consent(user) {
+  const p = pending;
+  $("#sub").textContent = `${p.name} demande l'accès à ton compte MoneyMaker.`;
+  $("#body").innerHTML = `
+    ${p.scopes.map(s => `<label class="scope"><input type="checkbox" value="${esc(s)}" checked ${s === "moneymaker:read" ? "disabled" : ""}>
+      <div><b>${esc(SCOPES[s]?.[0] ?? s)}</b><span>${esc(SCOPES[s]?.[1] ?? "")}</span></div></label>`).join("")}
+    <p class="muted" style="font-size:13px;margin:0">Connecté en tant que <b>${esc(user.email ?? user.uid)}</b> · <a href="#" id="switch">changer</a><br>
+      Retour vers <b>${esc(p.redirectHost)}</b>${p.local ? " (application sur cet ordinateur)" : ""}. Révocable à tout moment sur cette page.</p>
+    <div class="row"><button type="button" id="deny">Refuser</button><button class="primary" type="button" id="allow">Autoriser</button></div>`;
+  $("#switch").onclick = e => { e.preventDefault(); signOut(auth); };
+  $("#deny").onclick = () => { $("#body").innerHTML = `<p class="done">Accès refusé. Tu peux fermer cette fenêtre.</p>`; };
+  $("#allow").onclick = async () => {
+    $("#allow").disabled = true; $("#err").textContent = "";
+    const scopes = [...document.querySelectorAll(".scope input")].filter(i => i.checked).map(i => i.value);
+    try {
+      const { redirect } = await api("/oauth/approve", user, { method: "POST", body: JSON.stringify({ request: requestId, consent: true, scopes }) });
+      $("#body").innerHTML = `<p class="done">Connecté ! Retour vers ${esc(p.name)}…</p>`;
+      location.replace(redirect);
+    } catch (e) { $("#allow").disabled = false; fail(e.message); }
+  };
+}
+
+async function grants(user) {
+  $("#sub").textContent = "Assistants connectés à ton compte MoneyMaker.";
+  const { grants } = await api("/oauth/grants", user);
+  const live = grants.filter(g => !g.revoked && Date.parse(g.expiresAt) > Date.now());
+  $("#body").innerHTML = (live.length ? live.map(g => `<div class="grant"><div>${esc(g.name)}<small>${g.scopes.includes("moneymaker:write") ? "Lecture et modification" : "Lecture seule"}
+    · depuis le ${new Date(g.createdAt).toLocaleDateString("fr-FR")}${g.lastUsedAt ? ` · utilisé le ${new Date(g.lastUsedAt).toLocaleDateString("fr-FR")}` : ""}</small></div>
+    <button type="button" data-id="${esc(g.id)}">Déconnecter</button></div>`).join("") : `<p class="done">Aucun assistant connecté.</p>`)
+    + `<p class="muted" style="font-size:13px;margin:0">Pour connecter Claude ou ChatGPT : <a href="/mcp-docs">guide d'installation</a>.</p>`;
+  document.querySelectorAll("[data-id]").forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    try { await api("/oauth/disconnect", user, { method: "POST", body: JSON.stringify({ id: b.dataset.id }) }); await grants(user); } catch (e) { b.disabled = false; fail(e.message); }
+  });
+}
+
+if (requestId) {
+  try { pending = await api(`/oauth/request?request=${encodeURIComponent(requestId)}`); }
+  catch (e) { $("#body").innerHTML = ""; fail(e.message); }
+}
+onAuthStateChanged(auth, user => {
+  $("#err").textContent = "";
+  if (requestId && !pending) return;
+  if (!user) return loginForm();
+  (pending ? consent(user) : grants(user).catch(e => fail(e.message)));
+});
+</script>
+</body>
+</html>

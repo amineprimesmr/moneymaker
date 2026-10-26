@@ -1,48 +1,26 @@
 #!/usr/bin/env node
-// Serveur MCP MoneyMaker (stdio, JSON-RPC 2.0 délimité par des retours à la ligne). Aucune dépendance.
+// Pont stdio → serveur MCP hébergé MoneyMaker (https://moneymaker-io.web.app/mcp). Aucune dépendance.
+// Pour les clients qui ne parlent que stdio ; les autres se connectent directement à l'URL (OAuth).
 // claude mcp add moneymaker -e MM_TOKEN=mm_pat_… -- node /chemin/vers/tools/mcp/index.js
 import { createInterface } from "node:readline";
-import { COMMANDS } from "../shared/client.mjs";
 
-const SERVER = { name: "moneymaker", version: "1.0.0" };
-const SUPPORTED = ["2025-06-18", "2025-03-26", "2024-11-05"];
-
+const URL_ = `${(process.env.MM_API_URL ?? "https://moneymaker-io.web.app").replace(/\/$/, "")}/mcp`;
+const TOKEN = process.env.MM_TOKEN;
 const send = msg => process.stdout.write(JSON.stringify(msg) + "\n");
-const tools = () => Object.entries(COMMANDS).map(([name, c]) => ({
-  name, description: c.description,
-  inputSchema: { type: "object", properties: c.params, required: c.required, additionalProperties: false },
-}));
-
-async function handle(msg) {
-  const { id, method, params } = msg;
-  switch (method) {
-    case "initialize":
-      return { protocolVersion: SUPPORTED.includes(params?.protocolVersion) ? params.protocolVersion : SUPPORTED[0], capabilities: { tools: { listChanged: false } }, serverInfo: SERVER,
-        instructions: "Données d'abonnements MoneyMaker. Commence par list_projects pour obtenir les projectId. Montants en micro-unités (÷ 1 000 000)." };
-    case "ping": return {};
-    case "tools/list": return { tools: tools() };
-    case "tools/call": {
-      const c = COMMANDS[params?.name];
-      if (!c) throw Object.assign(new Error(`Outil inconnu : ${params?.name}`), { code: -32602 });
-      try {
-        const out = await c.run(params.arguments ?? {});
-        return { content: [{ type: "text", text: typeof out === "string" ? out : JSON.stringify(out, null, 2) }] };
-      } catch (e) { return { content: [{ type: "text", text: e.message }], isError: true }; }
-    }
-    default:
-      if (id === undefined) return undefined; // notification (ex. notifications/initialized)
-      throw Object.assign(new Error(`Méthode inconnue : ${method}`), { code: -32601 });
-  }
-}
+const fail = (id, message, code = -32603) => id !== undefined && send({ jsonrpc: "2.0", id, error: { code, message } });
 
 createInterface({ input: process.stdin }).on("line", async line => {
   if (!line.trim()) return;
   let msg;
   try { msg = JSON.parse(line); } catch { return send({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }); }
+  if (!TOKEN) return fail(msg.id, "MM_TOKEN manquant : crée un jeton (mm_pat_…) dans le dashboard › Compte.");
   try {
-    const result = await handle(msg);
-    if (msg.id !== undefined && result !== undefined) send({ jsonrpc: "2.0", id: msg.id, result });
-  } catch (e) {
-    if (msg.id !== undefined) send({ jsonrpc: "2.0", id: msg.id, error: { code: e.code ?? -32603, message: e.message } });
-  }
+    const res = await fetch(URL_, { method: "POST", body: line, signal: AbortSignal.timeout(90000),
+      headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream", "User-Agent": "moneymaker-mcp-stdio/2" } });
+    if (res.status === 202) return;
+    const text = await res.text();
+    if (!res.ok) return fail(msg.id, res.status === 401 ? "Jeton MoneyMaker invalide ou révoqué (MM_TOKEN)." : `HTTP ${res.status} ${text.slice(0, 200)}`);
+    const out = JSON.parse(text);
+    for (const m of Array.isArray(out) ? out : [out]) send(m);
+  } catch (e) { fail(msg.id, e.message); }
 });

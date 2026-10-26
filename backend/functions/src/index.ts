@@ -233,3 +233,9 @@ export const benchmarksNightly = onSchedule({ schedule: "40 2 * * *", timeZone: 
   const { runBenchmarks } = await import("./benchmarks");
   console.log("benchmarks", await runBenchmarks());
 });
+
+/** Purge quotidienne des codes, jetons et compteurs expirés du connecteur MCP. */
+export const cleanupMcpOAuth = onSchedule({ schedule: "every 24 hours", timeoutSeconds: 300 }, async () => {
+  const { cleanupOAuth } = await import("./mcp/oauth");
+  await cleanupOAuth();
+});

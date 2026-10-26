@@ -37,6 +37,9 @@ import { sanitizeAdmobConfig, sanitizeAdEvent, recordAdEvent, handleSsv } from "
 import { projectBenchmarks } from "./benchmarks";
 import { sanitizeVirtualCurrencies, readWallet, moveWallet, parseAmount, parseIdempotencyKey } from "./wallet";
 import { projectLtv, audienceById, audienceCustomers, loadCustomerRows } from "./segmentsLoader";
+import { isMcpPath, handleMcp } from "./mcp/server";
+import { resolveAccessToken } from "./mcp/oauth";
+import { ACCESS_PREFIX } from "./mcp/policy";
 import { verifyStripeAppSignature, stripeAppPayload, parseGrantDays, isStripeCustomerId, STRIPE_APP_GRANT_DAYS } from "./stripeApp";
 
 /** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
@@ -47,11 +50,21 @@ type Caller =
   | { kind: "secret"; projectId: string }
   | { kind: "user"; uid: string; email?: string; emailVerified?: boolean };
 
+/** POST sans effet sur les données (aperçu d'audience, traduction mise en cache) : permis en lecture seule. */
+const READ_ONLY_POSTS = /^\/v1\/projects\/[^/]+\/(audiences\/preview|appstore\/[^/]+\/reviews\/[^/]+\/translate)\/?$/;
+
 async function authenticate(req: Request): Promise<Caller> {
   const header = req.get("authorization") ?? "";
   const raw = header.replace(/^Bearer\s+/i, "").trim();
   if (!raw) throw new HttpError(401, "missing_api_key");
   if (raw === DEMO_TOKEN) return { kind: "user", uid: DEMO_UID };
+  // Jeton OAuth du connecteur MCP : agit comme l'utilisateur, en lecture seule sans le scope d'écriture.
+  if (raw.startsWith(ACCESS_PREFIX)) {
+    const t = await resolveAccessToken(raw);
+    if (!t) throw new HttpError(401, "invalid_token");
+    if (!t.scopes.includes("moneymaker:write") && req.method !== "GET" && !READ_ONLY_POSTS.test(req.path)) throw new HttpError(403, "insufficient_scope", "Connexion en lecture seule");
+    return { kind: "user", uid: t.uid };
+  }
   if (raw.startsWith("mm_")) {
     const rec: KeyRecord | null = await resolveKey(raw);
     if (!rec) throw new HttpError(401, "invalid_api_key");
@@ -1685,6 +1698,8 @@ async function sendSigned(req: Request, res: Response, out: unknown) {
 }
 
 export async function handle(req: Request, res: Response) {
+  const mcpPath = req.path.length > 1 ? req.path.replace(/\/$/, "") : req.path;
+  if (isMcpPath(mcpPath)) return handleMcp(req, res, mcpPath, dispatch);
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Nonce, Stripe-Signature, X-Stripe-User-Id, X-Stripe-Account-Id");
   res.set("Access-Control-Expose-Headers", "X-MoneyMaker-Signature, X-Request-Time");
@@ -1715,4 +1730,26 @@ export async function handle(req: Request, res: Response) {
     if (!(e instanceof HttpError)) console.error(e);
     if (!res.headersSent) res.status(err.status).json({ error: err.code, message: err.message });
   }
+}
+
+/** Exécute une route /v1 en mémoire (outils MCP) : mêmes contrôles de rôle et même audit qu'un appel HTTP. */
+export async function dispatch(method: string, path: string, opts: { query?: Record<string, unknown>; body?: unknown; authorization: string; ip?: string }) {
+  const headers: Record<string, string> = { authorization: opts.authorization, "content-type": "application/json", "user-agent": "moneymaker-mcp" };
+  const req = { method, path, url: path, originalUrl: path, query: opts.query ?? {}, body: opts.body ?? {}, ip: opts.ip, headers,
+    get: (name: string) => headers[name.toLowerCase()], header: (name: string) => headers[name.toLowerCase()] } as unknown as Request;
+  let status = 200, payload: unknown, sent = false;
+  const res: any = {
+    get headersSent() { return sent; },
+    set: () => res, setHeader: () => res, type: () => res, vary: () => res,
+    status: (s: number) => { status = s; return res; },
+    json: (b: unknown) => { payload = b; sent = true; return res; },
+    send: (b: unknown) => { payload = b; sent = true; return res; },
+    end: () => { sent = true; return res; },
+    redirect: (_s: number, url: string) => { payload = { redirect: url }; sent = true; return res; },
+  };
+  await handle(req, res as Response);
+  let body = payload;
+  if (typeof body === "string" && /^[[{]/.test(body)) try { body = JSON.parse(body); } catch { /* CSV ou texte */ }
+  if (Buffer.isBuffer(body)) body = body.toString("utf8");
+  return { status, body: body as any };
 }
