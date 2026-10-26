@@ -786,7 +786,7 @@ async function tabSettings(el) {
 // ── Assistants (Claude, ChatGPT) : connecteur MCP en un clic ─────────────
 const MCP_URL = `${location.origin}/mcp`;
 const ASSISTANTS = [
-  ["claude", "Ajouter à Claude", "https://claude.ai/customize/connectors"],
+  ["claude", "Ajouter à Claude", "https://claude.ai/directory/moneymaker"],
   ["chatgpt", "Ajouter à ChatGPT", "https://chatgpt.com/#settings/Connectors"],
 ];
 async function assistantCard(el, { banner = false } = {}) {
@@ -794,7 +794,7 @@ async function assistantCard(el, { banner = false } = {}) {
   const live = grants.filter(g => !g.revoked && Date.parse(g.expiresAt) > Date.now());
   if (banner && (live.length || localStorage.getItem("mmHideAssistant"))) { el.remove(); return; }
   el.innerHTML = `<h2>Parle à tes revenus dans Claude ou ChatGPT</h2>
-    <p class="muted">« Combien j'ai gagné cette semaine ? », « Pourquoi mon MRR baisse ? »… Clique, colle l'adresse (déjà copiée) dans le champ URL, puis <b>Se connecter</b> → <b>Autoriser</b>.</p>
+    <p class="muted">« Combien j'ai gagné cette semaine ? », « Pourquoi mon MRR baisse ? »… Claude : clique, puis <b>Connecter</b> → <b>Autoriser</b>. ChatGPT : colle l'adresse (copiée automatiquement).</p>
     <div class="row" style="flex-wrap:wrap">${ASSISTANTS.map(([id, label]) => `<button class="primary" data-assistant="${id}">${label}</button>`).join("")}
       <button data-assistant="code">Claude Code</button>${banner ? `<button data-hide>Plus tard</button>` : ""}</div>
     <div id="assistantHelp" style="margin-top:10px"></div>
@@ -808,10 +808,11 @@ async function assistantCard(el, { banner = false } = {}) {
       el.querySelector("#assistantHelp").innerHTML = `<p class="muted">Commande copiée : colle-la dans ton terminal, puis <code>/mcp</code> → Authenticate.</p>${copyRow(cmd)}`;
       return;
     }
-    await copy(MCP_URL);
+    // Ouvrir avant tout await : sinon le navigateur bloque la fenêtre (plus de geste utilisateur).
     window.open(a[2], "_blank", "noopener");
+    await copy(MCP_URL);
     el.querySelector("#assistantHelp").innerHTML = a[0] === "claude"
-      ? `<p class="muted">Dans Claude : bouton <b>+ Ajouter</b> en haut à droite → <b>Ajouter un connecteur personnalisé</b> → nom MoneyMaker → colle l'URL → <b>Ajouter</b> → <b>Se connecter</b>.</p>${copyRow(MCP_URL)}`
+      ? `<p class="muted">La fiche MoneyMaker s'ouvre dans l'annuaire Claude : <b>Connecter</b> → connecte-toi → <b>Autoriser</b>. Rien ne s'ouvre ? <a href="${a[2]}" target="_blank" rel="noopener">Ouvrir la fiche</a>.</p>`
       : `<p class="muted">Dans ChatGPT : <b>Paramètres avancés</b> → active le mode développeur → <b>Créer</b> → colle l'URL, authentification OAuth → <b>Se connecter</b>.</p>${copyRow(MCP_URL)}`;
   });
   el.querySelector("[data-hide]")?.addEventListener("click", () => { try { localStorage.setItem("mmHideAssistant", "1"); } catch {} el.remove(); });
