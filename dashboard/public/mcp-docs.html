@@ -1,43 +1,25 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MoneyMaker dans Claude et ChatGPT</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<title>MoneyMaker dans Claude</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/icon-180.png">
 <meta name="theme-color" content="#000000">
-<meta name="description" content="Connecte MoneyMaker à Claude, Claude Code et ChatGPT : revenus, abonnés, clients, classements et finance de tes apps dans ton assistant.">
+<meta name="description" content="Connecte MoneyMaker à Claude : revenus, abonnés, clients, classements et finance de tes apps dans ton assistant.">
 <link rel="stylesheet" href="/app.css">
 </head>
 <body class="doc"><main>
 <nav class="crumbs"><a href="/">← Dashboard</a><a href="/guide">Guide</a><a href="/connect">Assistants connectés</a></nav>
 
-<h1>MoneyMaker dans ton assistant</h1>
-<p>Demande à Claude ou ChatGPT « combien j'ai gagné cette semaine ? », « pourquoi mon MRR a baissé ? », « quels pays convertissent le mieux ? »… L'assistant lit tes revenus, abonnés, clients, classements, avis et ta finance, et peut modifier ta configuration <b>avec ton accord</b>.</p>
-<p>Adresse du serveur : <code>https://moneymaker-io.web.app/mcp</code>. Une seule étape : <b>Se connecter avec MoneyMaker</b>.</p>
+<h1>MoneyMaker dans Claude</h1>
+<p>Demande à Claude « combien j'ai gagné cette semaine ? », « pourquoi mon MRR a baissé ? », « quels pays convertissent le mieux ? »… Claude lit tes revenus, abonnés, clients, classements, avis et ta finance, et peut modifier ta configuration <b>avec ton accord</b>.</p>
+<p>Adresse du serveur : <code>https://usemoneymaker.com/mcp</code>. Une seule étape : <b>Se connecter avec MoneyMaker</b>.</p>
 
 <h2>Claude (claude.ai, Claude Desktop, mobile)</h2>
 <ul>
 <li><b>Le plus simple</b> : ouvre la <a href="https://claude.ai/directory/moneymaker">fiche MoneyMaker de l'annuaire Claude</a> › <b>Connecter</b> › <b>Autoriser</b>.</li>
 <li>Ou à la main : menu de gauche › <b>Personnalisation</b> › <b>Connecteurs</b> › <b>+ Ajouter</b> (en haut à droite) › <b>Ajouter un connecteur personnalisé</b>.</li>
-<li>Nom : <code>MoneyMaker</code> · URL : <code>https://moneymaker-io.web.app/mcp</code> → <b>Ajouter</b>, puis <b>Se connecter</b>.</li>
+<li>Nom : <code>MoneyMaker</code> · URL : <code>https://usemoneymaker.com/mcp</code> → <b>Ajouter</b>, puis <b>Se connecter</b>.</li>
 <li>Connecte-toi à MoneyMaker, choisis lecture seule ou lecture + modification, <b>Autoriser</b>. C'est tout.</li>
 </ul>
-
-<h2>Claude Code</h2>
-<pre>claude mcp add --transport http moneymaker https://moneymaker-io.web.app/mcp</pre>
-<p>Puis <code>/mcp</code> › moneymaker › <b>Authenticate</b> : le navigateur s'ouvre sur MoneyMaker. Ou le plugin (connecteur + skill d'analyse) :</p>
-<pre>/plugin marketplace add amineprimesmr/moneymaker
-/plugin install moneymaker@moneymaker</pre>
-
-<h2>ChatGPT</h2>
-<ul>
-<li>Réglages › <b>Applis et connecteurs</b> › <b>Paramètres avancés</b> › active le <b>mode développeur</b>.</li>
-<li><b>Créer</b> : nom <code>MoneyMaker</code>, URL <code>https://moneymaker-io.web.app/mcp</code>, authentification <b>OAuth</b>.</li>
-<li>ChatGPT ouvre la page MoneyMaker : connecte-toi et <b>Autorise</b>. Dans une conversation, active MoneyMaker depuis le menu <b>+</b>.</li>
-</ul>
-
-<h2>Sans OAuth (secours, scripts, autres clients)</h2>
-<p>Crée un jeton personnel <code>mm_pat_…</code> (Dashboard › Compte) et passe-le en en-tête :</p>
-<pre>claude mcp add --transport http moneymaker https://moneymaker-io.web.app/mcp --header "Authorization: Bearer mm_pat_xxx"</pre>
-<p>Cursor, Codex, Windsurf… : même URL, en OAuth ou avec l'en-tête <code>Authorization</code>. Client stdio uniquement : <code>MM_TOKEN=mm_pat_xxx node tools/mcp/index.js</code> (dépôt GitHub).</p>
 
 <h2>Sécurité</h2>
 <ul>
@@ -57,6 +39,6 @@
 <p><b>PostHog</b> : <code>get_posthog</code>, <code>list_posthog_events</code>.</p>
 <p><b>Configuration et équipe</b> : <code>get_project</code> (produits, entitlements, webhooks, connecteurs Stripe / App Store / Google Play / RevenueCat / Paddle / AppsFlyer / Amazon / Roku), <code>get_setup_checklist</code>, <code>get_offerings</code>, <code>get_public_listing</code>, <code>get_leaderboard</code>, <code>list_members</code>, <code>get_audit_log</code>.</p>
 <p><b>Modifications</b> (avec ton accord) : <code>create_project</code>, <code>update_project</code>, <code>update_offerings</code>, <code>set_alert_preferences</code>, <code>add_tracked_app</code>, <code>refresh_app_store</code>, <code>grant_entitlement</code>, <code>send_test_webhook</code>, <code>update_public_listing</code>, <code>update_finance_settings</code>, <code>upsert_expense</code>, <code>invite_member</code>, <code>update_member_role</code>.</p>
-<p><b>Connexions</b> (installation guidée : <code>/moneymaker-setup</code> dans Claude Code) : <code>connect_app_store</code>, <code>connect_google_play</code>, <code>connect_stripe</code>, <code>import_revenuecat</code>, <code>get_import_status</code>, <code>connect_posthog</code>, <code>set_store_credentials</code>, <code>send_test_push</code>. Les clés vont directement au serveur et ne sont jamais réaffichées.</p>
+<p><b>Connexions</b> (installation guidée : demande à Claude « configure MoneyMaker ») : <code>connect_app_store</code>, <code>connect_google_play</code>, <code>connect_stripe</code>, <code>import_revenuecat</code>, <code>get_import_status</code>, <code>connect_posthog</code>, <code>set_store_credentials</code>, <code>send_test_push</code>. Les clés vont directement au serveur et ne sont jamais réaffichées.</p>
 <p><b>Suppressions</b> (confirmation explicite) : <code>remove_tracked_app</code>, <code>delete_expense</code>, <code>remove_member</code>, <code>revoke_invite</code>, <code>disconnect_posthog</code>.</p>
 </main></body></html>

@@ -302,3 +302,38 @@ aside button.ghost { text-align: left; padding: 9px 12px; border-radius: 14px; w
 }
 .wl-logo { line-height: 0; margin-bottom: 22px; -webkit-text-fill-color: initial; background: none; }
 .wl-logo img { width: min(560px, 86vw); height: auto; filter: drop-shadow(0 0 24px rgba(255, 255, 255, 0.18)); }
+
+/* ── Landing ────────────────────────────────────────────────────────── */
+html { scroll-behavior: smooth; }
+.lp-nav { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; max-width: 1040px; width: 100%; margin: 0 auto; padding: 22px 20px; }
+.lp-brand img { display: block; height: 22px; width: auto; }
+.lp-nav nav { display: flex; align-items: center; gap: 22px; font-size: 13px; }
+.lp-nav a { color: var(--muted); text-decoration: none; transition: color .2s; } .lp-nav a:hover { color: #fff; }
+.lp-nav .lp-pill { color: #fff; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line2); }
+.lp-hero { flex: none; padding-top: 56px; }
+.lp-title span { background: linear-gradient(180deg, #fff 0%, #7a7a7a 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lp-cta { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-bottom: 64px; animation: mmFadeUp 1s var(--ease) .2s both; }
+.lp-btn { display: inline-flex; align-items: center; height: 48px; padding: 0 24px; border-radius: 999px; font-size: 15px; font-weight: 500; text-decoration: none; color: #fff; border: 1px solid var(--line2); background: rgba(255, 255, 255, 0.03); transition: transform .2s var(--ease), background .2s; }
+.lp-btn:hover { transform: translateY(-1px); background: rgba(255, 255, 255, 0.07); }
+.lp-btn-primary { background: #fff; color: #000; border-color: #fff; box-shadow: 0 0 40px rgba(255, 255, 255, 0.18); }
+.lp-btn-primary:hover { background: #fff; }
+.lp-chat { width: min(520px, 100%); display: flex; flex-direction: column; gap: 12px; text-align: left; animation: mmFadeUp 1.1s var(--ease) .3s both; }
+.lp-msg { padding: 14px 18px; border-radius: 22px; font-size: 15px; border: 1px solid var(--line); }
+.lp-me { align-self: flex-end; background: rgba(255, 255, 255, 0.08); border-bottom-right-radius: 8px; }
+.lp-ai { background: var(--card-bg); border-bottom-left-radius: 8px; display: flex; flex-direction: column; gap: 4px; }
+.lp-ai p { margin: 6px 0 0; color: var(--muted); }
+.lp-tool { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.lp-big { font-size: 34px; font-weight: 600; letter-spacing: -0.04em; }
+.lp-up { color: var(--accent); font-size: 13px; }
+.lp-note { margin: 12px 0 0; font-size: 11px; color: var(--faint); }
+.lp-grid { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; max-width: 960px; width: calc(100% - 32px); margin: 96px auto 0; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--line); }
+.lp-grid > div { padding: 28px; background: #050506; }
+.lp-grid b { font-size: 15px; font-weight: 600; }
+.lp-grid p { margin: 6px 0 0; color: var(--muted); }
+.lp-signin { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; padding: 112px 16px 72px; scroll-margin-top: 24px; }
+.lp-signin h2 { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; margin: 0 0 24px; }
+@media (max-width: 720px) {
+  .lp-nav nav a:not(.lp-pill) { display: none; }
+  .lp-grid { grid-template-columns: 1fr; margin-top: 72px; }
+  .lp-hero { padding-top: 32px; }
+}

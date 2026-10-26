@@ -426,7 +426,7 @@ Base URL: ${location.origin}/v1
 Clé publique SDK: <colle ta clé mm_pub_ ici>
 Accès à vérifier: ${Object.keys(p.config.entitlements)[0] ?? "premium"}
 Remplace toute logique RevenueCat/StoreKit existante, appelle MoneyMaker.configure au lancement, logIn avec l'id utilisateur, purchase() depuis le paywall, et verrouille les écrans premium avec isEntitled.`;
-  el.innerHTML = `<div class="card section"><h2>⚡ Brancher le SDK : demande à ton agent</h2><p class="muted">Colle ce prompt dans Claude Code / Cursor / Codex à la racine de ton app.</p><pre>${esc(agentPrompt)}</pre>
+  el.innerHTML = `<div class="card section"><h2>⚡ Brancher le SDK : demande à ton agent</h2><p class="muted">Colle ce prompt dans Claude, à la racine de ton app.</p><pre>${esc(agentPrompt)}</pre>
     <div class="row" style="margin-top:10px"><button class="primary" style="flex:0" onclick='mmCopy(${esc(JSON.stringify(agentPrompt))})'>Copier le prompt</button><a href="/guide" style="flex:0;white-space:nowrap">Guide pas à pas →</a></div></div>
   <div class="grid2">
     <div class="card"><h2>Stripe ${ok(p.credentials.stripeKey && p.credentials.stripeWebhook)}</h2><p class="muted">Colle une clé secrète (ou restreinte avec accès webhooks, abonnements, factures, clients, Checkout). MoneyMaker crée le webhook tout seul et importe tes abonnements + 12 mois de factures.</p>
@@ -783,37 +783,26 @@ async function tabSettings(el) {
   teamSection($("#team")).catch(e => { $("#team").innerHTML = `<h2>Équipe</h2><div class="empty error">${esc(e.message)}</div>`; });
 }
 
-// ── Assistants (Claude, ChatGPT) : connecteur MCP en un clic ─────────────
+// ── Claude : connecteur MCP en un clic ─────────────
 const MCP_URL = `${location.origin}/mcp`;
 const ASSISTANTS = [
   ["claude", "Ajouter à Claude", "https://claude.ai/directory/moneymaker"],
-  ["chatgpt", "Ajouter à ChatGPT", "https://chatgpt.com/#settings/Connectors"],
 ];
 async function assistantCard(el, { banner = false } = {}) {
   const { grants = [] } = await api("/oauth/grants").catch(() => ({}));
   const live = grants.filter(g => !g.revoked && Date.parse(g.expiresAt) > Date.now());
   if (banner && (live.length || localStorage.getItem("mmHideAssistant"))) { el.remove(); return; }
-  el.innerHTML = `<h2>Parle à tes revenus dans Claude ou ChatGPT</h2>
-    <p class="muted">« Combien j'ai gagné cette semaine ? », « Pourquoi mon MRR baisse ? »… Claude : clique, puis <b>Connecter</b> → <b>Autoriser</b>. ChatGPT : colle l'adresse (copiée automatiquement).</p>
-    <div class="row" style="flex-wrap:wrap">${ASSISTANTS.map(([id, label]) => `<button class="primary" data-assistant="${id}">${label}</button>`).join("")}
-      <button data-assistant="code">Claude Code</button>${banner ? `<button data-hide>Plus tard</button>` : ""}</div>
+  el.innerHTML = `<h2>Parle à tes revenus dans Claude</h2>
+    <p class="muted">« Combien j'ai gagné cette semaine ? », « Pourquoi mon MRR baisse ? »… Clique, puis <b>Connecter</b> → <b>Autoriser</b>.</p>
+    <div class="row" style="flex-wrap:wrap">${ASSISTANTS.map(([id, label]) => `<button class="primary" data-assistant="${id}">${label}</button>`).join("")}${banner ? `<button data-hide>Plus tard</button>` : ""}</div>
     <div id="assistantHelp" style="margin-top:10px"></div>
     ${live.length ? `<p class="muted" style="margin-top:10px">Connecté : ${live.map(g => esc(g.name)).join(", ")} · <a href="/connect">gérer</a></p>` : ""}`;
   const copy = async text => { try { await navigator.clipboard.writeText(text); toast("Adresse copiée"); } catch {} };
   el.querySelectorAll("[data-assistant]").forEach(b => b.onclick = async () => {
     const a = ASSISTANTS.find(x => x[0] === b.dataset.assistant);
-    if (!a) {
-      const cmd = `claude mcp add --transport http moneymaker ${MCP_URL}`;
-      await copy(cmd);
-      el.querySelector("#assistantHelp").innerHTML = `<p class="muted">Commande copiée : colle-la dans ton terminal, puis <code>/mcp</code> → Authenticate.</p>${copyRow(cmd)}`;
-      return;
-    }
     // Ouvrir avant tout await : sinon le navigateur bloque la fenêtre (plus de geste utilisateur).
     window.open(a[2], "_blank", "noopener");
-    await copy(MCP_URL);
-    el.querySelector("#assistantHelp").innerHTML = a[0] === "claude"
-      ? `<p class="muted">La fiche MoneyMaker s'ouvre dans l'annuaire Claude : <b>Connecter</b> → connecte-toi → <b>Autoriser</b>. Rien ne s'ouvre ? <a href="${a[2]}" target="_blank" rel="noopener">Ouvrir la fiche</a>.</p>`
-      : `<p class="muted">Dans ChatGPT : <b>Paramètres avancés</b> → active le mode développeur → <b>Créer</b> → colle l'URL, authentification OAuth → <b>Se connecter</b>.</p>${copyRow(MCP_URL)}`;
+    el.querySelector("#assistantHelp").innerHTML = `<p class="muted">La fiche MoneyMaker s'ouvre dans l'annuaire Claude : <b>Connecter</b> → connecte-toi → <b>Autoriser</b>. Rien ne s'ouvre ? <a href="${a[2]}" target="_blank" rel="noopener">Ouvrir la fiche</a>.</p>`;
   });
   el.querySelector("[data-hide]")?.addEventListener("click", () => { try { localStorage.setItem("mmHideAssistant", "1"); } catch {} el.remove(); });
 }

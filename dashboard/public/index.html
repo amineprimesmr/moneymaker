@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MoneyMaker</title>
-<meta name="description" content="Abonnements App Store, Google Play et Stripe centralisés.">
+<meta name="description" content="Tes revenus d'apps en une question : App Store, Google Play et Stripe réunis, directement dans Claude.">
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="icon" type="image/png" sizes="32x32" href="/icon-32.png">
 <link rel="apple-touch-icon" href="/icon-180.png">
@@ -13,13 +13,42 @@
 </head>
 <body>
 <div id="login" class="wl-screen hidden">
-  <section class="wl-hero">
+  <header class="lp-nav">
+    <a href="/" class="lp-brand"><img src="/logo.png" alt="MoneyMaker" height="22"></a>
+    <nav><a href="/guide">Guide</a><a href="/mcp-docs">Claude</a><a href="#signin" class="lp-pill">Se connecter</a></nav>
+  </header>
+
+  <section class="wl-hero lp-hero">
     <div class="wl-badge-wrap">
       <div class="wl-badge-glow"></div>
-      <div class="wl-badge"><span class="wl-badge-spin"></span><span class="wl-badge-label"><i class="wl-dot"></i>Tes revenus, en direct</span></div>
+      <div class="wl-badge"><span class="wl-badge-spin"></span><span class="wl-badge-label"><i class="wl-dot"></i>Maintenant dans Claude</span></div>
     </div>
-    <h1 class="wl-title wl-logo"><img src="/logo.png" alt="MoneyMaker" width="720" height="249"></h1>
-    <p class="wl-sub">Tous tes abonnements App Store, Google Play et Stripe au même endroit.</p>
+    <h1 class="wl-title lp-title">Tes revenus d'apps.<br><span>En une question.</span></h1>
+    <p class="wl-sub">App Store, Google Play et Stripe réunis au même endroit. Demande à Claude, il te répond en direct.</p>
+    <div class="lp-cta">
+      <a href="#signin" class="lp-btn lp-btn-primary">Commencer</a>
+      <a href="https://claude.ai/directory/moneymaker" target="_blank" rel="noopener" class="lp-btn">Ajouter à Claude</a>
+    </div>
+
+    <div class="lp-chat" aria-hidden="true">
+      <div class="lp-msg lp-me">Combien j'ai gagné cette semaine&nbsp;?</div>
+      <div class="lp-msg lp-ai">
+        <span class="lp-tool">MoneyMaker · get_overview</span>
+        <strong class="lp-big">2 480 €</strong><span class="lp-up">+18 % vs semaine dernière</span>
+        <p>Surtout l'abonnement annuel aux États-Unis. Tu veux le détail par pays&nbsp;?</p>
+      </div>
+    </div>
+    <p class="lp-note">Exemple de réponse</p>
+  </section>
+
+  <section class="lp-grid">
+    <div><b>Tout au même endroit</b><p>MRR, abonnés, essais, churn et LTV de toutes tes apps.</p></div>
+    <div><b>Les stores sous l'œil</b><p>Classements, notes et avis App Store, chaque jour.</p></div>
+    <div><b>La finance au propre</b><p>TVA, commissions et net, export comptable en un clic.</p></div>
+  </section>
+
+  <section id="signin" class="lp-signin">
+    <h2>Connecte-toi</h2>
     <div class="wl-card-shell">
       <span class="spin"></span><span class="spin blur"></span>
       <div class="wl-card">
@@ -39,8 +68,9 @@
       </div>
     </div>
   </section>
+
   <footer class="wl-foot">
-    <div><a href="/guide">Guide en 15 minutes</a><span>·</span><a href="/docs">Référence API</a><span>·</span><a href="/llms.txt">llms.txt</a></div>
+    <div><a href="/guide">Guide</a><span>·</span><a href="/docs">API</a><span>·</span><a href="/mcp-docs">Claude</a><span>·</span><a href="/support">Support</a><span>·</span><a href="/privacy">Confidentialité</a><span>·</span><a href="/terms">Conditions</a></div>
     <div>© 2026 MoneyMaker</div>
   </footer>
 </div>

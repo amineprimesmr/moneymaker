@@ -103,7 +103,7 @@ async function grants(user) {
   $("#body").innerHTML = (live.length ? live.map(g => `<div class="grant"><div>${esc(g.name)}<small>${g.scopes.includes("moneymaker:write") ? "Lecture et modification" : "Lecture seule"}
     · depuis le ${new Date(g.createdAt).toLocaleDateString("fr-FR")}${g.lastUsedAt ? ` · utilisé le ${new Date(g.lastUsedAt).toLocaleDateString("fr-FR")}` : ""}</small></div>
     <button type="button" data-id="${esc(g.id)}">Déconnecter</button></div>`).join("") : `<p class="done">Aucun assistant connecté.</p>`)
-    + `<p class="muted" style="font-size:13px;margin:0">Pour connecter Claude ou ChatGPT : <a href="/mcp-docs">guide d'installation</a>.</p>`;
+    + `<p class="muted" style="font-size:13px;margin:0">Pour connecter Claude : <a href="/mcp-docs">guide d'installation</a>.</p>`;
   document.querySelectorAll("[data-id]").forEach(b => b.onclick = async () => {
     b.disabled = true;
     try { await api("/oauth/disconnect", user, { method: "POST", body: JSON.stringify({ id: b.dataset.id }) }); await grants(user); } catch (e) { b.disabled = false; fail(e.message); }
