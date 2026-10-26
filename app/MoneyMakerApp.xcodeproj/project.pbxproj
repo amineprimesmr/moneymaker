@@ -33,6 +33,7 @@
 		9E22F7E452E61C7687F22A70 /* Globe.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6EDB0BDEE53E198B5CA131 /* Globe.swift */; };
 		9FB0842E3D9190DD976971E0 /* MoneyMakerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */; };
 		ADADB3EF429F2E44BA31DDA1 /* MMEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8864A5BC74A1FB07813601 /* MMEffects.swift */; };
+		253F3B86C24853A0F93FFD36 /* BuildDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F8170B75D304EE2B5A21D40 /* BuildDemo.swift */; };
 		AEBAE27FA6C291041BA9B259 /* MMTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B41F707AED2D8405F6A5A /* MMTheme.swift */; };
 		AF79FEB78C3C31BD156BF1D8 /* BusinessSideBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B505E5DB6CC437E02CFFDC2 /* BusinessSideBar.swift */; };
 		B7EE6F0D843CE65B903EC25A /* ScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0766FA3E98182D13451DA68 /* ScreenshotTests.swift */; };
@@ -107,6 +108,7 @@
 		D388B48B0EC4821BE9AE43EB /* levelup.caf */ = {isa = PBXFileReference; path = levelup.caf; sourceTree = "<group>"; };
 		DDD82E7144DFCD2E9CEB2649 /* MMTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMTabBar.swift; sourceTree = "<group>"; };
 		DF8864A5BC74A1FB07813601 /* MMEffects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMEffects.swift; sourceTree = "<group>"; };
+		0F8170B75D304EE2B5A21D40 /* BuildDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildDemo.swift; sourceTree = "<group>"; };
 		E69CC078545BF8CD48C90C01 /* Widgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Widgets.entitlements; sourceTree = "<group>"; };
 		EA6EDB0BDEE53E198B5CA131 /* Globe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Globe.swift; sourceTree = "<group>"; };
 		F1097A42E4D78F9B3FE75803 /* LiveWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveWidgets.swift; sourceTree = "<group>"; };
@@ -201,6 +203,7 @@
 				98A641DEF15038E8304BEEE0 /* CachedImage.swift */,
 				F4144027ADBE57BF8FB2AC8F /* LaunchSplash.swift */,
 				DF8864A5BC74A1FB07813601 /* MMEffects.swift */,
+				0F8170B75D304EE2B5A21D40 /* BuildDemo.swift */,
 				DDD82E7144DFCD2E9CEB2649 /* MMTabBar.swift */,
 				AD9FF9FB850F74B6132F8088 /* SideMenu.swift */,
 				0FEFF0FBF7420753D830CBF3 /* SyncBanner.swift */,
@@ -366,6 +369,7 @@
 				7A09B8560251703819AC48BC /* LiveScreens.swift in Sources */,
 				0095B39F4DF4E19D7F6A24E0 /* LiveServices.swift in Sources */,
 				ADADB3EF429F2E44BA31DDA1 /* MMEffects.swift in Sources */,
+				253F3B86C24853A0F93FFD36 /* BuildDemo.swift in Sources */,
 				425C064EB8D2A265790D5C41 /* MMLive.swift in Sources */,
 				4794E62556120F3F01B74FEE /* MMTabBar.swift in Sources */,
 				FF6CF15644F82D3C4793F7B6 /* MMTheme.swift in Sources */,

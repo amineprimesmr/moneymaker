@@ -65,7 +65,11 @@ private struct AppearModifier: ViewModifier {
     @ObservedObject private var launch = LaunchCoordinator.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.mmTabVisible) private var tabVisible
+    @ViewBuilder
     func body(content: Content) -> some View {
+        if BuildDemo.isOn { content.mmBuild() } else { cascade(content) }
+    }
+    private func cascade(_ content: Content) -> some View {
         content
             .opacity(shown ? 1 : 0)
             .offset(y: shown || reduceMotion ? 0 : 22)
