@@ -4,6 +4,10 @@
 <dict>
 	<key>aps-environment</key>
 	<string>$(APS_ENVIRONMENT)</string>
+	<key>com.apple.developer.in-app-payments</key>
+	<array>
+		<string>merchant.io.moneymaker.app</string>
+	</array>
 	<key>com.apple.developer.storekit.custom-purchase-link.allowed-regions</key>
 	<array>
 		<string>at</string>

@@ -1,3 +1,4 @@
+import PassKit
 import SafariServices
 import StoreKit
 import SwiftUI
@@ -227,7 +228,7 @@ struct ProPaywallView: View {
                 ProPaywallContinueButton(title: "Continuer", isLoading: false, isEnabled: true) { dismiss() }
             } else {
                 ProPaywallPriceCard(title: "À vie", price: "29 €", detail: "Paiement unique · sans abonnement")
-                ProPaywallContinueButton(title: "Débloquer Pro", isLoading: isPurchasing, isEnabled: canPurchase) {
+                ProPaywallContinueButton(title: ProApplePay.isAvailable ? "Débloquer avec Apple Pay" : "Débloquer Pro", isLoading: isPurchasing, isEnabled: canPurchase) {
                     Task { await purchase() }
                 }
                 Text("Paiement sécurisé par Stripe. Un seul paiement de 29 € TTC, aucun renouvellement. Les business en plus s'ajoutent depuis le dashboard web.")
@@ -316,22 +317,31 @@ struct ProPaywallView: View {
         isPurchasing = true; purchaseError = nil
         defer { isPurchasing = false }
         do {
+            var token: String?
             switch route {
             case .eu:
                 guard #available(iOS 18.1, *) else { return }
                 // Feuille d'information d'Apple, exigée avant chaque paiement hors In-App Purchase dans l'UE.
                 guard case .continued = try await ExternalPurchaseCustomLink.showNotice(type: .browser) else { return }
-                async let token = ExternalPurchaseCustomLink.token(for: "ACQUISITION")?.value
-                let c = try await paywall.takeCheckout(client: store.client)
-                checkout = IdentifiableURL(url: c.url)
-                // Le jeton est rattaché pendant que la page s'affiche : plus d'aller-retour avant le paiement.
-                let client = store.client
-                if let t = try await token { Task.detached { try? await client.attachExternalPurchaseToken(t, session: c.id) } }
+                token = try await ExternalPurchaseCustomLink.token(for: "ACQUISITION")?.value
             case .us:
-                checkout = IdentifiableURL(url: try await paywall.takeCheckout(client: store.client).url)
+                break
             case .none:
                 return
             }
+            // Apple Pay natif : la feuille s'ouvre sur le paywall, sans changer de page.
+            if ProApplePay.isAvailable {
+                if let s = try await ProApplePay.pay(client: store.client, externalPurchaseToken: token) {
+                    paywall.didPay(s)
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                }
+                return
+            }
+            // Sans Apple Pay (aucune carte dans Wallet) : la page Stripe préparée.
+            let c = try await paywall.takeCheckout(client: store.client)
+            checkout = IdentifiableURL(url: c.url)
+            let client = store.client
+            if let token { Task.detached { try? await client.attachExternalPurchaseToken(token, session: c.id) } }
         } catch {
             purchaseError = error.localizedDescription
         }
@@ -609,5 +619,92 @@ private struct ProPaywallPressStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .opacity(configuration.isPressed ? 0.94 : 1)
             .animation(.spring(response: 0.22, dampingFraction: 0.82), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Apple Pay natif (Stripe en coulisse)
+
+extension MoneyMakerClient {
+    /// Débite le jeton Apple Pay via Stripe et renvoie le statut, Pro déjà actif.
+    func payProWithApplePay(_ payment: PKPayment, externalPurchaseToken: String?) async throws -> BillingStatus {
+        var body: [String: Any] = [
+            "paymentData": payment.token.paymentData.base64EncodedString(),
+            "transactionId": payment.token.transactionIdentifier,
+            "network": payment.token.paymentMethod.network?.rawValue ?? "",
+            "displayName": payment.token.paymentMethod.displayName ?? "",
+        ]
+        if let externalPurchaseToken { body["externalPurchaseToken"] = externalPurchaseToken }
+        return try await send("POST", "billing/applepay", body: body)
+    }
+}
+
+/// Feuille Apple Pay de MoneyMaker Pro : 29 €, payé une fois. Renvoie le statut si le paiement passe,
+/// nil si la personne annule.
+@MainActor
+final class ProApplePay: NSObject, PKPaymentAuthorizationControllerDelegate {
+    static let merchantId = "merchant.io.moneymaker.app"
+    static let networks: [PKPaymentNetwork] = [.visa, .masterCard, .amex, .cartesBancaires, .maestro]
+
+    static var isAvailable: Bool { PKPaymentAuthorizationController.canMakePayments(usingNetworks: networks) }
+
+    private let client: MoneyMakerClient
+    private let externalPurchaseToken: String?
+    private var result: BillingStatus?
+    private var failure: Error?
+    private var continuation: CheckedContinuation<BillingStatus?, Error>?
+    private static var current: ProApplePay?
+
+    private init(client: MoneyMakerClient, externalPurchaseToken: String?) {
+        self.client = client
+        self.externalPurchaseToken = externalPurchaseToken
+    }
+
+    static func pay(client: MoneyMakerClient, externalPurchaseToken: String?) async throws -> BillingStatus? {
+        let request = PKPaymentRequest()
+        request.merchantIdentifier = merchantId
+        request.supportedNetworks = networks
+        request.merchantCapabilities = [.threeDSecure]
+        request.countryCode = "FR"
+        request.currencyCode = "EUR"
+        request.paymentSummaryItems = [
+            PKPaymentSummaryItem(label: String(localized: "MoneyMaker Pro · à vie"), amount: 29),
+            PKPaymentSummaryItem(label: "MoneyMaker", amount: 29),
+        ]
+        let session = ProApplePay(client: client, externalPurchaseToken: externalPurchaseToken)
+        let controller = PKPaymentAuthorizationController(paymentRequest: request)
+        controller.delegate = session
+        current = session
+        defer { current = nil }
+        return try await withCheckedThrowingContinuation { c in
+            session.continuation = c
+            controller.present { shown in
+                if !shown { session.finish() }
+            }
+        }
+    }
+
+    private func finish() {
+        guard let c = continuation else { return }
+        continuation = nil
+        if let failure { c.resume(throwing: failure) } else { c.resume(returning: result) }
+    }
+
+    nonisolated func paymentAuthorizationController(_ controller: PKPaymentAuthorizationController, didAuthorizePayment payment: PKPayment,
+                                                    handler completion: @escaping (PKPaymentAuthorizationResult) -> Void) {
+        Task { @MainActor in
+            do {
+                result = try await client.payProWithApplePay(payment, externalPurchaseToken: externalPurchaseToken)
+                completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
+            } catch {
+                failure = error
+                completion(PKPaymentAuthorizationResult(status: .failure, errors: [error]))
+            }
+        }
+    }
+
+    nonisolated func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
+        Task { @MainActor in
+            controller.dismiss { Task { @MainActor in self.finish() } }
+        }
     }
 }

@@ -152,3 +152,44 @@ export async function handleBillingWebhook(raw: Buffer | string | undefined, sig
   }
   return { received: true };
 }
+
+/**
+ * Apple Pay natif (feuille Apple Pay dans l'app) : le jeton chiffré d'Apple est converti en jeton
+ * Stripe (certificat de traitement Apple Pay déposé chez Stripe), puis débité tout de suite.
+ * Pro est activé dans la même requête : l'app n'attend aucun webhook.
+ */
+export async function payWithApplePay(uid: string, email: string | undefined, body: Record<string, unknown> | undefined) {
+  if (await isPro(uid)) throw new HttpError(409, "already_pro");
+  if (!(await configFor(uid))) throw new HttpError(503, "billing_unavailable", "Le paiement n'est pas encore ouvert.");
+  const paymentData = body?.paymentData, transactionId = body?.transactionId;
+  if (typeof paymentData !== "string" || !paymentData || paymentData.length > 20_000) throw new HttpError(400, "invalid_payment");
+  if (typeof transactionId !== "string" || transactionId.length > 200) throw new HttpError(400, "invalid_payment");
+  const str = (v: unknown, max = 100) => (typeof v === "string" ? v.slice(0, max) : undefined);
+  const ept = typeof body?.externalPurchaseToken === "string" && body.externalPurchaseToken.length < 4096 ? body.externalPurchaseToken : undefined;
+
+  const { cfg, stripe: s } = await stripe();
+  const price = await s.prices.retrieve(cfg.priceId);
+  const token = await s.tokens.create({
+    pk_token: Buffer.from(paymentData, "base64").toString("utf8"),
+    pk_token_instrument_name: str(body?.displayName),
+    pk_token_payment_network: str(body?.network),
+    pk_token_transaction_id: transactionId,
+  } as unknown as Stripe.TokenCreateParams);
+  const metadata = { uid, app_user_id: uid, product_id: "io.moneymaker.pro.lifetime", channel: "apple_pay_ios", ...(ept ? { apple_ept: "1" } : {}) };
+  let pi: Stripe.PaymentIntent;
+  try {
+    pi = await s.paymentIntents.create({
+      amount: price.unit_amount ?? 2900, currency: price.currency,
+      payment_method_types: ["card"],
+      payment_method_data: { type: "card", card: { token: token.id } } as unknown as Stripe.PaymentIntentCreateParams.PaymentMethodData,
+      confirm: true, description: "MoneyMaker Pro (à vie)", receipt_email: email, metadata,
+    }, { idempotencyKey: `applepay_${uid}_${transactionId}` });
+  } catch (e) {
+    throw new HttpError(402, "payment_failed", (e as Error).message);
+  }
+  if (pi.status !== "succeeded") throw new HttpError(402, "payment_failed", "Paiement refusé.");
+  await db.doc(`users/${uid}`).set({ pro: true, proSince: Date.now(), proPaymentIntent: pi.id, proChannel: "apple_pay_ios" }, { merge: true });
+  if (ept) await db.doc(`externalPurchases/${pi.id}`).set({ uid, token: ept, createdAt: Date.now(), status: "paid", paidAt: Date.now(),
+    amountTotal: pi.amount, currency: pi.currency, paymentIntent: pi.id });
+  return billingStatus(uid);
+}

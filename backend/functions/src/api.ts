@@ -41,7 +41,7 @@ import { projectLtv, audienceById, audienceCustomers, loadCustomerRows } from ".
 import { isMcpPath, handleMcp } from "./mcp/server";
 import { resolveAccessToken } from "./mcp/oauth";
 import { ACCESS_PREFIX } from "./mcp/policy";
-import { assertCanCreateProject, billingStatus, createCheckout as createProCheckout, handleBillingWebhook, safeReturnUrl, setTesterPro, attachExternalPurchaseToken } from "./billing";
+import { assertCanCreateProject, billingStatus, createCheckout as createProCheckout, handleBillingWebhook, safeReturnUrl, setTesterPro, attachExternalPurchaseToken, payWithApplePay } from "./billing";
 import { verifyStripeAppSignature, stripeAppPayload, parseGrantDays, isStripeCustomerId, STRIPE_APP_GRANT_DAYS } from "./stripeApp";
 
 /** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
@@ -518,6 +518,10 @@ route("POST", "/v1/projects", async req => {
 route("GET", "/v1/billing", async req => billingStatus(requireUser(await authenticate(req))));
 
 route("POST", "/v1/billing/tester-pro", async req => setTesterPro(requireUser(await authenticate(req)), req.body?.pro));
+route("POST", "/v1/billing/applepay", async req => {
+  const caller = await authenticate(req);
+  return payWithApplePay(requireUser(caller), caller.kind === "user" ? caller.email : undefined, req.body);
+});
 route("POST", "/v1/billing/checkout/token", async req =>
   attachExternalPurchaseToken(requireUser(await authenticate(req)), req.body?.sessionId, req.body?.externalPurchaseToken));
 route("POST", "/v1/billing/checkout", async req => {
