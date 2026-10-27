@@ -45,8 +45,16 @@ $("#logout").onclick = () => signOut(auth);
 onAuthStateChanged(auth, async user => {
   $("#login").classList.toggle("hidden", Boolean(user));
   $("#app").classList.toggle("hidden", !user);
-  if (user) { await acceptPendingInvite(); await loadProjects(); route(); }
+  if (user) { await acceptPendingInvite(); await loadProjects(); route(); proReturn(); }
 });
+
+/** Retour de Stripe Checkout (?pro=success|cancel) : message, puis URL nettoyée. */
+function proReturn() {
+  const v = new URLSearchParams(location.search).get("pro");
+  if (!v) return;
+  toast(v === "success" ? "Merci ! MoneyMaker Pro est activé : business illimités." : "Paiement annulé.");
+  history.replaceState(null, "", location.pathname + location.hash);
+}
 
 async function loadProjects() {
   state.projects = (await api("/v1/projects")).projects;
@@ -830,7 +838,23 @@ async function renderAccount(main) {
 
 // ── Modals ──────────────────────────────────────────────────────────────
 function openModal(html) { $("#modalBody").innerHTML = html; if (!$("#modal").open) $("#modal").showModal(); }
-function newProjectDialog() {
+/** MoneyMaker Pro : 29 € une fois, business illimités. Le plan gratuit en compte un. */
+function proDialog(b) {
+  openModal(`<h2>Passe à MoneyMaker Pro</h2>
+    <p class="muted">Le plan gratuit inclut ${b.freeProjects} business. Pro les débloque tous, pour toujours.</p>
+    <div class="card" style="margin:14px 0"><h2 style="margin:0">29 €<span class="muted" style="font-size:15px;font-weight:500"> · une fois, à vie</span></h2>
+      <p class="muted" style="margin:8px 0 0">Business illimités · toutes les fonctions · mises à jour incluses</p></div>
+    <div class="row"><button value="cancel">Plus tard</button><button type="button" class="primary" id="goPro">Payer 29 € avec Stripe</button></div>`);
+  $("#goPro").onclick = async () => {
+    $("#goPro").disabled = true;
+    try { const { url } = await api("/v1/billing/checkout", { method: "POST", body: { returnUrl: location.origin + "/" } }); location.href = url; }
+    catch (e) { $("#goPro").disabled = false; toast(e.message); }
+  };
+}
+
+async function newProjectDialog() {
+  const b = await api("/v1/billing").catch(() => null);
+  if (b && !b.pro && b.ownedProjects >= b.freeProjects) return proDialog(b);
   openModal(`<h2>Nouveau business</h2>
     <div class="field"><label>Ton app sur l'App Store (optionnel — remplit tout automatiquement)</label><div class="row"><input id="pSearch" placeholder="Nom de l'app…"><button type="button" id="pFind" style="flex:0">Chercher</button></div><div id="pResults"></div></div>
     <div class="field"><label>Nom du business</label><input id="pName" placeholder="ex. V2" required></div>

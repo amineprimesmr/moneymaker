@@ -41,6 +41,7 @@ import { projectLtv, audienceById, audienceCustomers, loadCustomerRows } from ".
 import { isMcpPath, handleMcp } from "./mcp/server";
 import { resolveAccessToken } from "./mcp/oauth";
 import { ACCESS_PREFIX } from "./mcp/policy";
+import { assertCanCreateProject, billingStatus, createCheckout as createProCheckout, handleBillingWebhook, safeReturnUrl } from "./billing";
 import { verifyStripeAppSignature, stripeAppPayload, parseGrantDays, isStripeCustomerId, STRIPE_APP_GRANT_DAYS } from "./stripeApp";
 
 /** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
@@ -494,6 +495,7 @@ route("POST", "/v1/projects", async req => {
   const uid = requireUser(await authenticate(req));
   const name = String(req.body?.name ?? "").trim().slice(0, 80);
   if (!name) throw new HttpError(400, "name_required");
+  await assertCanCreateProject(uid);
   const created = await createProject(name, uid);
   const project = await getProject(created.projectId);
   let config = req.body?.config ? sanitizeConfig(req.body.config, project.config) : project.config;
@@ -511,6 +513,17 @@ route("POST", "/v1/projects", async req => {
   await db.doc(`projects/${project.id}`).update({ config });
   return { ...created, note: "Store the secret key now: it is never shown again." };
 });
+
+// ── MoneyMaker Pro (licence à vie, Stripe Checkout) ───────────────────────
+route("GET", "/v1/billing", async req => billingStatus(requireUser(await authenticate(req))));
+
+route("POST", "/v1/billing/checkout", async req => {
+  const caller = await authenticate(req);
+  const uid = requireUser(caller);
+  return createProCheckout(uid, caller.kind === "user" ? caller.email : undefined, safeReturnUrl(req.body?.returnUrl, PUBLIC_BASE));
+});
+
+route("POST", "/v1/webhooks/billing", async req => handleBillingWebhook(req.rawBody, req.get("stripe-signature")));
 
 route("POST", "/v1/tokens", async req => {
   const uid = requireUser(await authenticate(req));

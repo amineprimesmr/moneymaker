@@ -1029,6 +1029,8 @@ struct LiveSettingsView: View {
                 account(lvl)
                     .padding(.top, 8)
 
+                ProSettingsSection()
+
                 SettingsSectionTitle(title: String(localized: "Apparence"))
                 SettingsCard {
                     ThemePicker(value: Binding(get: { AppTheme(rawValue: themeRaw) ?? .system }, set: { themeRaw = $0.rawValue }))
@@ -1209,5 +1211,65 @@ struct LiveSettingsView: View {
     private func link(_ title: LocalizedStringResource, _ icon: String, _ url: String) -> some View {
         Link(destination: URL(string: url)!) { SettingsRow(icon: icon, title: String(localized: title), trailing: .external) }
             .buttonStyle(SettingsRowPressStyle())
+    }
+}
+
+
+// MARK: - MoneyMaker Pro (29 €, une fois, payé avec Stripe)
+
+struct BillingStatus: Decodable { let pro: Bool; let ownedProjects: Int; let freeProjects: Int; let available: Bool }
+
+extension MoneyMakerClient {
+    func billing() async throws -> BillingStatus { try await get("billing") }
+    func proCheckoutURL() async throws -> URL {
+        struct R: Decodable { let url: URL }
+        let r: R = try await send("POST", "billing/checkout", body: ["returnUrl": "https://usemoneymaker.com/"])
+        return r.url
+    }
+}
+
+/// Licence Pro : statut, et achat via Stripe Checkout dans Safari. Là où Apple l'exige (UE avec le
+/// droit External Purchase), la fiche d'information d'Apple s'affiche avant de quitter l'app.
+struct ProSettingsSection: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var phase
+    @State private var status: BillingStatus?
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        if let status, status.available || status.pro {
+            SettingsSectionTitle(title: "MoneyMaker Pro")
+            SettingsCard {
+                if status.pro {
+                    SettingsRow(icon: "checkmark.seal.fill", title: String(localized: "Pro à vie"), trailing: .status(String(localized: "Actif")))
+                } else {
+                    Button { Task { await buy() } } label: {
+                        SettingsRow(icon: "crown.fill", title: String(localized: "Business illimités"),
+                                    trailing: busy ? .status("…") : .badge(String(localized: "29 € À VIE"), MMColor.accent))
+                    }.settingsRowButton().disabled(busy)
+                }
+            }
+            SettingsFootnote(text: error ?? (status.pro
+                ? String(localized: "Merci ! Tous tes business sont débloqués, pour toujours.")
+                : String(localized: "Le plan gratuit inclut \(status.freeProjects) business. Paiement unique et sécurisé avec Stripe, sans abonnement.")))
+        }
+        Color.clear.frame(height: 0)
+            .task { await load() }
+            .onChange(of: phase) { _, p in if p == .active { Task { await load() } } }
+    }
+
+    private func load() async { status = try? await store.client.billing() }
+
+    private func buy() async {
+        busy = true; error = nil; defer { busy = false }
+        do {
+            let url = try await store.client.proCheckoutURL()
+            if #available(iOS 17.4, *), await ExternalPurchase.canPresent {
+                if case .cancelled = try await ExternalPurchase.presentNoticeSheet() { return }
+            }
+            openURL(url)
+        } catch { self.error = error.localizedDescription }
     }
 }
