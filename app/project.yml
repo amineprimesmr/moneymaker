@@ -14,8 +14,8 @@ settings:
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: Apple Development
     SWIFT_VERSION: "5.9"
-    MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "5"
+    MARKETING_VERSION: "1.1"
+    CURRENT_PROJECT_VERSION: "6"
   configs:
     # Debug (installs sur l'iPhone) : compilation incrémentale, seuls les fichiers modifiés
     # sont recompilés (wholemodule recompilait toute l'app à chaque changement). Pas de dSYM.
