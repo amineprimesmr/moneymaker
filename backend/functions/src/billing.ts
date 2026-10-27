@@ -14,15 +14,24 @@ import { db } from "./store";
 export const FREE_PROJECTS = 1;
 export const PRO_PRICE = { amount: 29, currency: "EUR" };
 
-interface BillingConfig { secretKey: string; webhookSecret: string; priceId: string }
+interface BillingConfig { secretKey: string; webhookSecret: string; priceId: string; mode: "test" | "live"; testers: string[] }
 let cache: { at: number; cfg: BillingConfig | null } | null = null;
 
 async function config(): Promise<BillingConfig | null> {
   if (cache && Date.now() - cache.at < 60_000) return cache.cfg;
   const d = (await db.doc("system/billing").get()).data();
-  const cfg = d?.secretKey && d?.priceId ? { secretKey: d.secretKey, webhookSecret: d.webhookSecret ?? "", priceId: d.priceId } : null;
+  const cfg: BillingConfig | null = d?.secretKey && d?.priceId ? {
+    secretKey: d.secretKey, webhookSecret: d.webhookSecret ?? "", priceId: d.priceId,
+    mode: d.mode === "live" ? "live" : "test", testers: Array.isArray(d.testers) ? d.testers : [],
+  } : null;
   cache = { at: Date.now(), cfg };
   return cfg;
+}
+
+/** En mode test, seuls les testeurs voient l'offre : personne n'obtient Pro avec une carte de test. */
+async function configFor(uid: string) {
+  const cfg = await config();
+  return cfg && (cfg.mode === "live" || cfg.testers.includes(uid)) ? cfg : null;
 }
 
 async function stripe() {
@@ -41,13 +50,13 @@ async function ownedProjects(uid: string) {
 
 export async function billingStatus(uid: string) {
   const [pro, owned] = await Promise.all([isPro(uid), ownedProjects(uid)]);
-  return { pro, ownedProjects: owned, freeProjects: FREE_PROJECTS, price: PRO_PRICE, available: !!(await config()) };
+  return { pro, ownedProjects: owned, freeProjects: FREE_PROJECTS, price: PRO_PRICE, available: !!(await configFor(uid)) };
 }
 
 /** Bloque la création au-delà du quota gratuit (402 : l'appelant propose l'achat). */
 export async function assertCanCreateProject(uid: string) {
   // Tant que le paiement n'est pas configuré, personne n'est bloqué sans pouvoir payer.
-  if (!(await config()) || await isPro(uid)) return;
+  if (!(await configFor(uid)) || await isPro(uid)) return;
   if (await ownedProjects(uid) >= FREE_PROJECTS) {
     throw new HttpError(402, "pro_required", `Le plan gratuit inclut ${FREE_PROJECTS} business. MoneyMaker Pro (29 €, une fois) les débloque tous.`);
   }
@@ -66,6 +75,7 @@ export function safeReturnUrl(raw: unknown, base: string): string {
 
 export async function createCheckout(uid: string, email: string | undefined, returnUrl: string, externalPurchaseToken?: string) {
   if (await isPro(uid)) throw new HttpError(409, "already_pro");
+  if (!(await configFor(uid))) throw new HttpError(503, "billing_unavailable", "Le paiement n'est pas encore ouvert.");
   const { cfg, stripe: s } = await stripe();
   const sep = returnUrl.includes("?") ? "&" : "?";
   // Jeton StoreKit External Purchase (achat depuis l'app dans l'UE) : gardé pour la déclaration
@@ -109,7 +119,10 @@ export async function handleBillingWebhook(raw: Buffer | string | undefined, sig
     }
   } else if (event.type === "charge.refunded") {
     const ch = event.data.object as Stripe.Charge;
-    const uid = ch.metadata?.uid;
+    // La charge ne reprend pas les métadonnées du paiement : on retrouve l'acheteur par son paiement.
+    const pi = String(ch.payment_intent ?? "");
+    const uid = ch.metadata?.uid
+      ?? (pi ? (await db.collection("users").where("proPaymentIntent", "==", pi).limit(1).get()).docs[0]?.id : undefined);
     if (uid && ch.refunded) {
       await db.doc(`users/${uid}`).set({ pro: false, proRefundedAt: Date.now() }, { merge: true });
       const ep = await db.collection("externalPurchases").where("paymentIntent", "==", String(ch.payment_intent ?? "")).limit(1).get();
