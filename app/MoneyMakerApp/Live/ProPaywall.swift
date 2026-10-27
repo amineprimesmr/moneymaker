@@ -21,6 +21,7 @@ final class ProPaywall: ObservableObject {
     @Published private(set) var route: ProPurchaseRoute?
     private var prepared: (checkout: MoneyMakerClient.ProCheckout, at: Date)?
     private var preparing: Task<MoneyMakerClient.ProCheckout, Error>?
+    private var prewarm: SFSafariViewController.PrewarmingToken?
     private static let cacheKey = "mm.billingStatus"
 
     private init() {
@@ -69,7 +70,11 @@ final class ProPaywall: ObservableObject {
         preparing = Task { try await client.proCheckout() }
         Task {
             defer { preparing = nil }
-            if let c = try? await preparing?.value { prepared = (c, Date()) }
+            if let c = try? await preparing?.value {
+                prepared = (c, Date())
+                // Connexions TLS et DNS ouvertes d'avance : la page Stripe s'affiche aussitôt.
+                prewarm = SFSafariViewController.prewarmConnections(to: [c.url])
+            }
         }
     }
 
@@ -119,6 +124,7 @@ struct ProPaywallView: View {
                     .frame(minHeight: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom, alignment: .top)
                 }
                 .scrollIndicators(.hidden)
+                .scrollBounceBehavior(.basedOnSize)
                 .ignoresSafeArea()
             }
         }
@@ -317,8 +323,10 @@ struct ProPaywallView: View {
                 guard case .continued = try await ExternalPurchaseCustomLink.showNotice(type: .browser) else { return }
                 async let token = ExternalPurchaseCustomLink.token(for: "ACQUISITION")?.value
                 let c = try await paywall.takeCheckout(client: store.client)
-                if let t = try await token { try await store.client.attachExternalPurchaseToken(t, session: c.id) }
                 checkout = IdentifiableURL(url: c.url)
+                // Le jeton est rattaché pendant que la page s'affiche : plus d'aller-retour avant le paiement.
+                let client = store.client
+                if let t = try await token { Task.detached { try? await client.attachExternalPurchaseToken(t, session: c.id) } }
             case .us:
                 checkout = IdentifiableURL(url: try await paywall.takeCheckout(client: store.client).url)
             case .none:
@@ -342,30 +350,63 @@ struct ProPaywallView: View {
 enum ProPaywallTheme {
     static let title = Color(.label)
     /// Dégradé du mot « Pro » : l'accent vert de MoneyMaker vers le bleu de ses courbes.
+    /// Violets de la DA (jauge et courbes de l'Accueil, RecoveryTileTheme).
+    static let violet = MMColor.hex(0x9A4DE8)
+    static let violetDeep = MMColor.hex(0x5638C7)
+    static let violetBright = MMColor.hex(0x8D6CF2)
     static let proGradient = LinearGradient(
-        colors: [MMColor.hex(0x5CFFC4), MMColor.accent, MMColor.blue],
+        colors: [MMColor.hex(0xC4B2FF), violetBright, violet],
         startPoint: .topLeading, endPoint: .bottomTrailing)
     static let featureTitle = Color.white.opacity(0.92)
     static let featureIcon = Color.white.opacity(0.88)
 }
 
 struct ProPaywallBackdrop: View {
-    @State private var breathe = false
+    @State private var drift = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         ZStack {
             Color.black
-            // Lueur respirante en bas d'écran (l'aurore de l'onboarding V2), aux couleurs de MoneyMaker.
+            // Lueur violette en bas d'écran, rastérisée une fois : seule sa texture respire.
             EllipticalGradient(stops: [
-                .init(color: MMColor.accent.opacity(0.30), location: 0),
-                .init(color: MMColor.blue.opacity(0.16), location: 0.45),
+                .init(color: ProPaywallTheme.violet.opacity(0.34), location: 0),
+                .init(color: ProPaywallTheme.violetDeep.opacity(0.18), location: 0.45),
                 .init(color: .clear, location: 1),
             ], center: .bottom, startRadiusFraction: 0, endRadiusFraction: 0.75)
-            .scaleEffect(x: 1.4, y: breathe ? 0.78 : 0.62, anchor: .bottom)
-            .opacity(breathe ? 1 : 0.75)
+            .scaleEffect(x: 1.4, y: 0.7, anchor: .bottom)
+            .drawingGroup()
+            .opacity(drift ? 1 : 0.7)
+            // Petits carrés de l'Accueil et du menu, en violet, qui dérivent doucement (une texture par nappe).
+            ZStack {
+                RecoveryDotMatrix(anchor: .topTrailing, reach: 0.7, maxOpacity: 0.42, animated: false, ink: ProPaywallTheme.violetBright)
+                    .environment(\.recoveryDotSeed, 51)
+                    .frame(height: 360).drawingGroup()
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .offset(y: drift ? 6 : -6)
+                RecoveryDotMatrix(anchor: .topLeading, reach: 0.45, maxOpacity: 0.26, animated: false, ink: ProPaywallTheme.violet)
+                    .environment(\.recoveryDotSeed, 63)
+                    .frame(height: 240).drawingGroup()
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .offset(y: drift ? -5 : 5)
+                RecoveryDotMatrix(anchor: .bottomLeading, reach: 0.6, maxOpacity: 0.36, animated: false, ink: ProPaywallTheme.violetBright)
+                    .environment(\.recoveryDotSeed, 77)
+                    .frame(height: 380).drawingGroup()
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .offset(y: drift ? -6 : 6)
+                RecoveryDotMatrix(anchor: .bottomTrailing, reach: 0.45, maxOpacity: 0.24, animated: false, ink: ProPaywallTheme.violet)
+                    .environment(\.recoveryDotSeed, 89)
+                    .frame(height: 260).drawingGroup()
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .offset(y: drift ? 5 : -5)
+            }
         }
         .ignoresSafeArea()
-        .onAppear { withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true)) { breathe = true } }
         .allowsHitTesting(false)
+        .onAppear {
+            guard !reduceMotion else { drift = true; return }
+            withAnimation(.easeInOut(duration: 4).repeatForever(autoreverses: true)) { drift = true }
+        }
     }
 }
 
@@ -411,7 +452,7 @@ private struct ProPaywallBusinessHero: View {
         while t.count < 4 {
             t.append(AnyView(ZStack {
                 LinearGradient(colors: [Color(white: 0.20), Color(white: 0.09)], startPoint: .top, endPoint: .bottom)
-                Image(systemName: "plus").font(.system(size: 28, weight: .semibold)).foregroundStyle(MMColor.accent)
+                Image(systemName: "plus").font(.system(size: 28, weight: .semibold)).foregroundStyle(ProPaywallTheme.violetBright)
             }))
         }
         return t
@@ -507,9 +548,9 @@ private struct ProPaywallPriceCard: View {
         .overlay { RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Color.white.opacity(0.26), lineWidth: 1) }
         .overlay(alignment: .top) {
             Text("SANS ABONNEMENT")
-                .font(MMFont.system(12, .bold)).foregroundStyle(.black)
+                .font(MMFont.system(12, .bold)).foregroundStyle(.white)
                 .padding(.horizontal, 11).padding(.vertical, 5)
-                .background(Capsule().fill(MMColor.accent))
+                .background(Capsule().fill(LinearGradient(colors: [ProPaywallTheme.violetBright, ProPaywallTheme.violetDeep], startPoint: .top, endPoint: .bottom)))
                 .offset(y: -9)
         }
         .padding(.top, 8)

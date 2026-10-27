@@ -1262,7 +1262,7 @@ struct ProSettingsSection: View {
             SettingsCard {
                 Toggle(isOn: Binding(get: { status.pro }, set: { v in paywall.setTesterPro(v, client: store.client) })) {
                     HStack(spacing: 14) {
-                        Image(systemName: "crown.fill").foregroundStyle(MMColor.accent).frame(width: 22)
+                        Image(systemName: "crown.fill").foregroundStyle(ProPaywallTheme.violetBright).frame(width: 22)
                         Text(status.pro ? "Compte en Pro" : "Compte en gratuit").font(MMFont.system(15))
                     }
                 }
@@ -1279,7 +1279,7 @@ struct ProSettingsSection: View {
                 } else {
                     Button { paywall.isPresented = true } label: {
                         SettingsRow(icon: "crown.fill", title: String(localized: "Business illimités"),
-                                    trailing: .badge(String(localized: "29 € À VIE"), MMColor.accent))
+                                    trailing: .badge(String(localized: "29 € À VIE"), ProPaywallTheme.violetBright))
                     }.settingsRowButton()
                 }
             }
