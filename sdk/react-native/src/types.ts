@@ -98,7 +98,7 @@ export interface ConfigureOptions {
   apiKey: string;
   /** Your own user id. Omit to start anonymous (`$anon:…`), then call `logIn` later. */
   appUserId?: string;
-  /** Defaults to https://moneymaker-io.web.app/v1 */
+  /** Defaults to https://usemoneymaker.com/v1 */
   baseUrl?: string;
 }
 

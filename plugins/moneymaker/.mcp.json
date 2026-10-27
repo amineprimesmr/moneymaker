@@ -1,5 +1,5 @@
 {
   "mcpServers": {
-    "moneymaker": { "type": "http", "url": "https://moneymaker-io.web.app/mcp" }
+    "moneymaker": { "type": "http", "url": "https://usemoneymaker.com/mcp" }
   }
 }

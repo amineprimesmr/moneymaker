@@ -5,7 +5,7 @@ description: Integrate MoneyMaker (self-hosted RevenueCat alternative) into an i
 
 # MoneyMaker integration
 
-1. Fetch the always-current reference: `curl -s https://moneymaker-io.web.app/llms.txt` and follow it exactly.
+1. Fetch the always-current reference: `curl -s https://usemoneymaker.com/llms.txt` and follow it exactly.
 2. Ask the user only for what you cannot find: the public key `mm_pub_…` (dashboard → business → Réglages) and the entitlement id (default `premium`). If they give a personal token `mm_pat_…`, you may create/configure the project yourself through the API (`POST /v1/projects`, `PATCH /v1/projects/{id}`) — print the returned secret key once to the user and never commit it.
 3. Integrate: configure at launch → logIn/logOut with the app's auth → gate with `isEntitled` → paywall with `loadOfferings` + `purchase` (or the drop-in `MoneyMakerPaywall`) → restore button.
 4. Remove RevenueCat / hand-written StoreKit or Play Billing listeners the SDK replaces. Keep product ids identical.

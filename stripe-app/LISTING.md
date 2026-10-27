@@ -29,7 +29,7 @@ MoneyMaker unifie les achats intégrés et les abonnements de vos apps — App S
 - `customer_read` — afficher le statut MoneyMaker sur la fiche client.
 - `secret_write` — stocker la clé MoneyMaker de façon chiffrée.
 
-**Support :** https://moneymaker-io.web.app/support · **Confidentialité :** https://moneymaker-io.web.app/privacy · **Conditions :** https://moneymaker-io.web.app/terms
+**Support :** https://usemoneymaker.com/support · **Confidentialité :** https://usemoneymaker.com/privacy · **Conditions :** https://usemoneymaker.com/terms
 
 ---
 
@@ -57,7 +57,7 @@ MoneyMaker unifies in-app purchases and subscriptions from your apps — App Sto
 - `customer_read` — show MoneyMaker status on the customer page.
 - `secret_write` — store the MoneyMaker key encrypted.
 
-**Support:** https://moneymaker-io.web.app/support · **Privacy:** https://moneymaker-io.web.app/privacy · **Terms:** https://moneymaker-io.web.app/terms
+**Support:** https://usemoneymaker.com/support · **Privacy:** https://usemoneymaker.com/privacy · **Terms:** https://usemoneymaker.com/terms
 
 ---
 

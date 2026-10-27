@@ -21,7 +21,7 @@ const OverviewView = (ctx: ExtensionContextValue) => {
       title={t.appName}
       description={data ? data.project.name : t.overviewTitle}
       brandColor="#111111"
-      externalLink={{ href: data?.dashboardUrl ?? "https://moneymaker-io.web.app", label: t.openDashboard }}
+      externalLink={{ href: data?.dashboardUrl ?? "https://usemoneymaker.com", label: t.openDashboard }}
     >
       {state.kind === "loading" && <Loading t={t} />}
       {state.kind === "missing_key" && <MissingKey t={t} />}

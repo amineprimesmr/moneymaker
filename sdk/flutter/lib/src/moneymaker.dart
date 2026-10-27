@@ -14,7 +14,7 @@ abstract final class MoneyMaker {
   static const MethodChannel _channel = MethodChannel('io.moneymaker/methods');
   static const EventChannel _events = EventChannel('io.moneymaker/customer_info');
 
-  static const String defaultBaseUrl = 'https://moneymaker-io.web.app/v1';
+  static const String defaultBaseUrl = 'https://usemoneymaker.com/v1';
 
   static Stream<CustomerInfo>? _stream;
 

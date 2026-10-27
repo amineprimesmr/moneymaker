@@ -52,6 +52,9 @@ export interface Credentials {
   appStoreConnect?: { issuerId: string; keyId: string; privateKey: string };
   integrations?: import("./integrations").IntegrationSecrets;
   googleRtdnToken: string;
+  /** Jetons distincts par webhook : une URL qui fuit n'ouvre pas les autres. */
+  amazonNotificationToken?: string;
+  rokuNotificationToken?: string;
   webhookSigningSecret: string;
 }
 
@@ -89,18 +92,28 @@ export async function getProject(id: string): Promise<Project> {
   return { id, name: data.name, members: data.members ?? [], roles: data.roles ?? {}, ownerUid: data.ownerUid, config: { ...DEFAULT_CONFIG, ...data.config }, createdAt: data.createdAt };
 }
 
+const newWebhookTokens = () => ({
+  googleRtdnToken: token("rtdn", 18), amazonNotificationToken: token("amzn", 18), rokuNotificationToken: token("roku", 18),
+  webhookSigningSecret: token("whsec", 24),
+});
+
+/** Identifiants privés du business. Créés à la volée s'ils manquent (business créé hors API),
+ *  et complétés des jetons de webhook apparus depuis : plus d'erreur 500 « credentials_missing ». */
 export async function getCredentials(projectId: string): Promise<Credentials> {
-  const snap = await db.doc(`projects/${projectId}/private/credentials`).get();
-  if (!snap.exists) throw new HttpError(500, "credentials_missing");
-  return snap.data() as Credentials;
+  const ref = db.doc(`projects/${projectId}/private/credentials`);
+  const snap = await ref.get();
+  const data = (snap.exists ? snap.data() : {}) as Partial<Credentials>;
+  const fresh = newWebhookTokens();
+  const missing = Object.fromEntries(Object.entries(fresh).filter(([k]) => !(data as any)[k]));
+  if (!Object.keys(missing).length) return data as Credentials;
+  await ref.set(missing, { merge: true });
+  return { ...data, ...missing } as Credentials;
 }
 
 export async function createProject(name: string, uid: string) {
   const ref = db.collection("projects").doc();
   await ref.set({ name, members: [uid], ownerUid: uid, config: DEFAULT_CONFIG, createdAt: FieldValue.serverTimestamp() });
-  await ref.collection("private").doc("credentials").set({
-    googleRtdnToken: token("rtdn", 18), webhookSigningSecret: token("whsec", 24),
-  });
+  await ref.collection("private").doc("credentials").set(newWebhookTokens());
   const [publicKey, secretKey] = await Promise.all([
     issueKey({ kind: "public", projectId: ref.id }), issueKey({ kind: "secret", projectId: ref.id }),
   ]);

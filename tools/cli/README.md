@@ -20,4 +20,4 @@ mm get-offerings --project <pid> --json > offerings.json
 mm update-offerings --project <pid> --offerings @offerings.json --current-offering default
 ```
 
-`--json` affiche la réponse brute. Une valeur `@fichier` est lue depuis le disque. `MM_API_URL` change la base (défaut `https://moneymaker-io.web.app`).
+`--json` affiche la réponse brute. Une valeur `@fichier` est lue depuis le disque. `MM_API_URL` change la base (défaut `https://usemoneymaker.com`).

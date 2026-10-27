@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 process.env.GCLOUD_PROJECT ??= "moneymaker-io";
 const { rpc } = require("../lib/mcp/server.js");
-const BASE = (process.env.MM_API_URL ?? "https://moneymaker-io.web.app").replace(/\/$/, "");
+const BASE = (process.env.MM_API_URL ?? "https://usemoneymaker.com").replace(/\/$/, "");
 const TOKEN = process.env.MM_TOKEN ?? "mm_demo";
 const dispatch = async (method, path, { query, body, authorization }) => {
   const qs = new URLSearchParams(query ?? {}).toString();

@@ -7,7 +7,7 @@ import fetchStripeSignature from "@stripe/ui-extension-sdk/signature";
 import type { ExtensionContextValue } from "@stripe/ui-extension-sdk/context";
 
 export const SECRET_NAME = "moneymaker_secret_key";
-const DEFAULT_API_BASE = "https://moneymaker-io.web.app/v1/stripe-app";
+const DEFAULT_API_BASE = "https://usemoneymaker.com/v1/stripe-app";
 
 export const stripe = new Stripe(STRIPE_API_KEY, { httpClient: createHttpClient() as Stripe.HttpClient });
 

@@ -1,7 +1,7 @@
 // Règles OAuth du connecteur MCP (pures, testées) : redirections autorisées, scopes, PKCE.
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 
-export const ORIGIN = (process.env.MONEYMAKER_PUBLIC_BASE ?? "https://moneymaker-io.web.app").replace(/\/$/, "");
+export const ORIGIN = (process.env.MONEYMAKER_PUBLIC_BASE ?? "https://usemoneymaker.com").replace(/\/$/, "");
 export const RESOURCE = `${ORIGIN}/mcp`;
 /** Domaines publics servant le même connecteur (Firebase Hosting) ; les métadonnées OAuth suivent celui appelé. */
 export const ORIGINS = [...new Set([ORIGIN, "https://usemoneymaker.com", "https://moneymaker-io.web.app"])];

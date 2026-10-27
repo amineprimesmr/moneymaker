@@ -2,8 +2,8 @@
   "name": "moneymaker",
   "version": "1.1.0",
   "description": "Tes revenus d'apps dans Claude : MRR, abonnés, clients, transactions, classements App Store, avis, finance, croissance, configuration et équipe MoneyMaker.",
-  "author": { "name": "MoneyMaker", "url": "https://moneymaker-io.web.app" },
-  "homepage": "https://moneymaker-io.web.app/mcp-docs",
+  "author": { "name": "MoneyMaker", "url": "https://usemoneymaker.com" },
+  "homepage": "https://usemoneymaker.com/mcp-docs",
   "repository": "https://github.com/amineprimesmr/moneymaker",
   "keywords": ["revenue", "subscriptions", "mrr", "app-store", "analytics"]
 }

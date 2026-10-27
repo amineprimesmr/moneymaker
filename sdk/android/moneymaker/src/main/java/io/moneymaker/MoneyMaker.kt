@@ -33,7 +33,7 @@ class MoneyMaker private constructor(
 ) : PurchasesUpdatedListener {
 
     companion object {
-        const val DEFAULT_BASE_URL = "https://moneymaker-io.web.app/v1"
+        const val DEFAULT_BASE_URL = "https://usemoneymaker.com/v1"
         /** Ed25519 key of the hosted service (GET /v1/signing-key), pinned for DEFAULT_BASE_URL. */
         const val HOSTED_SIGNING_KEY = "9F7dzH51ASV9YKJmckzwJPTmNzoaefMzuOPPz2xXOBA="
         @Volatile private var instance: MoneyMaker? = null

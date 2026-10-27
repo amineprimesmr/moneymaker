@@ -9,7 +9,7 @@ import { mmFetch, type CustomerResponse, type PurchaseRow } from "../lib/moneyma
 import { useMoneyMaker } from "../lib/useMoneyMaker";
 import { Loading, MissingKey, ErrorState } from "../lib/StateViews";
 
-const DASHBOARD = "https://moneymaker-io.web.app";
+const DASHBOARD = "https://usemoneymaker.com";
 
 const statusBadge = (p: PurchaseRow, t: Strings) => {
   if (p.billingIssue) return <Badge type="warning">{t.billingIssue}</Badge>;

@@ -165,7 +165,9 @@ export async function connectAppStore(project: Project, baseUrl: string, body: a
 
 /** Google Play: validate the service account against the app and import subscription products. */
 export async function connectGooglePlay(project: Project, body: any) {
-  const sa = typeof body?.serviceAccount === "string" ? JSON.parse(body.serviceAccount) : body?.serviceAccount;
+  let sa: any;
+  try { sa = typeof body?.serviceAccount === "string" ? JSON.parse(body.serviceAccount) : body?.serviceAccount; }
+  catch { throw new HttpError(400, "invalid_service_account", "Le JSON du compte de service Google est illisible"); }
   const pkg = String(body?.packageName ?? project.config.google?.packageName ?? "");
   if (!sa?.client_email || !sa?.private_key || !pkg) throw new HttpError(400, "invalid_google_connection");
   const jwt = new JWT({ email: sa.client_email, key: sa.private_key, scopes: ["https://www.googleapis.com/auth/androidpublisher"] });

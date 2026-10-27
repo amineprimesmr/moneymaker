@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// Pont stdio → serveur MCP hébergé MoneyMaker (https://moneymaker-io.web.app/mcp). Aucune dépendance.
+// Pont stdio → serveur MCP hébergé MoneyMaker (https://usemoneymaker.com/mcp). Aucune dépendance.
 // Pour les clients qui ne parlent que stdio ; les autres se connectent directement à l'URL (OAuth).
 // claude mcp add moneymaker -e MM_TOKEN=mm_pat_… -- node /chemin/vers/tools/mcp/index.js
 import { createInterface } from "node:readline";
 
-const URL_ = `${(process.env.MM_API_URL ?? "https://moneymaker-io.web.app").replace(/\/$/, "")}/mcp`;
+const URL_ = `${(process.env.MM_API_URL ?? "https://usemoneymaker.com").replace(/\/$/, "")}/mcp`;
 const TOKEN = process.env.MM_TOKEN;
 const send = msg => process.stdout.write(JSON.stringify(msg) + "\n");
 const fail = (id, message, code = -32603) => id !== undefined && send({ jsonrpc: "2.0", id, error: { code, message } });

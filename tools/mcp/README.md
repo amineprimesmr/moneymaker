@@ -1,8 +1,8 @@
 # MoneyMaker MCP
 
 Le serveur MCP est **hébergé** dans la fonction `api` (Firebase `moneymaker-io`, europe-west1) :
-`https://moneymaker-io.web.app/mcp` — Streamable HTTP sans état, OAuth 2.1 (DCR + PKCE) ou jeton `mm_pat_…`.
-Guide utilisateur : https://moneymaker-io.web.app/mcp-docs · autorisations : https://moneymaker-io.web.app/connect
+`https://usemoneymaker.com/mcp` — Streamable HTTP sans état, OAuth 2.1 (DCR + PKCE) ou jeton `mm_pat_…`.
+Guide utilisateur : https://usemoneymaker.com/mcp-docs · autorisations : https://usemoneymaker.com/connect
 
 Code : `backend/functions/src/mcp/` — `tools.ts` (catalogue, chaque outil appelle une route `/v1` via
 `dispatch()` en mémoire : mêmes rôles, validations et audit), `server.ts` (JSON-RPC, découverte OAuth),
@@ -14,7 +14,7 @@ Ce dossier ne contient plus qu'un **pont stdio** vers le serveur hébergé, pour
 claude mcp add moneymaker -e MM_TOKEN=mm_pat_xxx -- node /chemin/vers/moneymaker/tools/mcp/index.js
 ```
 
-Préférer la connexion directe : `claude mcp add --transport http moneymaker https://moneymaker-io.web.app/mcp`.
+Préférer la connexion directe : `claude mcp add --transport http moneymaker https://usemoneymaker.com/mcp`.
 
 ## Tests
 

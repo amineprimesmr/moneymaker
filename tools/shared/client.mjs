@@ -1,7 +1,7 @@
 // Client REST MoneyMaker partagé par le serveur MCP et la CLI `mm`. Aucune dépendance (fetch de Node ≥ 18).
-// Auth : jeton d'accès personnel (mm_pat_…) dans MM_TOKEN. Base : MM_API_URL (défaut https://moneymaker-io.web.app).
+// Auth : jeton d'accès personnel (mm_pat_…) dans MM_TOKEN. Base : MM_API_URL (défaut https://usemoneymaker.com).
 
-export const BASE = (process.env.MM_API_URL ?? "https://moneymaker-io.web.app").replace(/\/$/, "");
+export const BASE = (process.env.MM_API_URL ?? "https://usemoneymaker.com").replace(/\/$/, "");
 
 export async function call(method, path, { query, body, raw = false } = {}) {
   const token = process.env.MM_TOKEN;

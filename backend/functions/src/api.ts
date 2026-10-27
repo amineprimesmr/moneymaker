@@ -1,8 +1,9 @@
 import type { Request } from "firebase-functions/v2/https";
+import { SETUP_EN } from "./i18n";
 import type { Response } from "express";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
-import { HttpError, cleanId, Purchase } from "./engine";
+import { HttpError, cleanId, Purchase, convertMicros } from "./engine";
 import type { Credentials } from "./store";
 import {
   db, getProject, createProject, customerInfo, mergeCustomers, touchCustomer, resolveKey, issueKey, revokeProjectKeys,
@@ -43,7 +44,7 @@ import { ACCESS_PREFIX } from "./mcp/policy";
 import { verifyStripeAppSignature, stripeAppPayload, parseGrantDays, isStripeCustomerId, STRIPE_APP_GRANT_DAYS } from "./stripeApp";
 
 /** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
-export const PUBLIC_BASE = process.env.MONEYMAKER_PUBLIC_BASE ?? "https://moneymaker-io.web.app";
+export const PUBLIC_BASE = process.env.MONEYMAKER_PUBLIC_BASE ?? "https://usemoneymaker.com";
 
 type Caller =
   | { kind: "public"; projectId: string; test?: boolean }
@@ -206,7 +207,7 @@ function sanitizeConfig(input: any, current: ProjectConfig): ProjectConfig {
     catch (e) { throw new HttpError(400, (e as Error).message); }
   }
   if (input.web !== undefined) { const w = sanitizeWeb(input.web); if (w) (next as any).web = w; else delete (next as any).web; }
-  if (input.stripe !== undefined) next.stripe = { enabled: Boolean(input.stripe.enabled), prices: input.stripe.prices };
+  if (input.stripe !== undefined) next.stripe = { enabled: Boolean(input.stripe.enabled), prices: sanitizeStripePrices(input.stripe.prices) };
   if (JSON.stringify(next).length > 200000) throw new HttpError(400, "config_too_large");
   return next;
 }
@@ -291,11 +292,26 @@ route("POST", "/v1/webhooks/google/:pid", async (req, _res, [pid]) => {
   return r;
 });
 
+/** Jeton propre au webhook. L'ancien jeton partagé (celui de Google) n'est plus accepté que pour les
+ *  business dont ce webhook a déjà reçu des notifications avec lui : rien ne casse chez eux. */
+const legacyNotificationUse = new Map<string, boolean>();
+async function notificationTokenOKAsync(given: unknown, own: string | undefined, legacy: string, pid: string, health: string) {
+  if (given && given === own) return true;
+  if (!given || given !== legacy) return false;
+  const key = `${pid}:${health}`;
+  if (!legacyNotificationUse.has(key)) {
+    const snap = await db.doc(`projects/${pid}`).get();
+    legacyNotificationUse.set(key, Boolean(snap.get(`health.${health}.lastAt`)));
+  }
+  return legacyNotificationUse.get(key)!;
+}
+
 // Amazon Appstore RTN (SNS HTTPS subscription; SNS signature verified, then the receipt is re-verified with RVS).
 route("POST", "/v1/webhooks/amazon/:pid", async (req, _res, [pid]) => {
   const project = await getProject(cleanId(pid));
   const creds = await getCredentials(project.id);
-  if (req.query.token !== creds.googleRtdnToken) throw new HttpError(401, "invalid_notification_token");
+  if (!await notificationTokenOKAsync(req.query.token, creds.amazonNotificationToken, creds.googleRtdnToken, project.id, "amazonNotifications"))
+    throw new HttpError(401, "invalid_notification_token");
   const r = await ingestAmazonNotification(project, req.rawBody, req.body);
   await markHealth(project.id, "amazonNotifications", { type: String((r as any).notificationType ?? ((r as any).confirmed !== undefined ? "confirmation" : "")) });
   return r;
@@ -305,7 +321,8 @@ route("POST", "/v1/webhooks/amazon/:pid", async (req, _res, [pid]) => {
 route("POST", "/v1/webhooks/roku/:pid", async (req, res, [pid]) => {
   const project = await getProject(cleanId(pid));
   const creds = await getCredentials(project.id);
-  if (req.query.token !== creds.googleRtdnToken) throw new HttpError(401, "invalid_notification_token");
+  if (!await notificationTokenOKAsync(req.query.token, creds.rokuNotificationToken, creds.googleRtdnToken, project.id, "rokuNotifications"))
+    throw new HttpError(401, "invalid_notification_token");
   const r = await ingestRokuNotification(project, String(req.rawBody ?? ""), typeof req.body === "object" ? req.body : {}, req.get("authorization"));
   await markHealth(project.id, "rokuNotifications", { type: String(r.transactionType ?? "") });
   if (r.responseKey) { res.status(200).type("text/plain").send(String(r.responseKey)); return; }
@@ -536,7 +553,7 @@ route("GET", "/v1/overview", async req => {
     const m = await projectMetrics(pr, days);
     // Logo hébergé par MoneyMaker (icons.ts) : toujours un PNG 256 px lisible par l'app, versionné.
     const v = d.get("iconVersion") as number | null | undefined;
-    return { ...m, iconUrl: v ? `${PUBLIC_BASE}/v1/icons/${d.id}?v=${v}` : null };
+    return { ...m, iconUrl: v ? `${PUBLIC_BASE}/v1/icons/${d.id}?v=${v}` : null, stores: Object.keys((d.get("connections") as Record<string, unknown> | undefined) ?? {}) };
   }));
   const currency = String(req.query.currency ?? projects[0]?.currency ?? "EUR");
   const { convertMicros } = await import("./engine");
@@ -551,13 +568,16 @@ route("GET", "/v1/overview", async req => {
     payingCustomers: projects.reduce((a, p) => a + p.payingCustomers, 0),
     downloads: projects.some(p => p.downloads !== null) ? projects.reduce((a, p) => a + (p.downloads ?? 0), 0) : null,
     hasTrials: projects.some(p => p.hasTrials),
-    projects: projects.map(({ history, revenueByDay, downloadsByDay, ...p }) => ({
-      projectId: p.projectId, name: p.name, currency: p.currency, mrrMicros: p.mrrMicros, netRevenueMicros: p.netRevenueMicros,
+    // Montants de chaque business convertis dans la devise d'affichage : l'app peut les additionner sans mélanger € et $.
+    projects: projects.map(({ history, revenueByDay, downloadsByDay, ...p }) => { const cv = (m: number) => convertMicros(m, p.currency, currency);
+      const cvMap = (o?: Record<string, number> | null) => o ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, cv(v)])) : o;
+      return {
+      projectId: p.projectId, name: p.name, currency, sourceCurrency: p.currency, mrrMicros: cv(p.mrrMicros), netRevenueMicros: cv(p.netRevenueMicros),
       activeSubscriptions: p.activeSubscriptions, activeTrials: p.activeTrials, newCustomers: p.newCustomers, trialConversionRate: p.trialConversionRate,
-      adRevenueMicros: p.adRevenueMicros, revenueInclAdsMicros: p.revenueInclAdsMicros,
+      adRevenueMicros: p.adRevenueMicros == null ? p.adRevenueMicros : cv(p.adRevenueMicros), revenueInclAdsMicros: p.revenueInclAdsMicros == null ? p.revenueInclAdsMicros : cv(p.revenueInclAdsMicros),
       churnRate: p.churnRate, billingIssues: p.billingIssues, payingCustomers: p.payingCustomers, downloads: p.downloads,
-      hasTrials: p.hasTrials, revenueByCountry: p.revenueByCountry, iconUrl: p.iconUrl, downloadsByDay, revenueByDay,
-    })),
+      hasTrials: p.hasTrials, revenueByCountry: cvMap(p.revenueByCountry), iconUrl: p.iconUrl, stores: p.stores, downloadsByDay, revenueByDay: cvMap(revenueByDay),
+    }; }),
     generatedAt: Date.now(),
   };
 });
@@ -575,8 +595,8 @@ route("GET", "/v1/projects/:pid", async (req, _res, [pid]) => {
       googleRtdn: `${base}/v1/webhooks/google/${project.id}?token=${creds.googleRtdnToken}`,
       stripeWebhook: `${base}/v1/webhooks/stripe/${project.id}`,
       paddleWebhook: `${base}/v1/webhooks/paddle/${project.id}`,
-      amazonNotifications: `${base}/v1/webhooks/amazon/${project.id}?token=${creds.googleRtdnToken}`,
-      rokuNotifications: `${base}/v1/webhooks/roku/${project.id}?token=${creds.googleRtdnToken}`,
+      amazonNotifications: `${base}/v1/webhooks/amazon/${project.id}?token=${creds.amazonNotificationToken}`,
+      rokuNotifications: `${base}/v1/webhooks/roku/${project.id}?token=${creds.rokuNotificationToken}`,
     },
     webhookSigningSecret: project.role === "viewer" ? undefined : creds.webhookSigningSecret,
     amazonConfirmationToken: (creds as any).amazon ? ((await db.doc(`projects/${project.id}`).get()).get("health.amazonNotifications.confirmationToken") ?? null) : null,
@@ -603,7 +623,9 @@ route("PUT", "/v1/projects/:pid/credentials", async (req, _res, [pid]) => {
     update.apple = { issuerId: String(issuerId), keyId: String(keyId), privateKey: String(privateKey) };
   }
   if (b.google) {
-    const sa = typeof b.google.serviceAccount === "string" ? JSON.parse(b.google.serviceAccount) : b.google.serviceAccount;
+    let sa: any;
+    try { sa = typeof b.google.serviceAccount === "string" ? JSON.parse(b.google.serviceAccount) : b.google.serviceAccount; }
+    catch { throw new HttpError(400, "invalid_service_account", "Le JSON du compte de service Google est illisible"); }
     if (!sa?.client_email || !sa?.private_key) throw new HttpError(400, "invalid_service_account");
     update.google = { serviceAccount: { client_email: sa.client_email, private_key: sa.private_key } };
   }
@@ -697,7 +719,14 @@ route("GET", "/v1/projects/:pid/customers/:id", async (req, _res, [pid, id]) => 
     customerInfo(project, appUserId),
     db.collection(`projects/${project.id}/events`).where("appUserId", "==", appUserId).orderBy("at", "desc").limit(100).get(),
   ]);
-  return { ...info, events: events.docs.map(d => ({ id: d.id, ...d.data() })) };
+  // Fiche client façon RevenueCat : vu pour la première / dernière fois, pays, total dépensé, historique complet.
+  const doc = await db.doc(`projects/${project.id}/customers/${appUserId}`).get();
+  return {
+    ...info,
+    lastSeenAt: doc.get("lastSeenAt") ?? null, country: doc.get("country") ?? null,
+    totalSpentMicros: doc.get("totalSpentMicros") ?? 0, isPaying: doc.get("isPaying") ?? false, currency: project.config.currency,
+    events: events.docs.map(d => ({ id: d.id, projectId: project.id, projectName: project.name, ...d.data() })),
+  };
 });
 
 route("POST", "/v1/projects/:pid/customers/:id/grant", async (req, _res, [pid, id]) => {
@@ -747,6 +776,18 @@ route("POST", "/v1/projects/:pid/webhooks/test", async (req, _res, [pid]) => {
   return { eventId: ref.id };
 });
 
+/** Table prix Stripe → produit : clés price_…, produit texte, période en mois positive ; 200 au plus. */
+function sanitizeStripePrices(v: unknown): Record<string, { productId: string; periodMonths: number }> {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  const out: Record<string, { productId: string; periodMonths: number }> = {};
+  for (const [k, x] of Object.entries(v as Record<string, any>).slice(0, 200)) {
+    if (!/^price_[A-Za-z0-9]{6,64}$/.test(k) || typeof x?.productId !== "string") continue;
+    const months = Number(x.periodMonths);
+    out[k] = { productId: x.productId.slice(0, 200), periodMonths: Number.isFinite(months) && months > 0 ? Math.min(months, 120) : 1 };
+  }
+  return out;
+}
+
 // ── Setup checklist (auto-detected) ────────────────────────────────────────
 export function setupSteps(project: any, creds: Credentials, counts: { customers: number; purchases: number }) {
   const h = project.health ?? {}, c = project.config ?? {};
@@ -756,7 +797,7 @@ export function setupSteps(project: any, creds: Credentials, counts: { customers
       help: "Liste les identifiants produits (App Store, Play, Stripe) qui débloquent l'accès. Connecter App Store Connect ou Google Play les importe automatiquement." },
     // Le SDK est la librairie iOS/Android : sans app (business 100 % Stripe sur le web), l'étape ne s'applique pas.
     { id: "sdk", group: "Base", title: "Brancher le SDK dans l'app", done: Boolean(h.sdk?.lastAt), optional: !apple && !google && stripe, tab: "connect", detail: h.sdk ? `dernier appel ${h.sdk.platform ?? ""}` : null,
-      help: "Copie le prompt de l'onglet Connexions dans ton agent (Claude Code, Cursor…). L'étape se valide dès que l'app appelle MoneyMaker." },
+      help: "Copie le prompt de l'onglet Connexions dans Claude. L'étape se valide dès que l'app appelle MoneyMaker." },
     { id: "asc", group: "App Store", title: "Connecter App Store Connect", done: Boolean(creds.appStoreConnect), optional: !apple, tab: "connect",
       help: "Clé API App Store Connect (rôle App Manager) : importe les produits, active les classements et règle l'URL des notifications." },
     { id: "appleNotifications", group: "App Store", title: "Recevoir les notifications serveur Apple", done: Boolean(h.appleNotifications?.lastAt), optional: !apple, tab: "connect",
@@ -775,7 +816,9 @@ export function setupSteps(project: any, creds: Credentials, counts: { customers
       help: "Ajoute ton app et tes concurrents : classements dans 177 pays, alertes, avis." },
     { id: "integrations", group: "Bonus", title: "Brancher Slack ou tes outils", done: Object.keys(creds.integrations ?? {}).length > 0 || (c.webhooks ?? []).length > 0, optional: true, tab: "connect",
       help: "Slack/Discord pour être notifié de chaque vente, Mixpanel/Amplitude/Segment/PostHog pour l'analytique, webhooks pour ton backend." },
-  ];
+
+  ].map(s => ({ ...s, groupEn: SETUP_EN[s.id]?.group ?? s.group, titleEn: SETUP_EN[s.id]?.title ?? s.title, helpEn: SETUP_EN[s.id]?.help ?? s.help,
+    ...(s.id === "sdk" ? { detailEn: h.sdk ? `last call ${h.sdk.platform ?? ""}`.trim() : null } : {}) }));
   // Rankings-only businesses (no in-app sales): only App Store tracking matters.
   if (c.mode === "rankings") {
     const only = steps.filter(s => s.id === "appstore").map(s => ({ ...s, optional: false }));
@@ -1103,6 +1146,93 @@ route("GET", "/v1/alerts", async req => {
   return { alerts: all };
 });
 
+// ── Classement public (façon TrustMRR) ─────────────────────────────────────
+/** Public, sans authentification : les business inscrits, classés sur des revenus vérifiés par les stores. */
+route("GET", "/v1/leaderboard", async (req, res) => {
+  const { leaderboard, sortEntries, publicEntry, LEADERBOARD_SORTS, LEADERBOARD_CURRENCY } = await import("./leaderboard");
+  const sort = LEADERBOARD_SORTS.find(s => s === req.query.sort) ?? "mrr";
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit ?? 100)));
+  const { entries, updatedAt } = await leaderboard(PUBLIC_BASE);
+  res.set("Cache-Control", "public, max-age=0, s-maxage=30");
+  return {
+    currency: LEADERBOARD_CURRENCY, sort, updatedAt, total: entries.length,
+    entries: sortEntries(entries, sort).slice(0, limit).map((e, i) => publicEntry(e, i + 1)),
+  };
+});
+
+route("GET", "/v1/leaderboard/:pid", async (req, res, [pid]) => {
+  const { leaderboard, sortEntries, publicEntry, LEADERBOARD_CURRENCY } = await import("./leaderboard");
+  const { entries, updatedAt } = await leaderboard(PUBLIC_BASE);
+  const ranked = sortEntries(entries, "mrr");
+  const i = ranked.findIndex(e => e.projectId === cleanId(pid));
+  if (i < 0) throw new HttpError(404, "not_listed");
+  res.set("Cache-Control", "public, max-age=0, s-maxage=30");
+  return { currency: LEADERBOARD_CURRENCY, updatedAt, total: ranked.length, entry: publicEntry(ranked[i], i + 1) };
+});
+
+route("GET", "/v1/projects/:pid/public", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  return (await db.doc(`projects/${project.id}`).get()).get("publicListing") ?? { listed: true };
+});
+
+route("PUT", "/v1/projects/:pid/public", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid, false, "admin");
+  const { sanitizeListing, invalidateLeaderboard } = await import("./leaderboard");
+  const ref = db.doc(`projects/${project.id}`);
+  const listing = sanitizeListing(req.body ?? {}, (await ref.get()).get("publicListing"));
+  await ref.update({ publicListing: listing });
+  await invalidateLeaderboard();
+  return listing;
+});
+
+// ── PostHog (lecture) ──────────────────────────────────────────────────────
+route("GET", "/v1/projects/:pid/posthog", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const { posthogState } = await import("./posthog");
+  const { config, apiKey } = await posthogState(project.id);
+  return { connected: Boolean(config && apiKey), config };
+});
+
+route("PUT", "/v1/projects/:pid/posthog", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid, false, "admin");
+  const P = await import("./posthog");
+  const prev = await P.posthogState(project.id);
+  const { config, apiKey } = P.sanitizePosthog(req.body ?? {}, prev.config ?? undefined);
+  const key = apiKey ?? prev.apiKey;
+  if (!key) throw new HttpError(400, "missing_key", "Colle ta clé personnelle PostHog");
+  // Vérifie la connexion et propose les étapes de l'entonnoir si rien n'est encore choisi.
+  const events = await P.listEvents(config, key);
+  if (!Object.keys(config.events).length) config.events = P.suggestMapping(events);
+  await db.doc(`projects/${project.id}`).update({ posthog: config });
+  if (apiKey) await db.doc(`projects/${project.id}/private/credentials`).set({ posthogRead: { apiKey } }, { merge: true });
+  await P.invalidatePosthog(project.id);
+  return { connected: true, config, events: events.slice(0, 100) };
+});
+
+route("DELETE", "/v1/projects/:pid/posthog", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid, false, "admin");
+  await db.doc(`projects/${project.id}`).update({ posthog: FieldValue.delete() });
+  await db.doc(`projects/${project.id}/private/credentials`).set({ posthogRead: FieldValue.delete() }, { merge: true });
+  const { invalidatePosthog } = await import("./posthog");
+  await invalidatePosthog(project.id);
+  return { connected: false };
+});
+
+route("GET", "/v1/projects/:pid/posthog/events", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid, false, "admin");
+  const P = await import("./posthog");
+  const { config, apiKey } = await P.posthogState(project.id);
+  if (!config || !apiKey) throw new HttpError(404, "posthog_not_connected");
+  const events = await P.listEvents(config, apiKey);
+  return { events: events.slice(0, 100), suggested: P.suggestMapping(events) };
+});
+
+route("GET", "/v1/projects/:pid/posthog/summary", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid);
+  const { posthogSummary } = await import("./posthog");
+  return { summary: await posthogSummary(project.id, req.query.force === "1") };
+});
+
 // ── iOS devices, today, live feed ──────────────────────────────────────────
 route("PUT", "/v1/devices/:id", async (req, _res, [id]) => {
   const uid = requireUser(await authenticate(req));
@@ -1124,15 +1254,14 @@ route("DELETE", "/v1/devices/:id", async (req, _res, [id]) => {
 // Push de test sur tous les appareils du compte (onboarding depuis un assistant, qui ne connaît pas les ids).
 route("POST", "/v1/devices/test", async req => {
   const uid = requireUser(await authenticate(req));
-  const { apnsSend, apnsConfigured } = await import("./push");
+  const { apnsSend, apnsConfigured, saleSoundFile } = await import("./push");
+  const { testPush, normLang } = await import("./i18n");
   const devices = (await db.collection(`users/${uid}/devices`).get()).docs.map(d => d.data()).filter(d => d.apnsToken);
   if (!devices.length) throw new HttpError(400, "no_device", "Installe l'app MoneyMaker sur iPhone, connecte-toi et autorise les notifications.");
   if (!(await apnsConfigured())) throw new HttpError(503, "apns_not_configured", "La clé APNs n'est pas encore configurée côté serveur.");
   let sent = 0;
   for (const d of devices) {
-    const r = await apnsSend(d.env, d.apnsToken, "alert", {
-      aps: { alert: { title: "+9,99 € · MoneyMaker", subtitle: "Notification de test", body: "Nouvel abonné · mensuel · 🇫🇷 FR" }, sound: saleSoundFile(d.prefs ?? {}), "thread-id": "test", category: "SALE" },
-    });
+    const r = await apnsSend(d.env, d.apnsToken, "alert", { aps: { alert: testPush(normLang(d.lang)), sound: saleSoundFile(d.prefs ?? {}), "thread-id": "test", category: "SALE" } });
     if (r.status === 200) sent++;
   }
   return { ok: sent > 0, devices: devices.length, sent };
@@ -1140,12 +1269,14 @@ route("POST", "/v1/devices/test", async req => {
 
 route("POST", "/v1/devices/:id/test", async (req, _res, [id]) => {
   const uid = requireUser(await authenticate(req));
-  const { apnsSend, apnsConfigured } = await import("./push");
+  const { apnsSend, apnsConfigured, saleSoundFile } = await import("./push");
   const d = (await db.doc(`users/${uid}/devices/${cleanId(id, 80)}`).get()).data();
   if (!d?.apnsToken) throw new HttpError(400, "no_apns_token");
+  const { testPush, normLang } = await import("./i18n");
+  const msg = testPush(normLang(d.lang));
   if (!(await apnsConfigured())) throw new HttpError(503, "apns_not_configured", "La clé APNs n'est pas encore configurée côté serveur.");
   const r = await apnsSend(d.env, d.apnsToken, "alert", {
-    aps: { alert: { title: "+9,99 € · MoneyMaker", subtitle: "Notification de test", body: "Nouvel abonné · mensuel · 🇫🇷 FR" }, sound: saleSoundFile(d.prefs ?? {}), "thread-id": "test", category: "SALE" },
+    aps: { alert: msg, sound: saleSoundFile(d.prefs ?? {}), "thread-id": "test", category: "SALE" },
   });
   if (r.status !== 200) throw new HttpError(502, "apns_failed", r.reason ?? String(r.status));
   return { ok: true };
@@ -1190,9 +1321,10 @@ function projectIdsParam(req: Request): string[] | undefined {
 route("GET", "/v1/finance", async req => {
   const uid = requireUser(await authenticate(req));
   const { waterfallFor, PRESETS } = await import("./finance");
+  const { PRESET_EN } = await import("./i18n");
   const days = Math.min(365, Math.max(1, Number(req.query.days ?? 28)));
   const w = await waterfallFor(uid, days, projectIdsParam(req));
-  return { ...w, presets: Object.fromEntries(Object.entries(PRESETS).map(([k, v]) => [k, { label: v.label, note: v.note }])) };
+  return { ...w, presets: Object.fromEntries(Object.entries(PRESETS).map(([k, v]) => [k, { label: v.label, note: v.note, labelEn: PRESET_EN[k]?.label ?? v.label, noteEn: PRESET_EN[k]?.note ?? v.note }])) };
 });
 
 route("PUT", "/v1/finance/settings", async req => {
@@ -1265,13 +1397,18 @@ route("GET", "/v1/today", async req => {
 
 route("GET", "/v1/feed", async req => {
   const uid = requireUser(await authenticate(req));
-  const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 30)));
+  const limit = Math.min(300, Math.max(1, Number(req.query.limit ?? 30)));
   const projects = await db.collection("projects").where("members", "array-contains", uid).select("name").get();
   const only = projectIdsParam(req);
   const all = (await Promise.all(projects.docs.filter(p => !only?.length || only.includes(p.id)).map(async p =>
-    (await db.collection(`projects/${p.id}/events`).orderBy("at", "desc").limit(limit).select("type", "productId", "priceMicros", "currency", "country", "store", "isSandbox", "isTrial", "periodMonths", "at").get())
+    (await db.collection(`projects/${p.id}/events`).orderBy("at", "desc").limit(limit).select("type", "productId", "priceMicros", "currency", "country", "store", "isSandbox", "isTrial", "periodMonths", "at", "appUserId", "purchaseId", "expiresAt").get())
       .docs.map(d => ({ id: d.id, projectId: p.id, projectName: p.get("name"), ...d.data() })),
   ))).flat().filter((e: any) => e.type !== "TEST").sort((a: any, b: any) => b.at - a.at).slice(0, limit);
+  // Montant converti dans la devise d'affichage choisie (?currency=EUR), en plus du montant d'origine.
+  const to = typeof req.query.currency === "string" && /^[A-Z]{3}$/.test(req.query.currency) ? req.query.currency : undefined;
+  if (to) for (const e of all as any[]) if (e.priceMicros && e.currency && e.currency !== to) {
+    e.displayMicros = convertMicros(e.priceMicros, e.currency, to); e.displayCurrency = to;
+  }
   return { events: all };
 });
 
@@ -1714,6 +1851,21 @@ async function sendSigned(req: Request, res: Response, out: unknown) {
   res.status(200).type("application/json").send(body);
 }
 
+/** Limite par adresse et par minute, en mémoire de l'instance (sans lecture Firestore) : coupe les rafales
+ *  et le martèlement d'un webhook ou d'une clé publique. Large pour ne jamais gêner une app normale. */
+const RATE_PER_MINUTE = 1200;
+const rateWindow = new Map<string, { minute: number; count: number }>();
+export function overRateLimit(ip: string, now = Date.now()): boolean {
+  const minute = Math.floor(now / 60000);
+  const w = rateWindow.get(ip);
+  if (!w || w.minute !== minute) {
+    if (rateWindow.size > 50_000) rateWindow.clear();
+    rateWindow.set(ip, { minute, count: 1 });
+    return false;
+  }
+  return ++w.count > RATE_PER_MINUTE;
+}
+
 export async function handle(req: Request, res: Response) {
   const mcpPath = req.path.length > 1 ? req.path.replace(/\/$/, "") : req.path;
   if (isMcpPath(mcpPath)) return handleMcp(req, res, mcpPath, dispatch);
@@ -1723,6 +1875,8 @@ export async function handle(req: Request, res: Response) {
   res.set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
   const path = req.path.replace(/^\/api(?=\/)/, "");
+  // Les webhooks des stores (Apple, Google, Stripe…) partagent quelques IP : ils ne sont pas limités.
+  if (!path.startsWith("/v1/webhooks/") && overRateLimit(req.ip ?? "unknown")) { res.status(429).json({ error: "rate_limited", message: "Trop de requêtes, réessaie dans une minute" }); return; }
   try {
     // Mode démo : lecture seule.
     if (req.method !== "GET" && /^Bearer\s+mm_demo\s*$/i.test(req.get("authorization") ?? "")) throw new HttpError(403, "demo_read_only", "Mode démo : lecture seule");

@@ -17,7 +17,7 @@
 
 <h2 id="compte">1. Compte et business <span class="time">· 1 min</span></h2>
 <ol>
-<li>Va sur <a href="/">moneymaker-io.web.app</a> → <b>Continuer avec Google</b>.</li>
+<li>Va sur <a href="/">usemoneymaker.com</a> → <b>Continuer avec Google</b>.</li>
 <li><b>+ Nouveau business</b> → tape le nom de ton app dans « Ton app sur l'App Store » → <b>Chercher</b> → clique sur ton app. Bundle ID, Apple ID et suivi des classements se remplissent seuls.</li>
 <li>Ajoute le package Android si tu en as un, puis <b>Créer</b>.</li>
 <li><b>Copie la clé secrète</b> (<code>mm_sk_…</code>) dans ton gestionnaire de mots de passe : elle n'est affichée qu'une fois. La clé publique (<code>mm_pub_…</code>) se retrouve à tout moment dans Réglages → Clés API.</li>
@@ -93,7 +93,7 @@ try await MoneyMaker.shared.purchase(package)         // acheter (ou MoneyMakerP
 <li>Garde les mêmes identifiants produits : rien ne change côté App Store / Play.</li>
 <li>Remplace le SDK RevenueCat par MoneyMaker (ton agent le fait avec le prompt). Au premier lancement, le SDK resynchronise <b>en silence</b> les achats en cours de chaque utilisateur.</li>
 <li>Redirige les notifications serveur Apple et Play vers MoneyMaker (étapes 3 et 4) et désactive l'intégration AppsFlyer de RevenueCat pour ne pas compter les revenus deux fois.</li>
-<li><b>Ton backend</b> appelle l'API RevenueCat (vérifier un abonné, offrir un mois) ou reçoit ses webhooks ? Remplace seulement l'URL de base par <code>https://moneymaker-io.web.app/v1/rc</code> et la clé par ta clé secrète MoneyMaker : mêmes réponses, mêmes webhooks (format « revenuecat » dans Réglages). Pendant la transition, lis les deux et garde l'accès qui expire le plus tard.</li>
+<li><b>Ton backend</b> appelle l'API RevenueCat (vérifier un abonné, offrir un mois) ou reçoit ses webhooks ? Remplace seulement l'URL de base par <code>https://usemoneymaker.com/v1/rc</code> et la clé par ta clé secrète MoneyMaker : mêmes réponses, mêmes webhooks (format « revenuecat » dans Réglages). Pendant la transition, lis les deux et garde l'accès qui expire le plus tard.</li>
 <li>Abonnés qui n'ouvrent plus l'app : leurs renouvellements sont rattachés automatiquement au bon compte dès qu'ils rouvrent l'app. Pour les rattacher tout de suite, importe la correspondance <code>original_transaction_id → app_user_id</code> depuis l'export RevenueCat (on l'a fait pour V2).</li>
 </ol>
 

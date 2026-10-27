@@ -1,8 +1,8 @@
-// Vérification de soumission : OAuth réel + chaque outil via https://moneymaker-io.web.app/mcp, avec le compte relecteur.
+// Vérification de soumission : OAuth réel + chaque outil via https://usemoneymaker.com/mcp, avec le compte relecteur.
 // node tests/mcp-prod-check.mjs   (lit submission/reviewer-credentials.txt ; écrit uniquement dans le business du relecteur)
 import fs from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
-const B = "https://moneymaker-io.web.app";
+const B = "https://usemoneymaker.com";
 const cred = fs.readFileSync(new URL("../../../submission/reviewer-credentials.txt", import.meta.url), "utf8");
 const email = /E-mail : (.+)/.exec(cred)[1].trim(), password = /Mot de passe : (.+)/.exec(cred)[1].trim();
 const { apiKey } = await (await fetch(`${B}/__/firebase/init.json`)).json();
@@ -34,7 +34,7 @@ const args = {
   get_chart: { projectId: pid, name: "mrr", days: 30 }, get_customer: { projectId: pid, customerId: cust }, export_csv: { projectId: pid, kind: "customers", maxRows: 5 },
   preview_audience: { projectId: pid, filters: {} }, get_app_rankings: { projectId: pid, appId }, get_app_ratings: { projectId: pid, appId }, list_app_reviews: { projectId: pid, appId },
   translate_review: { projectId: pid, appId, reviewId: review }, search_app_store: { term: "pomodoro" }, get_experiment_results: null, list_audience_customers: null, list_posthog_events: null,
-  update_project: { projectId: pid, config: { website: "https://moneymaker-io.web.app" } },
+  update_project: { projectId: pid, config: { website: "https://usemoneymaker.com" } },
   update_offerings: { projectId: pid, currentOffering: "default" }, set_alert_preferences: { projectId: pid, threshold: 3 }, add_tracked_app: { projectId: pid, appId, own: true },
   refresh_app_store: { projectId: pid }, grant_entitlement: { projectId: pid, customerId: cust, entitlement: "premium", days: 7 }, send_test_webhook: { projectId: pid },
   update_public_listing: { projectId: pid, listed: false }, update_finance_settings: { settings: { structure: "sasu_is" } },

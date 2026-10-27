@@ -13,7 +13,7 @@ import Network
 /// ```
 @MainActor
 public final class MoneyMaker: ObservableObject {
-    nonisolated public static let defaultBaseURL = URL(string: "https://moneymaker-io.web.app/v1")!
+    nonisolated public static let defaultBaseURL = URL(string: "https://usemoneymaker.com/v1")!
 
     private static var instance: MoneyMaker?
     public static var shared: MoneyMaker {
@@ -33,7 +33,7 @@ public final class MoneyMaker: ObservableObject {
     /// Ed25519 public key (base64 raw, from `GET /v1/signing-key`) pinned in the app. Set before `configure`.
     /// When nil, the key is fetched once and pinned on first launch (trust on first use).
     public static var signingPublicKey: String?
-    /// Key of the hosted MoneyMaker service (moneymaker-io.web.app), pinned by default for that host.
+    /// Key of the hosted MoneyMaker service (usemoneymaker.com), pinned by default for that host.
     static let hostedSigningPublicKey = "9F7dzH51ASV9YKJmckzwJPTmNzoaefMzuOPPz2xXOBA="
 
     /// Signature checking of customer-info responses (trusted entitlements).
@@ -65,7 +65,7 @@ public final class MoneyMaker: ObservableObject {
         self.cache = Cache(namespace: String(apiKey.suffix(8)))
         self.entitlementVerification = verification
         self.isTestStore = apiKey.hasPrefix("mm_test_")
-        self.verifier = SignatureVerifier(api: api, hardcodedKey: Self.signingPublicKey ?? (baseURL.host == "moneymaker-io.web.app" ? Self.hostedSigningPublicKey : nil), namespace: String(apiKey.suffix(8)))
+        self.verifier = SignatureVerifier(api: api, hardcodedKey: Self.signingPublicKey ?? (baseURL.host == "usemoneymaker.com" ? Self.hostedSigningPublicKey : nil), namespace: String(apiKey.suffix(8)))
         self.pending = PendingTransactionQueue(namespace: String(apiKey.suffix(8)))
         self.appUserID = appUserID ?? cache.anonymousID
         self.customerInfo = cache.customerInfo(for: self.appUserID)

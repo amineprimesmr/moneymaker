@@ -38,7 +38,7 @@ async function getJSON(url: string, attempts = 3): Promise<any> {
     const wait = (coolDownUntil.get(host) ?? 0) - Date.now();
     if (wait > 0) await sleep(wait);
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { "User-Agent": "MoneyMaker/1 (+https://moneymaker-io.web.app)" } });
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { "User-Agent": "MoneyMaker/1 (+https://usemoneymaker.com)" } });
       if (res.status === 404) return null;
       if (res.status === 403 || res.status === 429) {
         throttled++;

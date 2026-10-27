@@ -14,7 +14,7 @@ const OUT = path.join(__dirname, "../../../submission/reviewer-credentials.txt")
   user = user ? await getAuth().updateUser(user.uid, { password, emailVerified: true, disabled: false })
     : await getAuth().createUser({ email: EMAIL, password, emailVerified: true, displayName: "MoneyMaker Reviewer" });
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
-  fs.writeFileSync(OUT, `Connexion : https://moneymaker-io.web.app/connect (e-mail + mot de passe, pas de 2FA)\nE-mail : ${EMAIL}\nMot de passe : ${password}\n`, { mode: 0o600 });
+  fs.writeFileSync(OUT, `Connexion : https://usemoneymaker.com/connect (e-mail + mot de passe, pas de 2FA)\nE-mail : ${EMAIL}\nMot de passe : ${password}\n`, { mode: 0o600 });
   const existing = await db.collection("projects").where("ownerUid", "==", user.uid).get();
   if (existing.docs.some(d => d.get("name") === NAME)) { console.log(JSON.stringify({ uid: user.uid, project: "déjà présent", credentials: OUT })); process.exit(0); }
   const { projectId } = await createProject(NAME, user.uid);

@@ -54,7 +54,7 @@ function pretty(name, out) {
 
 function help() {
   console.log(`mm — CLI MoneyMaker\n\nUsage : mm <commande> [--option valeur] [--json]\n\nCommandes :\n${Object.entries(COMMANDS).map(([n, c]) =>
-    `  ${n.replace(/_/g, "-").padEnd(20)} ${c.description}\n${" ".repeat(23)}${Object.keys(c.params).map(p => `--${p === "projectId" ? "project" : p === "customerId" ? "customer" : p.replace(/[A-Z]/g, m => "-" + m.toLowerCase())}${c.required.includes(p) ? "" : "?"}`).join(" ")}`).join("\n")}\n\nAuth : MM_TOKEN=mm_pat_…   API : MM_API_URL (défaut https://moneymaker-io.web.app)\nValeurs @fichier.json lues depuis le disque.`);
+    `  ${n.replace(/_/g, "-").padEnd(20)} ${c.description}\n${" ".repeat(23)}${Object.keys(c.params).map(p => `--${p === "projectId" ? "project" : p === "customerId" ? "customer" : p.replace(/[A-Z]/g, m => "-" + m.toLowerCase())}${c.required.includes(p) ? "" : "?"}`).join(" ")}`).join("\n")}\n\nAuth : MM_TOKEN=mm_pat_…   API : MM_API_URL (défaut https://usemoneymaker.com)\nValeurs @fichier.json lues depuis le disque.`);
 }
 
 const { args, rest } = parse(process.argv.slice(2));

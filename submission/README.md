@@ -10,16 +10,16 @@ Re-vérifier avant d'envoyer : `cd backend/functions && node tests/mcp-prod-chec
 | Champ | Valeur |
 |---|---|
 | Nom | MoneyMaker |
-| URL du serveur MCP | `https://moneymaker-io.web.app/mcp` (Streamable HTTP) |
+| URL du serveur MCP | `https://usemoneymaker.com/mcp` (Streamable HTTP) |
 | Authentification | OAuth 2.1 — découverte auto (`/.well-known/oauth-protected-resource/mcp`), enregistrement dynamique, PKCE S256 |
 | Scopes | `moneymaker:read`, `moneymaker:write` |
 | Callback Claude | `https://claude.ai/api/mcp/auth_callback` (autorisé) |
 | Callback ChatGPT | `https://chatgpt.com/connector_platform_oauth_redirect` (autorisé, tout chemin sur chatgpt.com) |
-| Site | https://moneymaker-io.web.app |
-| Documentation | https://moneymaker-io.web.app/mcp-docs |
-| Confidentialité | https://moneymaker-io.web.app/privacy (section « Assistants IA ») |
-| Conditions | https://moneymaker-io.web.app/terms |
-| Support | https://moneymaker-io.web.app/support |
+| Site | https://usemoneymaker.com |
+| Documentation | https://usemoneymaker.com/mcp-docs |
+| Confidentialité | https://usemoneymaker.com/privacy (section « Assistants IA ») |
+| Conditions | https://usemoneymaker.com/terms |
+| Support | https://usemoneymaker.com/support |
 | Logo | `dashboard/public/icon-512.png` (512×512) |
 | Catégorie | Finance / Business analytics |
 | Outils | 68 : 43 lecture (`readOnlyHint`), 20 écriture, 5 suppressions (`destructiveHint`, `confirm: true`). Liste : `/mcp-docs` |
@@ -65,7 +65,7 @@ Négatifs :
 ## ChatGPT — envoyer
 
 1. platform.openai.com › Settings › Organization › **Verification** (identité / entreprise) — obligatoire avant de soumettre.
-2. platform.openai.com › **Apps** (ou Plugins) › New › « With MCP » › URL `https://moneymaker-io.web.app/mcp`, auth OAuth.
+2. platform.openai.com › **Apps** (ou Plugins) › New › « With MCP » › URL `https://usemoneymaker.com/mcp`, auth OAuth.
 3. Métadonnées ci-dessus, pays (tous), compte de test, 5 + 3 scénarios. Une seule version en revue à la fois.
 
 ## Après acceptation

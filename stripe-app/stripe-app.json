@@ -21,7 +21,7 @@
     ],
     "content_security_policy": {
       "connect-src": [
-        "https://moneymaker-io.web.app/v1/stripe-app/"
+        "https://usemoneymaker.com/v1/stripe-app/"
       ],
       "purpose": "Récupérer les données MoneyMaker (statut client, métriques) et offrir des accès promotionnels via l'API MoneyMaker. / Fetch MoneyMaker data (customer status, metrics) and grant promotional access through the MoneyMaker API."
     }
@@ -41,7 +41,7 @@
     "type": "settings"
   },
   "constants": {
-    "API_BASE": "https://moneymaker-io.web.app/v1/stripe-app"
+    "API_BASE": "https://usemoneymaker.com/v1/stripe-app"
   },
   "distribution_type": "private",
   "stripe_api_access_type": "platform",

@@ -1,6 +1,6 @@
 {
   "name": "moneymaker",
-  "owner": { "name": "MoneyMaker", "url": "https://moneymaker-io.web.app" },
+  "owner": { "name": "MoneyMaker", "url": "https://usemoneymaker.com" },
   "plugins": [
     { "name": "moneymaker", "source": "./plugins/moneymaker", "description": "Connecteur MCP MoneyMaker (OAuth) + skill d'analyse des revenus." }
   ]

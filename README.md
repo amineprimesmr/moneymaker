@@ -2,9 +2,9 @@
 
 Alternative auto-hébergée à RevenueCat : un seul backend pour les abonnements **App Store (StoreKit 2)**, **Google Play Billing** et **Stripe**, avec dashboard multi-business, app iPhone + widgets, SDK iOS/Android et webhooks signés vers tes propres serveurs. 0 % de commission.
 
-- Dashboard : https://moneymaker-io.web.app
-- API : `https://moneymaker-io.web.app/v1`
-- Doc pour agents : https://moneymaker-io.web.app/llms.txt (même contenu lisible sur `/docs`)
+- Dashboard : https://usemoneymaker.com
+- API : `https://usemoneymaker.com/v1`
+- Doc pour agents : https://usemoneymaker.com/llms.txt (même contenu lisible sur `/docs`)
 
 ## MoneyMaker vs RevenueCat
 

@@ -4,8 +4,34 @@
     {
       "name": "moneymaker-emulators",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "cd /Users/amine/Developer/moneymaker && export JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home' PATH=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin:$PATH\" && npm --prefix backend/functions run build && firebase emulators:start --project demo-moneymaker --only functions,firestore,auth,hosting"],
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/amine/Developer/moneymaker && export JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home' PATH=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin:$PATH\" && npm --prefix backend/functions run build && firebase emulators:start --project demo-moneymaker --only functions,firestore,auth,hosting"
+      ],
       "port": 5100
+    },
+    {
+      "name": "landing",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/amine/Developer/moneymaker && firebase emulators:start --project moneymaker-io --only hosting"
+      ],
+      "port": 5100
+    },
+    {
+      "name": "appstore-screenshots",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "marketing/appstore-screenshots",
+        "run",
+        "dev",
+        "--",
+        "-p",
+        "3210"
+      ],
+      "port": 3210
     }
   ]
 }
