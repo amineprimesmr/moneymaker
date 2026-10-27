@@ -174,6 +174,7 @@ struct ProPaywallView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Fermer")
+            .accessibilityIdentifier("paywall.close")
         }
         .padding(.horizontal, 18)
     }
@@ -505,7 +506,7 @@ struct ProPaywallFeatureItem: Identifiable {
 enum ProPaywallFeatureCatalog {
     static let primary: [ProPaywallFeatureItem] = [
         .init(id: "unlimited", title: "Business illimités · Toutes tes apps", symbol: "square.stack.3d.up"),
-        .init(id: "revenue", title: "Revenus en direct · App Store, Play, Stripe", symbol: "chart.line.uptrend.xyaxis"),
+        .init(id: "revenue", title: "Revenus en direct · App Store, Stripe", symbol: "chart.line.uptrend.xyaxis"),
         .init(id: "alerts", title: "Alertes · Chaque vente sur ton iPhone", symbol: "bell.badge"),
         .init(id: "widgets", title: "Widgets · Ton MRR d'un coup d'œil", symbol: "square.grid.2x2"),
         .init(id: "lifetime", title: "À vie · Payé une fois, à toi pour toujours", symbol: "infinity"),

@@ -1255,6 +1255,8 @@ struct ProSettingsSection: View {
     @EnvironmentObject var store: Store
     @Environment(\.scenePhase) private var phase
     @ObservedObject private var paywall = ProPaywall.shared
+    /// Les Réglages sont déjà en plein écran : le paywall de la racine ne peut pas s'ouvrir par-dessus.
+    @State private var showPaywall = false
 
     var body: some View {
         if let status = paywall.status, status.tester == true {
@@ -1277,7 +1279,7 @@ struct ProSettingsSection: View {
                 if status.pro {
                     SettingsRow(icon: "checkmark.seal.fill", title: String(localized: "Pro à vie"), trailing: .status(String(localized: "Actif")))
                 } else {
-                    Button { paywall.isPresented = true } label: {
+                    Button { showPaywall = true } label: {
                         SettingsRow(icon: "crown.fill", title: String(localized: "Business illimités"),
                                     trailing: .badge(String(localized: "29 € À VIE"), ProPaywallTheme.violetBright))
                     }.settingsRowButton()
@@ -1288,6 +1290,9 @@ struct ProSettingsSection: View {
                 : String(localized: "Le plan gratuit inclut \(status.freeProjects) business. Paiement unique avec Stripe, sans abonnement."))
         }
         Color.clear.frame(height: 0)
+            .fullScreenCover(isPresented: $showPaywall) { ProPaywallView().environmentObject(store) }
+            // Lien moneymaker://pro reçu pendant que les Réglages sont ouverts : c'est eux qui l'affichent.
+            .onChange(of: paywall.isPresented) { _, v in if v { paywall.isPresented = false; showPaywall = true } }
             .task { await paywall.refresh(client: store.client) }
             .onChange(of: phase) { _, p in if p == .active { Task { await paywall.refresh(client: store.client) } } }
     }
