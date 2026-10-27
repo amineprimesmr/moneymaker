@@ -1,0 +1,496 @@
+import SafariServices
+import StoreKit
+import SwiftUI
+import UIKit
+
+// MARK: - MoneyMaker Pro : paywall (porté du paywall de V2, adapté à la licence à vie)
+//
+// Même construction que V2 (PaywallView + PaywallBevelDesign) : fond noir à lueur respirante,
+// barre ⋯ / ✕, héros, titre « … Pro » en dégradé, liste de fonctions, carte de prix en verre,
+// bouton plein, mentions et liens légaux toujours visibles. Différence : un seul achat (29 €,
+// une fois, Stripe), donc une seule carte de prix au lieu du sélecteur annuel / mensuel.
+
+/// Ouvre le paywall depuis n'importe où (menu latéral, Réglages).
+@MainActor
+final class ProPaywall: ObservableObject {
+    static let shared = ProPaywall()
+    @Published var isPresented = false
+
+    /// « Nouveau business » : au-delà du quota gratuit, le paywall ; sinon le dashboard web.
+    func newBusiness(client: MoneyMakerClient) async {
+        let web = URL(string: "https://usemoneymaker.com")!
+        guard let s = try? await client.billing(), !s.pro, s.available, s.ownedProjects >= s.freeProjects,
+              await ProPurchaseRoute.current() != .none else {
+            await UIApplication.shared.open(web); return
+        }
+        isPresented = true
+    }
+}
+
+struct ProPaywallView: View {
+    @EnvironmentObject private var store: Store
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var phase
+
+    @State private var status: BillingStatus?
+    @State private var route: ProPurchaseRoute = .none
+    @State private var checkout: IdentifiableURL?
+    @State private var legalURL: IdentifiableURL?
+    @State private var isPurchasing = false
+    @State private var isRestoring = false
+    @State private var purchaseError: String?
+    @State private var showsLegalMenu = false
+
+    private let termsURL = URL(string: "https://usemoneymaker.com/terms")!
+    private let privacyURL = URL(string: "https://usemoneymaker.com/privacy")!
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                ProPaywallBackdrop()
+                ScrollView {
+                    VStack(spacing: 0) {
+                        topChrome
+                        titleBlock.padding(.horizontal, 24).padding(.top, 12)
+                        ProPaywallFeatures(items: ProPaywallFeatureCatalog.primary).padding(.top, 32)
+                        Spacer(minLength: 24)
+                        bottomSection
+                    }
+                    .padding(.top, geo.safeAreaInsets.top + 4)
+                    .padding(.bottom, max(geo.safeAreaInsets.bottom, 16) + 6)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom, alignment: .top)
+                }
+                .scrollIndicators(.hidden)
+                .ignoresSafeArea()
+            }
+        }
+        .environment(\.colorScheme, .dark)
+        .alert("Achat", isPresented: Binding(get: { purchaseError != nil }, set: { if !$0 { purchaseError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { if let purchaseError { Text(purchaseError) } }
+        .sheet(item: $checkout, onDismiss: { Task { await refreshAfterCheckout() } }) { SafariView(url: $0.url).ignoresSafeArea() }
+        .sheet(item: $legalURL) { SafariView(url: $0.url).ignoresSafeArea() }
+        .task { await load() }
+        .onChange(of: phase) { _, p in if p == .active { Task { await refreshAfterCheckout() } } }
+    }
+
+    // MARK: Haut
+
+    private var topChrome: some View {
+        HStack {
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                showsLegalMenu = true
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Color.primary.opacity(0.7))
+                    .frame(width: 32, height: 32).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Options et informations légales")
+            .popover(isPresented: $showsLegalMenu, attachmentAnchor: .rect(.bounds), arrowEdge: .top) {
+                legalMenu.presentationCompactAdaptation(.popover)
+            }
+            Spacer(minLength: 0)
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 48, height: 48)
+                    .background { closeGlass }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Fermer")
+        }
+        .padding(.horizontal, 18)
+    }
+
+    @ViewBuilder private var closeGlass: some View {
+        if #available(iOS 26.0, *) {
+            Circle().fill(.clear).glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            Circle().fill(.ultraThinMaterial)
+        }
+    }
+
+    // MARK: Titre
+
+    private var titleBlock: some View {
+        VStack(spacing: 6) {
+            ProPaywallBusinessHero(projects: store.overview?.projects ?? [])
+            VStack(spacing: 10) {
+                (Text("Fais grandir tous tes business avec ").foregroundStyle(ProPaywallTheme.title)
+                 + Text("Pro").foregroundStyle(ProPaywallTheme.proGradient))
+                    .font(MMFont.system(31, .bold))
+                    .tracking(-0.45)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(1)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+                Text(subtitle)
+                    .font(MMFont.system(15))
+                    .foregroundStyle(Color(.secondaryLabel))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+            }
+        }
+    }
+
+    private var subtitle: String {
+        let free = status?.freeProjects ?? 1
+        return String(localized: "Le plan gratuit suit \(free) business. Pro les débloque tous, pour toujours.")
+    }
+
+    // MARK: Bas
+
+    private var bottomSection: some View {
+        VStack(spacing: 12) {
+            if status?.pro == true {
+                ProPaywallPriceCard(title: "Pro à vie", price: "Actif", detail: "Tous tes business sont débloqués.")
+                ProPaywallContinueButton(title: "Continuer", isLoading: false, isEnabled: true) { dismiss() }
+            } else {
+                ProPaywallPriceCard(title: "À vie", price: "29 €", detail: "Paiement unique · sans abonnement")
+                ProPaywallContinueButton(title: "Débloquer Pro", isLoading: isPurchasing, isEnabled: canPurchase) {
+                    Task { await purchase() }
+                }
+                Text("Paiement sécurisé par Stripe. Un seul paiement de 29 € TTC, aucun renouvellement. Les business en plus s'ajoutent depuis le dashboard web.")
+                    .font(MMFont.system(11, .medium))
+                    .foregroundStyle(Color(.secondaryLabel))
+                    .multilineTextAlignment(.center)
+            }
+            HStack(spacing: 14) {
+                Button("Conditions") { legalURL = IdentifiableURL(url: termsURL) }
+                Text("·")
+                Button("Confidentialité") { legalURL = IdentifiableURL(url: privacyURL) }
+                Text("·")
+                Button(isRestoring ? "…" : "Restaurer") { Task { await restore() } }.disabled(isRestoring || isPurchasing)
+            }
+            .font(MMFont.system(11, .semibold))
+            .foregroundStyle(Color(.secondaryLabel))
+            .buttonStyle(.plain)
+
+            if status != nil, status?.pro != true, !canPurchase, !isPurchasing {
+                Text("L'achat n'est pas disponible depuis l'app dans ton pays. Passe Pro depuis usemoneymaker.com.")
+                    .font(MMFont.system(12, .medium))
+                    .foregroundStyle(MMColor.red.opacity(0.85))
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var canPurchase: Bool {
+        guard let status else { return false }
+        return status.available && !status.pro && route != .none && !isRestoring
+    }
+
+    private var legalMenu: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            menuRow("hand.raised", "Confidentialité") { showsLegalMenu = false; legalURL = IdentifiableURL(url: privacyURL) }
+            menuRow("doc.text", "Conditions") { showsLegalMenu = false; legalURL = IdentifiableURL(url: termsURL) }
+            Divider().padding(.horizontal, 12).padding(.vertical, 4)
+            menuRow("safari", "Dashboard web") { showsLegalMenu = false; openURL(URL(string: "https://usemoneymaker.com")!) }
+            menuRow("arrow.clockwise", "Restaurer") { showsLegalMenu = false; Task { await restore() } }
+        }
+        .padding(.vertical, 6)
+        .frame(minWidth: 248, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func menuRow(_ symbol: String, _ title: LocalizedStringKey, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: symbol).font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary.opacity(0.72)).frame(width: 22)
+                Text(title).font(MMFont.system(15, .medium)).foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 11).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Achat
+
+    private func load() async {
+        async let s = try? store.client.billing()
+        async let r = ProPurchaseRoute.current()
+        (status, route) = await (s, r)
+    }
+
+    private func refreshAfterCheckout() async {
+        let wasPro = status?.pro == true
+        await load()
+        if !wasPro, status?.pro == true {
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            isPurchasing = false
+        }
+    }
+
+    private func purchase() async {
+        guard !isPurchasing, !isRestoring else { return }
+        isPurchasing = true; purchaseError = nil
+        defer { isPurchasing = false }
+        do {
+            switch route {
+            case .eu:
+                guard #available(iOS 18.1, *) else { return }
+                guard case .continued = try await ExternalPurchaseCustomLink.showNotice(type: .browser) else { return }
+                let token = try await ExternalPurchaseCustomLink.token(for: "ACQUISITION")?.value
+                checkout = IdentifiableURL(url: try await store.client.proCheckoutURL(externalPurchaseToken: token))
+            case .us:
+                openURL(try await store.client.proCheckoutURL(externalPurchaseToken: nil))
+            case .none:
+                return
+            }
+        } catch {
+            purchaseError = error.localizedDescription
+        }
+    }
+
+    /// Pro est attaché au compte MoneyMaker : « Restaurer » relit simplement le statut.
+    private func restore() async {
+        isRestoring = true; defer { isRestoring = false }
+        await load()
+        if status?.pro != true { purchaseError = String(localized: "Aucun achat Pro trouvé sur ce compte MoneyMaker.") }
+    }
+}
+
+// MARK: - Design (PaywallBevelDesign de V2)
+
+enum ProPaywallTheme {
+    static let title = Color(.label)
+    /// Dégradé du mot « Pro » : l'accent vert de MoneyMaker vers le bleu de ses courbes.
+    static let proGradient = LinearGradient(
+        colors: [MMColor.hex(0x5CFFC4), MMColor.accent, MMColor.blue],
+        startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let featureTitle = Color.white.opacity(0.92)
+    static let featureIcon = Color.white.opacity(0.88)
+}
+
+struct ProPaywallBackdrop: View {
+    @State private var breathe = false
+    var body: some View {
+        ZStack {
+            Color.black
+            // Lueur respirante en bas d'écran (l'aurore de l'onboarding V2), aux couleurs de MoneyMaker.
+            EllipticalGradient(stops: [
+                .init(color: MMColor.accent.opacity(0.30), location: 0),
+                .init(color: MMColor.blue.opacity(0.16), location: 0.45),
+                .init(color: .clear, location: 1),
+            ], center: .bottom, startRadiusFraction: 0, endRadiusFraction: 0.75)
+            .scaleEffect(x: 1.4, y: breathe ? 0.78 : 0.62, anchor: .bottom)
+            .opacity(breathe ? 1 : 0.75)
+        }
+        .ignoresSafeArea()
+        .onAppear { withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true)) { breathe = true } }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Héros : les icônes des business de la personne en pile (à la place des photos de la communauté
+/// V2), avec une pastille embossée « business illimités ».
+private struct ProPaywallBusinessHero: View {
+    let projects: [ProjectSummary]
+    private let avatar: CGFloat = 82
+    private let overlap: CGFloat = 25
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            HStack(spacing: -overlap) {
+                ForEach(Array(tiles.enumerated()), id: \.offset) { index, tile in
+                    tile
+                        .frame(width: avatar, height: avatar)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .strokeBorder(LinearGradient(colors: [.white.opacity(0.42), .white.opacity(0.06), .black.opacity(0.30)],
+                                                             startPoint: .top, endPoint: .bottom), lineWidth: 1)
+                        }
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .fill(LinearGradient(colors: [.white.opacity(0.14), .clear], startPoint: .top, endPoint: .center))
+                                .allowsHitTesting(false)
+                        }
+                        .shadow(color: .black.opacity(0.32), radius: 7, y: 4)
+                        .rotationEffect(.degrees(Double(index - 1) * 4))
+                        .zIndex(Double(index))
+                }
+            }
+            pill.offset(y: 8)
+        }
+        .frame(height: 150)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Business illimités")
+    }
+
+    /// Jusqu'à trois vrais business, complétés par des tuiles « + » : quatre en tout.
+    private var tiles: [AnyView] {
+        var t: [AnyView] = projects.prefix(3).map { AnyView(ProjectIcon(project: $0, size: avatar)) }
+        while t.count < 4 {
+            t.append(AnyView(ZStack {
+                LinearGradient(colors: [Color(white: 0.20), Color(white: 0.09)], startPoint: .top, endPoint: .bottom)
+                Image(systemName: "plus").font(.system(size: 28, weight: .semibold)).foregroundStyle(MMColor.accent)
+            }))
+        }
+        return t
+    }
+
+    private var pill: some View {
+        Text("business illimités")
+            .font(MMFont.system(12.5, .bold))
+            .foregroundStyle(LinearGradient(colors: [Color(white: 0.10), Color(white: 0.30)], startPoint: .top, endPoint: .bottom))
+            .shadow(color: .white.opacity(0.85), radius: 0, y: 0.8)
+            .shadow(color: .black.opacity(0.25), radius: 0.6, y: -0.5)
+            .padding(.horizontal, 15).padding(.vertical, 8)
+            .background {
+                ZStack {
+                    Capsule(style: .continuous).fill(LinearGradient(stops: [
+                        .init(color: Color(white: 1.0), location: 0),
+                        .init(color: Color(white: 0.97), location: 0.35),
+                        .init(color: Color(white: 0.86), location: 0.75),
+                        .init(color: Color(white: 0.74), location: 1),
+                    ], startPoint: .top, endPoint: .bottom))
+                    Capsule(style: .continuous)
+                        .strokeBorder(LinearGradient(colors: [.clear, .black.opacity(0.42)], startPoint: .center, endPoint: .bottom), lineWidth: 3)
+                        .blur(radius: 1.4).mask(Capsule(style: .continuous))
+                    Capsule(style: .continuous)
+                        .strokeBorder(LinearGradient(colors: [.white, .white.opacity(0)], startPoint: .top, endPoint: .center), lineWidth: 1.6)
+                }
+                .compositingGroup()
+                .shadow(color: .black.opacity(0.42), radius: 1.5, y: 2)
+                .shadow(color: .black.opacity(0.30), radius: 14, y: 9)
+            }
+    }
+}
+
+struct ProPaywallFeatureItem: Identifiable {
+    let id: String
+    let title: LocalizedStringKey
+    let symbol: String
+}
+
+enum ProPaywallFeatureCatalog {
+    static let primary: [ProPaywallFeatureItem] = [
+        .init(id: "unlimited", title: "Business illimités · Toutes tes apps", symbol: "square.stack.3d.up"),
+        .init(id: "revenue", title: "Revenus en direct · App Store, Play, Stripe", symbol: "chart.line.uptrend.xyaxis"),
+        .init(id: "alerts", title: "Alertes · Chaque vente sur ton iPhone", symbol: "bell.badge"),
+        .init(id: "widgets", title: "Widgets · Ton MRR d'un coup d'œil", symbol: "square.grid.2x2"),
+        .init(id: "lifetime", title: "À vie · Payé une fois, à toi pour toujours", symbol: "infinity"),
+    ]
+}
+
+private struct ProPaywallFeatures: View {
+    let items: [ProPaywallFeatureItem]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(items) { item in
+                HStack(spacing: 14) {
+                    Image(systemName: item.symbol)
+                        .font(.system(size: 19))
+                        .foregroundStyle(ProPaywallTheme.featureIcon)
+                        .frame(width: 30, height: 30)
+                    Text(item.title)
+                        .font(MMFont.system(15, .medium))
+                        .foregroundStyle(ProPaywallTheme.featureTitle)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 6)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 26)
+    }
+}
+
+/// Carte de prix en verre (le segment sélectionné du sélecteur de V2), seule offre : à vie.
+private struct ProPaywallPriceCard: View {
+    let title: LocalizedStringKey
+    let price: LocalizedStringKey
+    let detail: LocalizedStringKey
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(MMFont.system(16, .bold)).foregroundStyle(Color(.label))
+                Text(detail).font(MMFont.system(13, .medium)).foregroundStyle(Color(.secondaryLabel))
+            }
+            Spacer()
+            Text(price).font(MMFont.system(24, .bold)).foregroundStyle(Color(.label))
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 82)
+        .background { glass }
+        .padding(4)
+        .overlay { RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Color.white.opacity(0.26), lineWidth: 1) }
+        .overlay(alignment: .top) {
+            Text("SANS ABONNEMENT")
+                .font(MMFont.system(12, .bold)).foregroundStyle(.black)
+                .padding(.horizontal, 11).padding(.vertical, 5)
+                .background(Capsule().fill(MMColor.accent))
+                .offset(y: -9)
+        }
+        .padding(.top, 8)
+    }
+
+    @ViewBuilder private var glass: some View {
+        let shape = RoundedRectangle(cornerRadius: 21, style: .continuous)
+        if #available(iOS 26.0, *) {
+            shape.fill(.clear).glassEffect(.regular, in: shape).shadow(color: .black.opacity(0.22), radius: 6, y: 2)
+        } else {
+            shape.fill(.ultraThinMaterial).shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+        }
+    }
+}
+
+private struct ProPaywallContinueButton: View {
+    let title: LocalizedStringKey
+    let isLoading: Bool
+    let isEnabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                if isLoading {
+                    ProgressView().tint(.black)
+                } else {
+                    Text(title)
+                        .font(MMFont.system(21, .bold)).tracking(-0.4).foregroundStyle(.black)
+                        .overlay { Text(title).font(MMFont.system(21, .bold)).tracking(-0.4).foregroundStyle(.black).offset(x: 0.35) }
+                        .padding(.horizontal, 16)
+                }
+            }
+            .frame(maxWidth: .infinity).frame(height: 54)
+            .background { capsule }
+            .overlay { Capsule(style: .continuous).strokeBorder(Color.black.opacity(0.08), lineWidth: 0.5) }
+            .opacity(isEnabled ? 1 : 0.55)
+        }
+        .buttonStyle(ProPaywallPressStyle())
+        .disabled(!isEnabled || isLoading)
+    }
+
+    @ViewBuilder private var capsule: some View {
+        if #available(iOS 26.0, *) {
+            Capsule(style: .continuous).fill(Color.white.opacity(0.92))
+                .glassEffect(.regular.tint(Color.white.opacity(0.96)).interactive(), in: Capsule())
+        } else {
+            Capsule(style: .continuous).fill(Color.white)
+        }
+    }
+}
+
+private struct ProPaywallPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .opacity(configuration.isPressed ? 0.94 : 1)
+            .animation(.spring(response: 0.22, dampingFraction: 0.82), value: configuration.isPressed)
+    }
+}

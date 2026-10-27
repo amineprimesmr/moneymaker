@@ -207,7 +207,8 @@ struct BusinessSideBar: View, Equatable {
                     }
                     Rectangle().fill(ink.opacity(0.08)).frame(height: 1).padding(.vertical, 12)
                     menuButton("plus.circle.fill", "Nouveau business") {
-                        UIApplication.shared.open(URL(string: "https://usemoneymaker.com")!)
+                        // Au-delà du business gratuit : le paywall Pro ; sinon le dashboard web.
+                        Task { await ProPaywall.shared.newBusiness(client: client) }
                     }
                     menuButton("gearshape.fill", "Réglages") { openSettings() }
                     menuButton("safari.fill", "Dashboard web") {

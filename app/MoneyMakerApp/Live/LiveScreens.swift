@@ -1246,16 +1246,13 @@ enum ProPurchaseRoute {
     }
 }
 
-/// Licence Pro dans les Réglages : statut, et achat quand la boutique le permet.
+/// Licence Pro dans les Réglages : statut, et paywall quand la boutique permet l'achat.
 struct ProSettingsSection: View {
     @EnvironmentObject var store: Store
-    @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var phase
+    @ObservedObject private var paywall = ProPaywall.shared
     @State private var status: BillingStatus?
     @State private var route: ProPurchaseRoute = .none
-    @State private var checkout: IdentifiableURL?
-    @State private var busy = false
-    @State private var error: String?
 
     var body: some View {
         if let status, status.pro || (status.available && route != .none) {
@@ -1264,43 +1261,26 @@ struct ProSettingsSection: View {
                 if status.pro {
                     SettingsRow(icon: "checkmark.seal.fill", title: String(localized: "Pro à vie"), trailing: .status(String(localized: "Actif")))
                 } else {
-                    Button { Task { await buy() } } label: {
+                    Button { paywall.isPresented = true } label: {
                         SettingsRow(icon: "crown.fill", title: String(localized: "Business illimités"),
-                                    trailing: busy ? .status("…") : .badge(String(localized: "29 € À VIE"), MMColor.accent))
-                    }.settingsRowButton().disabled(busy)
+                                    trailing: .badge(String(localized: "29 € À VIE"), MMColor.accent))
+                    }.settingsRowButton()
                 }
             }
-            SettingsFootnote(text: error ?? (status.pro
+            SettingsFootnote(text: status.pro
                 ? String(localized: "Merci ! Tous tes business sont débloqués, pour toujours.")
-                : String(localized: "Le plan gratuit inclut \(status.freeProjects) business. Paiement unique avec Stripe, sans abonnement.")))
+                : String(localized: "Le plan gratuit inclut \(status.freeProjects) business. Paiement unique avec Stripe, sans abonnement."))
         }
         Color.clear.frame(height: 0)
             .task { await load() }
             .onChange(of: phase) { _, p in if p == .active { Task { await load() } } }
-            .sheet(item: $checkout, onDismiss: { Task { await load() } }) { SafariView(url: $0.url).ignoresSafeArea() }
+            .onChange(of: paywall.isPresented) { _, shown in if !shown { Task { await load() } } }
     }
 
     private func load() async {
         async let s = try? store.client.billing()
         async let r = ProPurchaseRoute.current()
         (status, route) = await (s, r)
-    }
-
-    private func buy() async {
-        busy = true; error = nil; defer { busy = false }
-        do {
-            switch route {
-            case .eu:
-                guard #available(iOS 18.1, *) else { return }
-                guard case .continued = try await ExternalPurchaseCustomLink.showNotice(type: .browser) else { return }
-                let token = try await ExternalPurchaseCustomLink.token(for: "ACQUISITION")?.value
-                checkout = IdentifiableURL(url: try await store.client.proCheckoutURL(externalPurchaseToken: token))
-            case .us:
-                openURL(try await store.client.proCheckoutURL(externalPurchaseToken: nil))
-            case .none:
-                return
-            }
-        } catch { self.error = error.localizedDescription }
     }
 }
 

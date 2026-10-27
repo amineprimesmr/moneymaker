@@ -48,6 +48,7 @@
 		9326301A3D76873B8F70C942 /* MetricCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383FDA69C9F3FCE44ED59A32 /* MetricCards.swift */; };
 		9E22F7E452E61C7687F22A70 /* Globe.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6EDB0BDEE53E198B5CA131 /* Globe.swift */; };
 		9FB0842E3D9190DD976971E0 /* MoneyMakerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */; };
+		A23541712A449BDB19972C50 /* ProPaywall.swift in Sources */ = {isa = PBXBuildFile; fileRef = B07F7A04E06DA4EA8BE3552E /* ProPaywall.swift */; };
 		A5F141A16DD34B41D89FF132 /* InsightWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31D99055D68451C2DD0901A1 /* InsightWidgets.swift */; };
 		ADADB3EF429F2E44BA31DDA1 /* MMEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8864A5BC74A1FB07813601 /* MMEffects.swift */; };
 		AEBAE27FA6C291041BA9B259 /* MMTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B41F707AED2D8405F6A5A /* MMTheme.swift */; };
@@ -140,6 +141,7 @@
 		A925D692B3BCE98ECBB2187E /* land.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = land.json; sourceTree = "<group>"; };
 		AAC7F69770847ED8FCED312B /* WidgetGlobeData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetGlobeData.swift; sourceTree = "<group>"; };
 		AD9FF9FB850F74B6132F8088 /* SideMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideMenu.swift; sourceTree = "<group>"; };
+		B07F7A04E06DA4EA8BE3552E /* ProPaywall.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProPaywall.swift; sourceTree = "<group>"; };
 		B4D0A47CF847D152078B53C9 /* WidgetIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetIcons.swift; sourceTree = "<group>"; };
 		C21C1B609F5745CA0CD1EC26 /* Leaderboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Leaderboard.swift; sourceTree = "<group>"; };
 		C73C4CE142E8383DF54EED22 /* MoneyMaker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MoneyMaker.entitlements; sourceTree = "<group>"; };
@@ -248,6 +250,7 @@
 				1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */,
 				953420FF7BA3D03EBFF399BC /* PostHog.swift */,
 				A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */,
+				B07F7A04E06DA4EA8BE3552E /* ProPaywall.swift */,
 				FDF399933038A0DE2E6CAE08 /* Rewards.swift */,
 				FDA79FE47B32710C507EFC77 /* WebSignIn.swift */,
 			);
@@ -462,6 +465,7 @@
 				2AFD4C6B033F517E98B4102C /* NotificationPermissionView.swift in Sources */,
 				9254E7B079A1018DEE1D6D11 /* PerfProbe.swift in Sources */,
 				761153704D711A83EFB3C6D7 /* PostHog.swift in Sources */,
+				A23541712A449BDB19972C50 /* ProPaywall.swift in Sources */,
 				E41FCBB3965C52B9646B6A79 /* ProjectInsights.swift in Sources */,
 				BC140CFBA30DB38D7ACB9B4C /* RecoveryTileKit.swift in Sources */,
 				0EFF26F53F425A37EC4BB766 /* Rewards.swift in Sources */,

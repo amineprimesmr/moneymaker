@@ -4,6 +4,7 @@ import Charts
 
 struct RootView: View {
     @StateObject private var store = Store()
+    @ObservedObject private var paywall = ProPaywall.shared
     var body: some View {
         ZStack {
             if store.token == nil {
@@ -15,6 +16,7 @@ struct RootView: View {
             }
         }
         .animation(MMMotion.reveal, value: store.token == nil)
+        .fullScreenCover(isPresented: $paywall.isPresented) { ProPaywallView().environmentObject(store) }
         .environmentObject(store)
         .onReceive(Router.shared.$pendingToken.compactMap { $0 }) { t in
             Router.shared.pendingToken = nil
