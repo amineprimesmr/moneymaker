@@ -1218,10 +1218,12 @@ struct LiveSettingsView: View {
 
 // MARK: - MoneyMaker Pro (29 €, une fois, payé avec Stripe)
 
-struct BillingStatus: Decodable { let pro: Bool; let ownedProjects: Int; let freeProjects: Int; let available: Bool }
+struct BillingStatus: Decodable { let pro: Bool; let ownedProjects: Int; let freeProjects: Int; let available: Bool; var tester: Bool? }
 
 extension MoneyMakerClient {
     func billing() async throws -> BillingStatus { try await get("billing") }
+    /// Testeurs seulement : bascule son propre compte en Pro ou en gratuit.
+    func setTesterPro(_ pro: Bool) async throws -> BillingStatus { try await send("POST", "billing/tester-pro", body: ["pro": pro]) }
     func proCheckoutURL(externalPurchaseToken: String?) async throws -> URL {
         struct R: Decodable { let url: URL }
         var body: [String: Any] = ["returnUrl": "https://usemoneymaker.com/"]
@@ -1253,8 +1255,24 @@ struct ProSettingsSection: View {
     @ObservedObject private var paywall = ProPaywall.shared
     @State private var status: BillingStatus?
     @State private var route: ProPurchaseRoute = .none
+    @State private var switching = false
 
     var body: some View {
+        if let status, status.tester == true {
+            SettingsSectionTitle(title: "Mode test")
+            SettingsCard {
+                Toggle(isOn: Binding(get: { status.pro }, set: { v in Task { await setPro(v) } })) {
+                    HStack(spacing: 14) {
+                        Image(systemName: "crown.fill").foregroundStyle(MMColor.accent).frame(width: 22)
+                        Text(status.pro ? "Compte en Pro" : "Compte en gratuit").font(MMFont.system(15))
+                    }
+                }
+                .disabled(switching)
+                .padding(.horizontal, 16).padding(.vertical, 9)
+                .sensoryFeedback(.selection, trigger: status.pro)
+            }
+            SettingsFootnote(text: String(localized: "Visible seulement pour les testeurs : passe ton compte en gratuit pour voir le paywall et la limite d'un business."))
+        }
         if let status, status.pro || (status.available && route != .none) {
             SettingsSectionTitle(title: "MoneyMaker Pro")
             SettingsCard {
@@ -1281,6 +1299,11 @@ struct ProSettingsSection: View {
         async let s = try? store.client.billing()
         async let r = ProPurchaseRoute.current()
         (status, route) = await (s, r)
+    }
+
+    private func setPro(_ pro: Bool) async {
+        switching = true; defer { switching = false }
+        if let s = try? await store.client.setTesterPro(pro) { status = s }
     }
 }
 

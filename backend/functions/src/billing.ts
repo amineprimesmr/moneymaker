@@ -50,7 +50,16 @@ async function ownedProjects(uid: string) {
 
 export async function billingStatus(uid: string) {
   const [pro, owned] = await Promise.all([isPro(uid), ownedProjects(uid)]);
-  return { pro, ownedProjects: owned, freeProjects: FREE_PROJECTS, price: PRO_PRICE, available: !!(await configFor(uid)) };
+  const tester = !!(await config())?.testers.includes(uid);
+  return { pro, ownedProjects: owned, freeProjects: FREE_PROJECTS, price: PRO_PRICE, available: !!(await configFor(uid)), tester };
+}
+
+/** Testeurs (system/billing.testers) : bascule Pro / gratuit sur leur propre compte, pour voir les deux versions. */
+export async function setTesterPro(uid: string, pro: unknown) {
+  if (!(await config())?.testers.includes(uid)) throw new HttpError(403, "forbidden");
+  if (typeof pro !== "boolean") throw new HttpError(400, "invalid_pro");
+  await db.doc(`users/${uid}`).set({ pro, proTestToggledAt: Date.now() }, { merge: true });
+  return billingStatus(uid);
 }
 
 /** Bloque la création au-delà du quota gratuit (402 : l'appelant propose l'achat). */

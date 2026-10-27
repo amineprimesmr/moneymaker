@@ -41,7 +41,7 @@ import { projectLtv, audienceById, audienceCustomers, loadCustomerRows } from ".
 import { isMcpPath, handleMcp } from "./mcp/server";
 import { resolveAccessToken } from "./mcp/oauth";
 import { ACCESS_PREFIX } from "./mcp/policy";
-import { assertCanCreateProject, billingStatus, createCheckout as createProCheckout, handleBillingWebhook, safeReturnUrl } from "./billing";
+import { assertCanCreateProject, billingStatus, createCheckout as createProCheckout, handleBillingWebhook, safeReturnUrl, setTesterPro } from "./billing";
 import { verifyStripeAppSignature, stripeAppPayload, parseGrantDays, isStripeCustomerId, STRIPE_APP_GRANT_DAYS } from "./stripeApp";
 
 /** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
@@ -517,6 +517,7 @@ route("POST", "/v1/projects", async req => {
 // ── MoneyMaker Pro (licence à vie, Stripe Checkout) ───────────────────────
 route("GET", "/v1/billing", async req => billingStatus(requireUser(await authenticate(req))));
 
+route("POST", "/v1/billing/tester-pro", async req => setTesterPro(requireUser(await authenticate(req)), req.body?.pro));
 route("POST", "/v1/billing/checkout", async req => {
   const caller = await authenticate(req);
   const uid = requireUser(caller);
