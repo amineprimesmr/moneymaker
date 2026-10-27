@@ -27,7 +27,10 @@ final class SetupCache: ObservableObject {
         loadedAt = Date()
         await withTaskGroup(of: (String, SetupStatus?).self) { g in
             for p in projects { g.addTask { (p.projectId, try? await client.setup(projectId: p.projectId)) } }
-            for await (id, s) in g { if let s { byProject[id] = s } }
+            // Une seule publication pour tous les business (une par réponse redessinait le menu N fois).
+            var next = byProject
+            for await (id, s) in g { if let s { next[id] = s } }
+            byProject = next
         }
     }
 }
@@ -52,7 +55,7 @@ struct ProjectIcon: View {
 
     private var fallback: some View {
         ZStack {
-            Color.white.opacity(0.08)
+            Color(white: 0.16)
             if let p = project {
                 Text(String(p.name.prefix(1)).uppercased()).font(MMFont.system(size * 0.42, .semibold)).foregroundStyle(.white)
             } else {
@@ -164,19 +167,31 @@ struct LogoFan: View {
 
 // MARK: - Panneau
 
-struct BusinessSideBar: View {
-    @EnvironmentObject var store: Store
+/// Ne reçoit que ce qu'il affiche (pas tout le Store) et se compare sur ces entrées :
+/// les ticks du direct, le flux et les chargements ne le redessinent plus.
+struct BusinessSideBar: View, Equatable {
     @ObservedObject private var setup = SetupCache.shared
+    let projects: [ProjectSummary]
+    let activeIds: Set<String>
+    let client: MoneyMakerClient
     @Binding var isExpanded: Bool
+    /// Coche / décoche un business ; false si refusé (dernier business).
+    var toggleProject: (String) -> Bool
     var open: (ProjectSummary) -> Void
     var openSettings: () -> Void
+    /// Menu inversé par rapport à l'app : papier clair en mode sombre, ardoise en mode clair.
+    @Environment(\.colorScheme) private var appScheme
+    private var ink: Color { appScheme == .light ? .white : .black }
+
+    static func == (a: Self, b: Self) -> Bool {
+        a.activeIds == b.activeIds
+            && a.client.token == b.client.token && a.projects == b.projects
+    }
 
     var body: some View {
-        let o = store.overview
-        let projects = o?.projects ?? []
         VStack(alignment: .leading, spacing: 4) {
+            // Logo en modèle : noir sur le papier clair, blanc sur l'ardoise.
             Image("Logo").resizable().scaledToFit().frame(height: 30)
-                .shadow(color: .white.opacity(0.15), radius: 8)
                 .padding(.bottom, 18)
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -188,15 +203,15 @@ struct BusinessSideBar: View {
                             }
                     }
                     if projects.isEmpty {
-                        Text("Aucun business pour l'instant.").font(MMFont.system(14)).foregroundStyle(MMColor.ink3)
+                        Text("Aucun business pour l'instant.").font(MMFont.system(14)).foregroundStyle(ink.opacity(0.4))
                     }
-                    Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.vertical, 12)
+                    Rectangle().fill(ink.opacity(0.08)).frame(height: 1).padding(.vertical, 12)
                     menuButton("plus.circle.fill", "Nouveau business") {
-                        UIApplication.shared.open(URL(string: "https://moneymaker-io.web.app")!)
+                        UIApplication.shared.open(URL(string: "https://usemoneymaker.com")!)
                     }
                     menuButton("gearshape.fill", "Réglages") { openSettings() }
                     menuButton("safari.fill", "Dashboard web") {
-                        UIApplication.shared.open(URL(string: "https://moneymaker-io.web.app")!)
+                        UIApplication.shared.open(URL(string: "https://usemoneymaker.com")!)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -206,13 +221,19 @@ struct BusinessSideBar: View {
             .scrollIndicators(.hidden)
             .mask { Rectangle().ignoresSafeArea() }
             .scrollClipDisabled()
-            .refreshable { await setup.load(projects, client: store.client, force: true) }
+            .refreshable { await setup.load(projects, client: client, force: true) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding([.horizontal, .top], 18)
-        .task(id: projects.map(\.projectId)) { await setup.load(projects, client: store.client) }
-        .onChange(of: isExpanded) { _, open in if open { Task { await setup.load(projects, client: store.client) } } }
-        .sensoryFeedback(.selection, trigger: store.activeIds)
+        .environment(\.colorScheme, appScheme == .light ? .dark : .light)
+        .task(id: projects.map(\.projectId)) { await setup.load(projects, client: client) }
+        // Rafraîchi après l'animation d'ouverture (pas pendant : chaque réponse redessinait le menu
+        // et faisait sauter le glissé). Écoute sans redessiner le panneau.
+        .onReceive(IGMenuVisibility.shared.$visible.removeDuplicates()) { open in
+            guard open else { return }
+            Task { try? await Task.sleep(for: .milliseconds(450)); await setup.load(projects, client: client) }
+        }
+        .sensoryFeedback(.selection, trigger: activeIds)
         .sensoryFeedback(.error, trigger: refused)
     }
 
@@ -222,7 +243,7 @@ struct BusinessSideBar: View {
     /// Sélection multiple : le menu reste ouvert, l'Accueil se transforme derrière en direct.
     /// Le dernier business coché ne peut pas être retiré (vibration d'erreur + petite secousse).
     private func toggle(_ id: String) {
-        if !store.toggle(id) {
+        if !toggleProject(id) {
             refused += 1
             withAnimation(.spring(response: 0.18, dampingFraction: 0.3)) { shake = id }
             Task { try? await Task.sleep(for: .milliseconds(260)); withAnimation(.spring) { shake = nil } }
@@ -231,7 +252,7 @@ struct BusinessSideBar: View {
 
     private func row(_ p: ProjectSummary) -> some View {
         let progress = setup.byProject[p.projectId]?.progress
-        let selected = store.activeIds.contains(p.projectId)
+        let selected = activeIds.contains(p.projectId)
         return HStack(spacing: 14) {
             ProjectIcon(project: p, size: 38)
                 .opacity(selected ? 1 : 0.4)
@@ -240,16 +261,16 @@ struct BusinessSideBar: View {
                     if let progress {
                         Circle().fill(progress >= 1 ? MMColor.accent : MMColor.orange)
                             .frame(width: 9, height: 9)
-                            .overlay(Circle().stroke(Color.black, lineWidth: 2))
+                            .overlay(Circle().stroke(appScheme == .light ? Color(white: 0.12) : .white, lineWidth: 2))
                             .offset(x: 3, y: 3)
                     }
                 }
             Text(p.name).font(MMFont.system(17, .semibold))
-                .foregroundStyle(selected ? Color.white : MMColor.ink3).lineLimit(1)
+                .foregroundStyle(selected ? ink : ink.opacity(0.35)).lineLimit(1)
             Spacer(minLength: 8)
             Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(selected ? MMColor.accent : Color.white.opacity(0.25))
+                .foregroundStyle(selected ? Color(red: 0, green: 0.72, blue: 0.47) : ink.opacity(0.18))
                 .contentTransition(.symbolEffect(.replace))
         }
         .padding(.vertical, 6)
@@ -258,15 +279,76 @@ struct BusinessSideBar: View {
         .offset(x: shake == p.projectId ? 8 : 0)
     }
 
-    private func menuButton(_ icon: String, _ title: String, action: @escaping () -> Void) -> some View {
+    private func menuButton(_ icon: String, _ title: LocalizedStringKey, action: @escaping () -> Void) -> some View {
         Button { isExpanded = false; action() } label: {
             HStack(spacing: 12) {
                 Image(systemName: icon).font(.system(size: 18)).frame(width: 28)
                 Text(title).font(MMFont.system(17, .semibold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(ink.opacity(0.85))
             .padding(.vertical, 6)
         }
         .buttonStyle(MMPressStyle(scale: 0.96))
+    }
+}
+
+/// Fond du menu : blanc, avec un nuage de petits carrés sombres qui scintille en bas,
+/// au contour irrégulier comme celui des cartes de l'Accueil.
+struct SideBarBackdrop: View {
+    /// Seulement « menu visible ou non » : observer la progression redessinait ce fond à chaque image du glissement.
+    @ObservedObject private var menu = IGMenuVisibility.shared
+    @Environment(\.colorScheme) private var appScheme
+
+    var body: some View {
+        let inverted = appScheme == .light
+        ZStack {
+            // Blanc cassé en mode sombre, ardoise profonde en mode clair (le menu inverse l'app).
+            LinearGradient(colors: inverted ? [Color(white: 0.14), Color(white: 0.07)] : [Color(white: 0.93), Color(white: 0.86)],
+                           startPoint: .top, endPoint: .bottom)
+            // Toujours montés (rastérisés une fois) : les créer au début du glissement faisait sauter l'animation.
+            SideBarDots(drifting: menu.visible, ink: inverted ? .white : .black)
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+}
+
+private struct SideBarDots: View {
+    let drifting: Bool
+    var ink: Color = .black
+    @State private var drift = false
+
+    var body: some View {
+        // Chaque nappe est rastérisée seule (`drawingGroup`) et c'est la texture qui dérive : avant, le
+        // `drawingGroup` englobait les décalages animés et refaisait tout le rendu Metal à chaque image.
+        ZStack(alignment: .bottom) {
+            RecoveryDotMatrix(anchor: .bottomLeading, reach: 0.62, maxOpacity: 0.55, animated: false, ink: ink)
+                .environment(\.recoveryDotSeed, 7)
+                .frame(height: 420)
+                .drawingGroup()
+                .offset(y: drift ? -6 : 6)
+            RecoveryDotMatrix(anchor: .bottomTrailing, reach: 0.5, maxOpacity: 0.35, animated: false, ink: ink)
+                .environment(\.recoveryDotSeed, 13)
+                .frame(height: 300)
+                .drawingGroup()
+                .offset(y: drift ? 5 : -5)
+            RecoveryDotMatrix(anchor: .topTrailing, reach: 0.75, maxOpacity: 0.5, animated: false, ink: ink)
+                .environment(\.recoveryDotSeed, 21)
+                .frame(height: 380)
+                .drawingGroup()
+                .frame(maxHeight: .infinity, alignment: .top)
+                .offset(y: drift ? 6 : -6)
+            RecoveryDotMatrix(anchor: .topLeading, reach: 0.55, maxOpacity: 0.35, animated: false, ink: ink)
+                .environment(\.recoveryDotSeed, 33)
+                .frame(height: 260)
+                .drawingGroup()
+                .frame(maxHeight: .infinity, alignment: .top)
+                .offset(y: drift ? -5 : 5)
+        }
+        // La dérive ne tourne que menu visible ; menu fermé, rien ne s'anime derrière l'app.
+        .onChange(of: drifting, initial: true) { _, on in
+            if on { withAnimation(.easeInOut(duration: 4).repeatForever(autoreverses: true)) { drift = true } }
+            else { withAnimation(.linear(duration: 0)) { drift = false } }
+        }
     }
 }

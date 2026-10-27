@@ -35,7 +35,11 @@ struct FinanceSettings: Codable, Hashable {
 struct Waterfall: Codable, Hashable {
     struct StoreLine: Codable, Hashable { let grossMicros: Int; let vatMicros: Int; let feesMicros: Int; let netMicros: Int }
     struct Annual: Codable, Hashable { let netRevenueMicros: Int; let pocketMicros: Int }
-    struct Preset: Codable, Hashable { let label: String; let note: String }
+    struct Preset: Codable, Hashable {
+        let label: String; let note: String; var labelEn: String? = nil; var noteEn: String? = nil
+        var text: String { MMLang.pick(label, labelEn) ?? label }
+        var detail: String { MMLang.pick(note, noteEn) ?? note }
+    }
     let currency: String
     let days: Int
     let grossMicros: Int
@@ -90,21 +94,29 @@ final class FinanceModel: ObservableObject {
 struct NetCard: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var model = FinanceModel.shared
-    @State private var expanded = false
 
     var body: some View {
         Group {
-            if model.waterfall?.settings.showNet == true { card }
+            // Contenu équatable : les changements du Store sans rapport (flux, synchro…) ne
+            // redessinent plus la carte, seulement un nouveau calcul ou un changement de période.
+            if let w = model.waterfall, w.settings.showNet == true { NetCardContent(w: w, today: store.period == 0).equatable() }
         }
         .task(id: "\(store.period)|\(store.scopeIds ?? [])|\(store.overview?.generatedAt ?? 0)") { await model.load(store) }
     }
+}
 
-    private var card: some View {
+private struct NetCardContent: View, Equatable {
+    let w: Waterfall
+    let today: Bool
+    @State private var expanded = false
+
+    static func == (a: Self, b: Self) -> Bool { a.today == b.today && a.w == b.w }
+
+    var body: some View {
         MMCard(padding: 20) {
-            if let w = model.waterfall {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
-                        MMLabel(text: "Net en poche", trailing: store.period == 0 ? "aujourd'hui" : "\(w.days) j")
+                        MMLabel(text: String(localized: "Net en poche"), trailing: today ? String(localized: "aujourd'hui") : String(localized: "\(w.days) j"))
                     }
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text(w.pocketMicros.money(w.currency))
@@ -124,7 +136,7 @@ struct NetCard: View {
                         withAnimation(.smooth(duration: 0.4)) { expanded.toggle() }
                     } label: {
                         HStack(spacing: 6) {
-                            Text(expanded ? "Masquer le détail" : "Voir le détail").font(MMFont.system(13, .medium))
+                            (expanded ? Text("Masquer le détail") : Text("Voir le détail")).font(MMFont.system(13, .medium))
                             Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold)).rotationEffect(.degrees(expanded ? 180 : 0))
                         }
                         .foregroundStyle(MMColor.ink2)
@@ -132,13 +144,6 @@ struct NetCard: View {
                     }
                     .buttonStyle(MMPressStyle(scale: 0.97))
                 }
-            } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    MMLabel(text: "Net en poche")
-                    RoundedRectangle(cornerRadius: 8).fill(MMColor.cardFill).frame(width: 160, height: 36)
-                }
-                .modifier(MMShimmer())
-            }
         }
     }
 
@@ -146,19 +151,19 @@ struct NetCard: View {
         let franchise = w.settings.vatFranchise ?? w.settings.structure.hasPrefix("micro")
         let micro = w.settings.structure.hasPrefix("micro")
         let rows: [(String, Int, Color, Bool, String)] = [
-            ("Brut payé par les clients", w.grossMicros, MMColor.ink, false, "Ce que tes clients ont payé, toutes ventes confondues."),
-            (franchise ? "TVA collectée par les stores" : "TVA et taxes", -w.vatMicros, MMColor.ink3, true,
-             franchise ? "Les stores prélèvent la TVA du pays du client avant de te payer. Sur Stripe, en franchise, tu n'en factures pas."
-                       : "TVA comprise dans tes prix : collectée par les stores, à reverser toi-même pour Stripe."),
-            ("Commission des stores", -w.storeFeesMicros, MMColor.orange, true, "15 % (Small Business Program) ou 30 %."),
-            ("Frais de paiement Stripe", -w.paymentFeesMicros, MMColor.orange, true, "≈ 1,5 % + 0,25 € par paiement (carte européenne)."),
-            ("CA net encaissé", w.netRevenueMicros, MMColor.blue, false, micro ? "Base de calcul de tes cotisations URSSAF." : "Ce qui arrive réellement sur ton compte, hors TVA."),
-            ("Charges", -w.expensesMicros, MMColor.ink3, true, "Estimation en % de tes charges."),
-            (micro ? "Cotisations URSSAF" : "Cotisations", -w.socialMicros, MMColor.red, true,
-             micro ? "Pourcentage de ton CA payé à l'URSSAF chaque mois ou trimestre (+ versement libératoire si tu l'as choisi)." : "Cotisations sociales."),
-            ("Impôt sur les sociétés", -w.corporateTaxMicros, MMColor.red, true, "15 % jusqu'à 42 500 € de bénéfice, puis 25 %."),
-            ("Impôt sur les dividendes", -w.dividendTaxMicros, MMColor.red, true, "Flat tax sur ce que tu te verses."),
-            ("Net en poche", w.pocketMicros, MMColor.accent, false, micro ? "Avant ton impôt sur le revenu annuel (sauf versement libératoire)." : "Ce qui te revient personnellement."),
+            (String(localized: "Brut payé par les clients"), w.grossMicros, MMColor.ink, false, String(localized: "Ce que tes clients ont payé, toutes ventes confondues.")),
+            (franchise ? String(localized: "TVA collectée par les stores") : String(localized: "TVA et taxes"), -w.vatMicros, MMColor.ink3, true,
+             franchise ? String(localized: "Les stores prélèvent la TVA du pays du client avant de te payer. Sur Stripe, en franchise, tu n'en factures pas.")
+                       : String(localized: "TVA comprise dans tes prix : collectée par les stores, à reverser toi-même pour Stripe.")),
+            (String(localized: "Commission des stores"), -w.storeFeesMicros, MMColor.orange, true, String(localized: "15 % (Small Business Program) ou 30 %.")),
+            (String(localized: "Frais de paiement Stripe"), -w.paymentFeesMicros, MMColor.orange, true, String(localized: "≈ 1,5 % + 0,25 € par paiement (carte européenne).")),
+            (String(localized: "CA net encaissé"), w.netRevenueMicros, MMColor.blue, false, micro ? String(localized: "Base de calcul de tes cotisations URSSAF.") : String(localized: "Ce qui arrive réellement sur ton compte, hors TVA.")),
+            (String(localized: "Charges"), -w.expensesMicros, MMColor.ink3, true, String(localized: "Estimation en % de tes charges.")),
+            (micro ? String(localized: "Cotisations URSSAF") : String(localized: "Cotisations"), -w.socialMicros, MMColor.red, true,
+             micro ? String(localized: "Pourcentage de ton CA payé à l'URSSAF chaque mois ou trimestre (+ versement libératoire si tu l'as choisi).") : String(localized: "Cotisations sociales.")),
+            (String(localized: "Impôt sur les sociétés"), -w.corporateTaxMicros, MMColor.red, true, String(localized: "15 % jusqu'à 42 500 € de bénéfice, puis 25 %.")),
+            (String(localized: "Impôt sur les dividendes"), -w.dividendTaxMicros, MMColor.red, true, String(localized: "Flat tax sur ce que tu te verses.")),
+            (String(localized: "Net en poche"), w.pocketMicros, MMColor.accent, false, micro ? String(localized: "Avant ton impôt sur le revenu annuel (sauf versement libératoire).") : String(localized: "Ce qui te revient personnellement.")),
         ].filter { !$0.3 || $0.1 != 0 }
         return VStack(spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.offset) { i, r in
@@ -168,7 +173,7 @@ struct NetCard: View {
                         Circle().fill(r.2).frame(width: 6, height: 6)
                         Text(r.0).font(MMFont.system(13, r.3 ? .regular : .medium)).foregroundStyle(r.3 ? MMColor.ink2 : MMColor.ink)
                         Spacer()
-                        Text(r.1.money(w.currency)).font(MMFont.number(13, r.3 ? .regular : .medium)).foregroundStyle(r.3 ? MMColor.ink2 : r.2)
+                        Text(r.1.money(w.currency)).font(MMFont.number(13, r.3 ? .regular : .medium)).foregroundStyle(r.3 ? MMColor.ink2 : r.2).mmNumeric()
                     }
                     Text(r.4).font(MMFont.system(11)).foregroundStyle(MMColor.ink3).padding(.leading, 14)
                 }
@@ -181,10 +186,10 @@ struct NetCard: View {
                     ForEach(w.byStore.sorted { $0.value.grossMicros > $1.value.grossMicros }, id: \.key) { k, v in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(storeName(k)).font(MMFont.system(10, .medium)).foregroundStyle(MMColor.ink3)
-                            Text(v.netMicros.money(w.currency, compact: true)).font(MMFont.number(13, .regular))
+                            Text(v.netMicros.money(w.currency, compact: true)).font(MMFont.number(13, .regular)).mmNumeric()
                         }
                         .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(MMColor.fg(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                 }
                 .padding(.top, 10)
@@ -193,7 +198,7 @@ struct NetCard: View {
     }
 
     private func storeName(_ k: String) -> String {
-        ["app_store": "App Store", "play_store": "Autre store", "stripe": "Stripe", "promotional": "Offert"][k] ?? k
+        ["app_store": "App Store", "play_store": String(localized: "Autre store"), "stripe": "Stripe", "promotional": String(localized: "Offert")][k] ?? k
     }
 }
 
@@ -205,9 +210,9 @@ private struct WaterfallBar: View {
         let parts: [(Double, Color)] = [
             (Double(w.pocketMicros), MMColor.accent),
             (Double(w.dividendTaxMicros + w.corporateTaxMicros + w.socialMicros), MMColor.red),
-            (Double(w.expensesMicros), Color.white.opacity(0.25)),
+            (Double(w.expensesMicros), MMColor.fg(0.25)),
             (Double(w.storeFeesMicros + w.paymentFeesMicros), MMColor.orange),
-            (Double(w.vatMicros), Color.white.opacity(0.15)),
+            (Double(w.vatMicros), MMColor.fg(0.15)),
         ]
         GeometryReader { g in
             HStack(spacing: 2) {
@@ -252,7 +257,7 @@ struct FinanceSettingsSection: View {
                                 HStack(spacing: 12) {
                                     Image(systemName: "building.2.fill").font(.system(size: 14)).foregroundStyle(MMColor.ink2).frame(width: 22)
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text((s.companyName?.isEmpty == false ? s.companyName! : "Mon entreprise")).font(MMFont.system(15, .medium)).foregroundStyle(MMColor.ink)
+                                        Text((s.companyName?.isEmpty == false ? s.companyName! : String(localized: "Mon entreprise"))).font(MMFont.system(15, .medium)).foregroundStyle(MMColor.ink)
                                         Text(profileSummary(w)).font(MMFont.system(12)).foregroundStyle(MMColor.ink3).lineLimit(2)
                                     }
                                     Spacer()
@@ -314,17 +319,17 @@ struct FinanceSettingsSection: View {
 
     private func profileSummary(_ w: Waterfall) -> String {
         let s = w.settings
-        var parts = [w.presets?[s.structure]?.label ?? s.structure]
-        if s.vatFranchise ?? s.structure.hasPrefix("micro") { parts.append("franchise de TVA") }
+        var parts = [w.presets?[s.structure]?.text ?? s.structure]
+        if s.vatFranchise ?? s.structure.hasPrefix("micro") { parts.append(String(localized: "franchise de TVA")) }
         let p = s.processors
-        let procs = [p?.appStore == true ? "App Store" : nil, p?.googlePlay == true ? "Autre store" : nil, p?.stripe == true ? "Stripe" : nil].compactMap { $0 }
+        let procs = [p?.appStore == true ? "App Store" : nil, p?.googlePlay == true ? String(localized: "Autre store") : nil, p?.stripe == true ? "Stripe" : nil].compactMap { $0 }
         if !procs.isEmpty { parts.append(procs.joined(separator: ", ")) }
         return parts.joined(separator: " · ")
     }
 
     private var divider: some View { Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 16) }
 
-    private func percent(_ title: String, _ key: String, _ value: Double, step: Double = 0.01) -> some View {
+    private func percent(_ title: LocalizedStringKey, _ key: String, _ value: Double, step: Double = 0.01) -> some View {
         Stepper(value: Binding(get: { value }, set: { save([key: (($0 * 1000).rounded() / 1000)]) }), in: 0...1, step: step) {
             HStack {
                 Text(title).font(MMFont.system(14))
@@ -365,7 +370,7 @@ struct TaxProfileSheet: View {
     @State private var stripe = true
 
     private let structures = ["micro_vente", "micro_services", "micro_liberal", "sasu_is", "eurl_is", "llc_us", "uae_freezone", "custom"]
-    private let countries = [("FR", "France"), ("BE", "Belgique"), ("CH", "Suisse"), ("LU", "Luxembourg"), ("CA", "Canada"), ("US", "États-Unis"), ("AE", "Émirats"), ("GB", "Royaume-Uni")]
+    private let countries = ["FR", "BE", "CH", "LU", "CA", "US", "AE", "GB"].map { ($0, Locale.current.localizedString(forRegionCode: $0) ?? $0) }
     /// Taux du versement libératoire selon l'activité micro.
     private var vlRate: Double { structure == "micro_vente" ? 0.01 : structure == "micro_liberal" ? 0.022 : 0.017 }
     private var isMicro: Bool { structure.hasPrefix("micro") }
@@ -379,9 +384,9 @@ struct TaxProfileSheet: View {
                 }
                 Section {
                     Picker("Statut", selection: $structure) {
-                        ForEach(structures, id: \.self) { Text(presets[$0]?.label ?? $0).tag($0) }
+                        ForEach(structures, id: \.self) { Text(presets[$0]?.text ?? $0).tag($0) }
                     }
-                    if let note = presets[structure]?.note { Text(note).font(.footnote).foregroundStyle(.secondary) }
+                    if let note = presets[structure]?.detail { Text(note).font(.footnote).foregroundStyle(.secondary) }
                 } header: { Text("Statut juridique") } footer: {
                     Text("En micro : « vente » pour des biens physiques, « services » pour la plupart des apps et produits numériques, « libéral » si ton activité est déclarée en BNC. C'est indiqué sur ton attestation URSSAF.")
                 }
@@ -389,8 +394,8 @@ struct TaxProfileSheet: View {
                     Toggle("Franchise en base de TVA", isOn: $franchise)
                     if isMicro { Toggle("Versement libératoire (\(vlRate.formatted(.percent.precision(.fractionLength(1)))))", isOn: $libératoire) }
                 } header: { Text("TVA et impôt") } footer: {
-                    Text(franchise ? "Tu ne factures pas de TVA (« TVA non applicable, art. 293 B du CGI »)." : "Tu factures la TVA : elle est retirée de ton chiffre d'affaires.")
-                    + Text(isMicro ? " Le versement libératoire paie ton impôt sur le revenu en même temps que l'URSSAF ; sans lui, il est calculé une fois par an." : "")
+                    (franchise ? Text("Tu ne factures pas de TVA (« TVA non applicable, art. 293 B du CGI »).") : Text("Tu factures la TVA : elle est retirée de ton chiffre d'affaires."))
+                    + (isMicro ? Text(" Le versement libératoire paie ton impôt sur le revenu en même temps que l'URSSAF ; sans lui, il est calculé une fois par an.") : Text(verbatim: ""))
                 }
                 Section {
                     Toggle("App Store", isOn: $appStore)
@@ -402,7 +407,7 @@ struct TaxProfileSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.black)
+            .background(MMColor.bg)
             .navigationTitle("Ton profil")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -435,7 +440,6 @@ struct TaxProfileSheet: View {
             }
         }
         .tint(MMColor.accent)
-        .presentationBackground(Color.black)
-        .environment(\.colorScheme, .dark)
+        .presentationBackground(MMColor.bg)
     }
 }

@@ -58,11 +58,11 @@ struct MMTabBar: View {
             }
             .padding(.horizontal, isSelected ? 20 : 16)
             .frame(height: 52)
-            .foregroundStyle(isSelected ? AnyShapeStyle(Color.black) : AnyShapeStyle(Color.white.opacity(0.55)))
+            .foregroundStyle(isSelected ? AnyShapeStyle(MMColor.inkInverse) : AnyShapeStyle(MMColor.fg(0.55)))
             .background {
                 if isSelected {
                     Capsule()
-                        .fill(Color.white)
+                        .fill(MMColor.ink)
                         .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
                         .matchedGeometryEffect(id: "selection.pill", in: pillNamespace)
                 }
@@ -83,7 +83,7 @@ private struct GlassCapsuleBackground: ViewModifier {
         } else {
             content
                 .background(.ultraThinMaterial, in: .capsule)
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5))
+                .overlay(Capsule().strokeBorder(MMColor.fg(0.15), lineWidth: 0.5))
         }
     }
 }

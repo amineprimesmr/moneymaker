@@ -18,12 +18,24 @@ extension Notification.Name {
     static let mmLiveEvent = Notification.Name("mmLiveEvent")
 }
 
+/// Un push reçu au premier plan déclenche `willPresent` ET `didReceiveRemoteNotification` :
+/// on ne publie qu'un `.mmLiveEvent` par rafale (5 s) pour ne pas recharger le flux deux fois.
+@MainActor enum LiveEventBus {
+    private static var last = Date.distantPast
+    static func post() {
+        let now = Date()
+        guard now.timeIntervalSince(last) > 5 else { return }
+        last = now
+        NotificationCenter.default.post(name: .mmLiveEvent, object: nil)
+    }
+}
+
 // MARK: - Navigation par lien profond
 
 @MainActor
 final class Router: ObservableObject {
     static let shared = Router()
-    enum Destination: Hashable { case today, feed, globe, settings, project(String), charts(String?) }
+    enum Destination: Hashable { case today, feed, globe, leaderboard, settings, project(String), charts(String?) }
     @Published var pending: Destination?
     @Published var pendingToken: String?
 
@@ -38,6 +50,7 @@ final class Router: ObservableObject {
         case "project": if let id = url.pathComponents.dropFirst().first { pending = .project(id) }
         case "feed": pending = .feed
         case "globe": pending = .globe
+        case "leaderboard": pending = .leaderboard
         case "settings": pending = .settings
         case "charts":
             // moneymaker://charts?project=ID (sans projet : le business affiché).
@@ -53,10 +66,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-        let open = UNNotificationAction(identifier: "OPEN", title: "Voir le détail", options: [.foreground])
-        let live = UNNotificationAction(identifier: "LIVE", title: "Suivre en direct", options: [.foreground], icon: .init(systemImageName: "dot.radiowaves.left.and.right"))
+        let open = UNNotificationAction(identifier: "OPEN", title: String(localized: "Voir le détail"), options: [.foreground])
+        let live = UNNotificationAction(identifier: "LIVE", title: String(localized: "Suivre en direct"), options: [.foreground], icon: .init(systemImageName: "dot.radiowaves.left.and.right"))
         center.setNotificationCategories([
-            UNNotificationCategory(identifier: "SALE", actions: [open, live], intentIdentifiers: [], hiddenPreviewsBodyPlaceholder: "Nouvelle vente", options: []),
+            UNNotificationCategory(identifier: "SALE", actions: [open, live], intentIdentifiers: [], hiddenPreviewsBodyPlaceholder: String(localized: "Nouvelle vente"), options: []),
             UNNotificationCategory(identifier: "EVENT", actions: [open], intentIdentifiers: [], options: []),
             UNNotificationCategory(identifier: "RANKING", actions: [open], intentIdentifiers: [], options: []),
             UNNotificationCategory(identifier: "SUMMARY", actions: [], intentIdentifiers: [], options: []),
@@ -84,12 +97,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         async let f = try? client.feed(limit: 20)
         _ = await (t, f)
         WidgetCenter.shared.reloadAllTimelines()
-        await MainActor.run { NotificationCenter.default.post(name: .mmLiveEvent, object: nil) }
+        await LiveEventBus.post()
         return .newData
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        await MainActor.run { NotificationCenter.default.post(name: .mmLiveEvent, object: nil) }
+        await LiveEventBus.post()
         WidgetCenter.shared.reloadAllTimelines()
         return [.banner, .list, .sound]
     }
@@ -114,7 +127,8 @@ final class PushManager: ObservableObject {
     @Published var testing = false
 
     func refreshAuthorization() async {
-        status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        let s = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        if s != status { status = s }  // pas de publication inutile (tout l'arbre observe PushManager)
     }
 
     /// Demande l'autorisation (time-sensitive incluses) puis enregistre l'appareil.
@@ -135,14 +149,14 @@ final class PushManager: ObservableObject {
         MMShared.prefs = prefs
         let snapshot = prefs
         Task {
-            do { try await MoneyMakerClient.stored.savePrefs(snapshot); lastError = nil }
+            do { try await MoneyMakerClient.stored.savePrefs(snapshot); if lastError != nil { lastError = nil } }
             catch { lastError = error.localizedDescription }
         }
     }
 
     func sendTest() async {
         testing = true; defer { testing = false }
-        do { try await MoneyMakerClient.stored.testPush(); lastError = nil }
+        do { try await MoneyMakerClient.stored.testPush(); if lastError != nil { lastError = nil } }
         catch { lastError = error.localizedDescription }
     }
 
@@ -176,11 +190,12 @@ final class LiveActivityManager: ObservableObject {
         }
         Task {
             for await activity in Activity<RevenueActivityAttributes>.activityUpdates {
-                isRunning = true
+                if !isRunning { isRunning = true }
                 track(activity)
             }
         }
         Activity<RevenueActivityAttributes>.activities.forEach(track)
+        MMShared.liveRunning = !Activity<RevenueActivityAttributes>.activities.isEmpty
     }
 
     private func track(_ activity: Activity<RevenueActivityAttributes>) {
@@ -191,8 +206,10 @@ final class LiveActivityManager: ObservableObject {
         }
         Task {
             for await state in activity.activityStateUpdates where state == .ended || state == .dismissed {
-                isRunning = !Activity<RevenueActivityAttributes>.activities.filter { $0.activityState == .active }.isEmpty
-                if !isRunning { try? await MoneyMakerClient.stored.registerDevice(["liveActivity": ["updateToken": NSNull()]]) }
+                let running = Activity<RevenueActivityAttributes>.activities.contains { $0.activityState == .active }
+                if running != isRunning { isRunning = running }
+                if MMShared.liveRunning != running { MMShared.liveRunning = running; WidgetCenter.shared.reloadTimelines(ofKind: "MoneyMakerToday") }
+                if !running { try? await MoneyMakerClient.stored.registerDevice(["liveActivity": ["updateToken": NSNull()]]) }
             }
         }
     }
@@ -206,10 +223,12 @@ final class LiveActivityManager: ObservableObject {
             return
         }
         do {
-            let activity = try Activity.request(attributes: RevenueActivityAttributes(title: "Aujourd'hui"),
+            let activity = try Activity.request(attributes: RevenueActivityAttributes(title: String(localized: "Aujourd'hui")),
                                                 content: ActivityContent(state: state, staleDate: .now.addingTimeInterval(3 * 3600), relevanceScore: 100),
                                                 pushType: .token)
             isRunning = true
+            MMShared.liveRunning = true
+            WidgetCenter.shared.reloadTimelines(ofKind: "MoneyMakerToday")
             track(activity)
         } catch {
             PushManager.shared.lastError = error.localizedDescription
@@ -219,6 +238,8 @@ final class LiveActivityManager: ObservableObject {
     func stop() async {
         for a in Activity<RevenueActivityAttributes>.activities { await a.end(nil, dismissalPolicy: .immediate) }
         isRunning = false
+        MMShared.liveRunning = false
+        WidgetCenter.shared.reloadTimelines(ofKind: "MoneyMakerToday")
         try? await MoneyMakerClient.stored.registerDevice(["liveActivity": ["updateToken": NSNull()]])
     }
 

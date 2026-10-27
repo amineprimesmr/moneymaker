@@ -11,7 +11,6 @@
 
 import WidgetKit
 import SwiftUI
-import Charts
 import ActivityKit
 import AppIntents
 
@@ -31,116 +30,185 @@ struct TodayEntry: TimelineEntry {
     let date: Date
     let today: Today?
     let signedIn: Bool
+    var record: MMRecord? = nil
+    var goalMicros: Int? = nil
+    var liveOn = false
+    var icons: WIcons = [:]
+    var lastProjectId: String? = nil
+
+    init(date: Date, today: Today?, signedIn: Bool, history: MMHistory? = nil) {
+        self.date = date; self.today = today; self.signedIn = signedIn
+        record = MMRecord(today: today, history: history)
+        goalMicros = MMShared.dailyGoalMicros(history)
+        liveOn = MMShared.liveRunning
+    }
+
+    var goalProgress: Double? {
+        guard let g = goalMicros, g > 0, let t = today else { return nil }
+        return Double(t.netMicros) / Double(g)
+    }
 }
 
 struct TodayProvider: TimelineProvider {
-    func placeholder(in context: Context) -> TodayEntry { TodayEntry(date: .now, today: .placeholder, signedIn: true) }
+    func placeholder(in context: Context) -> TodayEntry { TodayEntry(date: .now, today: .placeholder, signedIn: true, history: .placeholder) }
     func getSnapshot(in context: Context, completion: @escaping (TodayEntry) -> Void) {
-        completion(TodayEntry(date: .now, today: context.isPreview ? .placeholder : (MMShared.cachedToday ?? .placeholder), signedIn: true))
+        completion(TodayEntry(date: .now, today: context.isPreview ? .placeholder : (MMShared.cachedToday ?? .placeholder), signedIn: context.isPreview || MoneyMakerClient.stored.token != nil,
+                              history: context.isPreview ? .placeholder : MMShared.history))
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<TodayEntry>) -> Void) {
         Task {
             let client = MoneyMakerClient.stored
-            let fresh = try? await client.today()
+            async let f = try? client.today()
+            async let h = client.history()
+            let (fresh, history) = await (f, h)
             let t = fresh ?? MMShared.cachedToday
             // Rafraîchissement à minuit pile pour repartir de zéro, sinon toutes les 15 min.
             let midnight = Calendar.current.startOfDay(for: .now.addingTimeInterval(86400))
             let next = min(midnight, .now.addingTimeInterval(15 * 60))
-            completion(Timeline(entries: [TodayEntry(date: .now, today: t, signedIn: client.token != nil)], policy: .after(next)))
+            let o = MoneyMakerClient.cachedOverview
+            let pid = o?.projectId(named: t?.last?.projectName)
+            let icons = context.family == .systemMedium ? await WIconCache.load([pid], overview: o) : [:]
+            let entries = wTimelineDates(until: next).map { d -> TodayEntry in
+                var e = TodayEntry(date: d, today: t, signedIn: client.token != nil, history: history)
+                e.icons = icons; e.lastProjectId = pid
+                return e
+            }
+            completion(Timeline(entries: entries, policy: .after(next)))
         }
     }
 }
 
-private func todayPoints(_ t: Today) -> [MMPoint] {
-    let start = Date(timeIntervalSince1970: t.dayStart / 1000)
-    let hour = max(1, min(24, Int(Date().timeIntervalSince(start) / 3600) + 1))
-    return t.hourly.prefix(hour).enumerated().map { MMPoint(date: start.addingTimeInterval(Double($0.offset) * 3600), value: Double($0.element) / 1e6) }
+/// Bouton du direct (Live Activity) : lance ou arrête, exécuté par l'app.
+struct WLiveToggle: View {
+    let on: Bool
+    var body: some View {
+        Button(intent: ToggleLiveActivityIntent()) {
+            WIconButtonLabel(symbol: on ? "stop.fill" : "dot.radiowaves.left.and.right", on: on)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(on ? Text("Arrêter le direct") : Text("Lancer le direct"))
+    }
 }
 
 struct TodayWidgetView: View {
     @Environment(\.widgetFamily) var family
     let entry: TodayEntry
 
+    private var isRecord: Bool { entry.record?.isRecord == true }
+
     var body: some View {
         if !entry.signedIn {
             SignedOutView()
         } else if let t = entry.today {
+            let net = t.netMicros.money(t.currency, compact: true)
+            let curve = todayValues(t, now: entry.date)
             switch family {
             case .accessoryInline:
-                Text("Aujourd'hui \(t.netMicros.money(t.currency, compact: true)) · \(t.transactions) ventes")
+                Text(isRecord ? "🏆 \(net) · record" : "Aujourd'hui \(net) · \(t.transactions) ventes")
             case .accessoryCircular:
-                VStack(spacing: 0) {
-                    Image(systemName: "dollarsign").font(.system(size: 10, weight: .bold)).widgetAccentable()
-                    Text(t.netMicros.money(t.currency, compact: true)).font(.system(size: 13, weight: .semibold)).minimumScaleFactor(0.5).lineLimit(1)
-                    Text("\(t.transactions)").font(.system(size: 9)).foregroundStyle(.secondary)
+                if let p = entry.goalProgress {
+                    Gauge(value: min(1, p)) { Text("Jour") } currentValueLabel: { Text(net).minimumScaleFactor(0.5) }
+                        .gaugeStyle(.accessoryCircularCapacity)
+                        .widgetAccentable()
+                } else {
+                    VStack(spacing: 0) {
+                        Text(net).font(.system(size: 14, weight: .medium)).minimumScaleFactor(0.5).lineLimit(1)
+                        Text("\(t.transactions)").font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                    .padding(4)
+                    .background(AccessoryWidgetBackground().clipShape(Circle()))
+                    .widgetAccentable()
                 }
             case .accessoryRectangular:
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("AUJOURD'HUI").font(.system(size: 10, weight: .semibold)).widgetAccentable()
-                    Text(t.netMicros.money(t.currency)).font(.system(size: 18, weight: .semibold)).minimumScaleFactor(0.6).lineLimit(1)
-                    Text("\(t.transactions) ventes · \(t.trials) essais").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Image(systemName: isRecord ? "trophy.fill" : "sun.max.fill").font(.system(size: 11, weight: .semibold)).widgetAccentable()
+                    Text(t.netMicros.money(t.currency)).font(.system(size: 19, weight: .medium)).minimumScaleFactor(0.6).lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text("\(t.transactions) ventes").font(.system(size: 11)).foregroundStyle(.secondary).fixedSize()
+                        if let p = entry.goalProgress { ProgressView(value: min(1, p)).widgetAccentable() }
+                        else { WLine(values: curve, lineWidth: 1.4, area: false, endDot: false).frame(height: 11) }
+                    }
                 }
             case .systemSmall:
-                VStack(alignment: .leading, spacing: 4) {
-                    MMLabel(text: "Aujourd'hui")
-                    Text(t.netMicros.money(t.currency, compact: true)).font(MMFont.number(30)).tracking(-0.8)
-                        .minimumScaleFactor(0.5).lineLimit(1).contentTransition(.numericText(value: Double(t.netMicros)))
-                    MMGlowChart(points: todayPoints(t), lineWidth: 1.8)
-                    HStack(spacing: 8) {
-                        Label("\(t.transactions)", systemImage: "arrow.up.right")
-                        Label("\(t.trials)", systemImage: "sparkles")
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .center, spacing: 4) {
+                        WHeader(live: true)
+                        WLiveToggle(on: entry.liveOn).padding(.top, -4)
                     }
-                    .font(MMFont.system(11)).foregroundStyle(MMColor.ink3).labelStyle(.titleAndIcon)
+                    HStack(alignment: .center, spacing: 6) {
+                        WValue(text: net, size: 30, numeric: Double(t.netMicros))
+                        if let p = entry.goalProgress { Spacer(minLength: 0); WRing(progress: p, lineWidth: 2.6).frame(width: 20, height: 20) }
+                    }
+                    .padding(.top, 4)
+                    if let r = entry.record, r.isRecord { WRecordBadge(record: r, compact: true).padding(.top, 3) }
+                    WLine(values: curve, tone: .money, lineWidth: 1.8).padding(.vertical, 6)
+                    HStack(spacing: 4) {
+                        Text("\(t.transactions)").foregroundStyle(MMColor.ink2)
+                        Text("ventes").foregroundStyle(MMColor.ink3)
+                        Spacer(minLength: 2)
+                        if let p = entry.goalProgress {
+                            Text(min(9.99, p).formatted(.percent.precision(.fractionLength(0)))).foregroundStyle(p >= 1 ? WTone.gold : MMColor.ink2)
+                            Text("obj.").foregroundStyle(MMColor.ink3)
+                        } else {
+                            Text("\(t.trials)").foregroundStyle(MMColor.ink2)
+                            Text("essais").foregroundStyle(MMColor.ink3)
+                        }
+                    }
+                    .font(MMFont.system(12, .medium)).lineLimit(1)
                 }
+                .background(alignment: .topTrailing) { if isRecord { RadialGradient(colors: [WTone.gold.opacity(0.12), .clear], center: .topTrailing, startRadius: 0, endRadius: 130).padding(-16) } }
             default:
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            MMLabel(text: "Aujourd'hui")
-                            Text(t.netMicros.money(t.currency)).font(MMFont.number(32)).tracking(-0.9).minimumScaleFactor(0.6).lineLimit(1)
-                                .contentTransition(.numericText(value: Double(t.netMicros)))
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .center, spacing: 8) {
+                        if let r = entry.record, r.isRecord {
+                            Circle().fill(WTone.moneyBright).frame(width: 6, height: 6)
+                            WRecordBadge(record: r)
+                            Spacer(minLength: 0)
+                        } else {
+                            WHeader(trailing: entry.date.formatted(date: .omitted, time: .shortened), live: true)
                         }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 3) {
-                            StatLine(value: "\(t.sales)", label: "ventes")
-                            StatLine(value: "\(t.renewals)", label: "renouv.")
-                            StatLine(value: "\(t.trials)", label: "essais")
-                        }
+                        WLiveToggle(on: entry.liveOn)
                     }
-                    MMGlowChart(points: todayPoints(t))
-                    if let l = t.last {
-                        HStack(spacing: 6) {
-                            Circle().fill(MMColor.accent).frame(width: 5, height: 5).shadow(color: MMColor.accent, radius: 3)
-                            Text("Dernière : +\(l.amountMicros.money(l.currency)) · \(l.projectName)").lineLimit(1)
-                            Spacer(minLength: 4)
-                            Text(Date(timeIntervalSince1970: l.at / 1000), style: .relative).monospacedDigit()
+                    HStack(alignment: .bottom, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(alignment: .center, spacing: 8) {
+                                if let p = entry.goalProgress, let g = entry.goalMicros {
+                                    ZStack {
+                                        WRing(progress: p, lineWidth: 3)
+                                        Text(min(9.99, p).formatted(.percent.precision(.fractionLength(0)))).font(MMFont.system(8, .semibold)).foregroundStyle(MMColor.ink2).minimumScaleFactor(0.6)
+                                    }
+                                    .frame(width: 30, height: 30)
+                                    .accessibilityLabel(Text("Objectif \(g.money(t.currency, compact: true))"))
+                                }
+                                WValue(text: t.netMicros.money(t.currency), size: 32, numeric: Double(t.netMicros))
+                            }
+                            HStack(spacing: 14) {
+                                WStat(label: String(localized: "ventes"), value: "\(t.sales)", size: 15)
+                                WStat(label: String(localized: "renouv."), value: "\(t.renewals)", size: 15)
+                                if let g = entry.goalMicros { WStat(label: String(localized: "objectif"), value: g.money(t.currency, compact: true), size: 15) }
+                                else { WStat(label: String(localized: "essais"), value: "\(t.trials)", size: 15) }
+                            }
                         }
-                        .font(MMFont.system(11)).foregroundStyle(MMColor.ink2)
+                        .fixedSize()
+                        WLine(values: curve, lineWidth: 1.8)
+                    }
+                    .padding(.top, 6)
+                    .frame(maxHeight: .infinity)
+                    if let l = t.last {
+                        WHairline().padding(.vertical, 8)
+                        HStack(spacing: 6) {
+                            WBizIcon(data: entry.lastProjectId.flatMap { entry.icons[$0] }, name: l.projectName, size: 18)
+                            Text("+\(l.amountMicros.money(l.currency))").foregroundStyle(MMColor.ink)
+                            if let c = l.country { Text(flagEmoji(c)) }
+                            Spacer(minLength: 4)
+                            WAgo(date: Date(timeIntervalSince1970: l.at / 1000)).foregroundStyle(MMColor.ink3).monospacedDigit().lineLimit(1)
+                        }
+                        .font(MMFont.system(12))
                     }
                 }
             }
         } else {
             Text("—").foregroundStyle(MMColor.ink3)
-        }
-    }
-}
-
-private struct StatLine: View {
-    let value: String, label: String
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text(value).font(MMFont.number(14, .regular))
-            Text(label).font(MMFont.system(10)).foregroundStyle(MMColor.ink3)
-        }
-    }
-}
-
-struct SignedOutView: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "dollarsign").font(.system(size: 18, weight: .bold)).foregroundStyle(.black)
-                .frame(width: 36, height: 36).background(MMColor.accent, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            Text("Ouvre MoneyMaker pour te connecter").font(MMFont.system(12)).foregroundStyle(MMColor.ink2).multilineTextAlignment(.center)
         }
     }
 }
@@ -151,8 +219,7 @@ struct MoneyMakerTodayWidget: Widget {
     static func configuration(kind: String, families: [WidgetFamily]) -> some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: TodayProvider()) { entry in
             TodayWidgetView(entry: entry)
-                .containerBackground(for: .widget) { WidgetBackdrop() }
-                .environment(\.colorScheme, .dark)
+                .containerBackground(for: .widget) { WidgetBackdrop(date: entry.date) }
                 .widgetURL(URL(string: "moneymaker://today"))
         }
         .configurationDisplayName("Aujourd'hui")
@@ -168,22 +235,26 @@ struct FeedEntry: TimelineEntry {
     let events: [FeedEvent]
     let today: Today?
     let signedIn: Bool
+    var icons: WIcons = [:]
 }
 
 struct FeedProvider: TimelineProvider {
     func placeholder(in context: Context) -> FeedEntry { FeedEntry(date: .now, events: FeedEvent.samples, today: .placeholder, signedIn: true) }
     func getSnapshot(in context: Context, completion: @escaping (FeedEntry) -> Void) {
         let cached = MMShared.cachedFeed
-        completion(FeedEntry(date: .now, events: context.isPreview || cached.isEmpty ? FeedEvent.samples : cached, today: MMShared.cachedToday ?? .placeholder, signedIn: true))
+        completion(FeedEntry(date: .now, events: context.isPreview ? FeedEvent.samples : cached, today: MMShared.cachedToday ?? .placeholder, signedIn: context.isPreview || MoneyMakerClient.stored.token != nil))
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<FeedEntry>) -> Void) {
         Task {
             let client = MoneyMakerClient.stored
             async let f = try? client.feed(limit: 12)
             async let t = try? client.today()
-            let (events, today) = await (f, t)
-            completion(Timeline(entries: [FeedEntry(date: .now, events: events ?? MMShared.cachedFeed, today: today ?? MMShared.cachedToday, signedIn: client.token != nil)],
-                                policy: .after(.now.addingTimeInterval(15 * 60))))
+            let (fresh, today) = await (f, t)
+            let events = fresh ?? MMShared.cachedFeed
+            let icons = await WIconCache.load(events.prefix(context.family == .systemLarge ? 7 : 3).map(\.projectId), overview: MoneyMakerClient.cachedOverview)
+            let next = Date.now.addingTimeInterval(15 * 60)
+            completion(Timeline(entries: wTimelineDates(until: next).map { FeedEntry(date: $0, events: events, today: today ?? MMShared.cachedToday, signedIn: client.token != nil, icons: icons) },
+                                policy: .after(next)))
         }
     }
 }
@@ -196,21 +267,16 @@ struct FeedWidgetView: View {
         if !entry.signedIn { SignedOutView() } else {
             let rows = Array(entry.events.prefix(family == .systemLarge ? 7 : 3))
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    MMLabel(text: "Ventes en direct")
-                    if let t = entry.today {
-                        Text(t.netMicros.money(t.currency, compact: true)).font(MMFont.number(13, .regular)).foregroundStyle(MMColor.accent)
-                    }
-                }
-                .padding(.bottom, 6)
+                WHeader(trailing: entry.today.map { $0.netMicros.money($0.currency, compact: true) }, live: true)
+                    .padding(.bottom, 4)
                 if rows.isEmpty {
                     Spacer()
-                    Text("Ta prochaine vente apparaîtra ici.").font(MMFont.system(12)).foregroundStyle(MMColor.ink3).frame(maxWidth: .infinity)
+                    Text("Ta prochaine vente apparaîtra ici.").font(MMFont.system(13)).foregroundStyle(MMColor.ink3).frame(maxWidth: .infinity)
                     Spacer()
                 } else {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { i, e in
-                        if i > 0 { Rectangle().fill(MMColor.hairline).frame(height: 1) }
-                        FeedRow(e: e).padding(.vertical, family == .systemLarge ? 7 : 5)
+                        if i > 0 { WHairline() }
+                        FeedRow(e: e, icon: entry.icons[e.projectId]).padding(.vertical, family == .systemLarge ? 6 : 4).frame(maxHeight: .infinity)
                     }
                     Spacer(minLength: 0)
                 }
@@ -221,20 +287,26 @@ struct FeedWidgetView: View {
 
 struct FeedRow: View {
     let e: FeedEvent
+    var icon: Data? = nil
     var body: some View {
-        let tint = e.type == "REFUND" || e.type == "BILLING_ISSUE" ? MMColor.red : e.isRevenue ? MMColor.accent : MMColor.blue
+        let negative = e.type == "REFUND" || e.type == "BILLING_ISSUE"
         HStack(spacing: 10) {
-            Image(systemName: e.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(tint)
-                .frame(width: 22, height: 22).background(tint.opacity(0.14), in: Circle())
-            VStack(alignment: .leading, spacing: 1) {
-                Text(e.title).font(MMFont.system(12, .medium)).lineLimit(1)
-                Text([e.projectName, e.country.map { "\(flagEmoji($0)) \($0)" }].compactMap { $0 }.joined(separator: " · "))
-                    .font(MMFont.system(10)).foregroundStyle(MMColor.ink3).lineLimit(1)
+            WBizIcon(data: icon, name: e.projectName, size: 26)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(e.title).font(MMFont.system(13, .medium)).foregroundStyle(negative ? MMColor.red : MMColor.ink).lineLimit(1)
+                HStack(spacing: 5) {
+                    TransactionBadge(kind: e.badge, size: 9)
+                    if let c = e.country { Text(flagEmoji(c)).font(.system(size: 11)) }
+                }
             }
             Spacer(minLength: 4)
-            VStack(alignment: .trailing, spacing: 1) {
-                if let a = e.amountText { Text(a).font(MMFont.number(13, .regular)).foregroundStyle(e.type == "REFUND" ? MMColor.red : MMColor.ink) }
-                Text(e.date, style: .relative).font(MMFont.system(10)).foregroundStyle(MMColor.ink3).monospacedDigit().lineLimit(1)
+            VStack(alignment: .trailing, spacing: 2) {
+                if let a = e.amountText {
+                    Text((e.isRevenue ? "+" : "") + a).font(MMFont.number(15, .regular)).foregroundStyle(negative ? MMColor.red : MMColor.ink)
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                }
+                WAgo(date: e.date).font(MMFont.system(11)).foregroundStyle(MMColor.ink3).monospacedDigit().lineLimit(1)
+                    .multilineTextAlignment(.trailing).frame(maxWidth: 90, alignment: .trailing)
             }
         }
     }
@@ -246,8 +318,7 @@ struct MoneyMakerFeedWidget: Widget {
     static func configuration(kind: String, families: [WidgetFamily]) -> some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: FeedProvider()) { entry in
             FeedWidgetView(entry: entry)
-                .containerBackground(for: .widget) { WidgetBackdrop() }
-                .environment(\.colorScheme, .dark)
+                .containerBackground(for: .widget) { WidgetBackdrop(date: entry.date) }
                 .widgetURL(URL(string: "moneymaker://feed"))
         }
         .configurationDisplayName("Ventes en direct")
@@ -257,106 +328,188 @@ struct MoneyMakerFeedWidget: Widget {
 }
 
 // MARK: - Live Activity + Dynamic Island
+//
+// Minimaliste, comme l'app : pas de liseré coloré, pas de logo « $ ». Un point blanc
+// discret (le « direct »), des chiffres blancs fins, une courbe verte sobre.
+
+/// Contexte d'affichage d'une mise à jour : objectif, record, vente toute fraîche.
+struct LiveMoment {
+    let goalProgress: Double?
+    let record: MMRecord?
+    /// Vente arrivée il y a moins de 8 s au moment du rendu (rendu = réception du push).
+    let freshSale: Bool
+    let saleDate: Date?
+
+    init(_ s: RevenueActivityAttributes.ContentState, now: Date = .now) {
+        let x = MMLiveExtras.current
+        let sameDay = x?.dayKey == DayKeys.last(1).first?.0
+        goalProgress = x?.goalMicros.flatMap { $0 > 0 ? Double(s.revenueMicros) / Double($0) : nil }
+        record = (sameDay && (x?.bestDayMicros ?? 0) > 0) ? MMRecord(today: s.revenueMicros, previousBest: x!.bestDayMicros) : nil
+        saleDate = s.lastSaleAt.map { Date(timeIntervalSince1970: Double($0)) }
+        freshSale = s.lastAmountMicros > 0 && (saleDate.map { now.timeIntervalSince($0) < 8 } ?? false)
+    }
+    var isRecord: Bool { record?.isRecord == true }
+}
 
 struct RevenueLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RevenueActivityAttributes.self) { context in
             LiveLockScreen(state: context.state)
-                .activityBackgroundTint(Color.black.opacity(0.82))
+                .environment(\.colorScheme, .dark) // fixed-scheme: teinte noire de la Live Activity
+                .activityBackgroundTint(Color.black.opacity(0.88))
                 .activitySystemActionForegroundColor(.white)
                 .widgetURL(URL(string: "moneymaker://today"))
         } dynamicIsland: { context in
             let s = context.state
+            let m = LiveMoment(s)
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("AUJOURD'HUI").font(MMFont.system(10, .medium)).tracking(1.6).foregroundStyle(MMColor.ink3)
-                        Text(s.revenueMicros.money(s.currency)).font(MMFont.number(24)).tracking(-0.6).foregroundStyle(.white)
+                    VStack(alignment: .leading, spacing: 3) {
+                        if m.isRecord {
+                            HStack(spacing: 3) {
+                                Image(systemName: "trophy.fill").font(.system(size: 8, weight: .semibold))
+                                Text("RECORD DU JOUR").font(MMFont.system(9, .medium)).tracking(1.4)
+                            }
+                            .foregroundStyle(WTone.gold)
+                        } else {
+                            Text("AUJOURD'HUI").font(MMFont.system(9, .medium)).tracking(1.6).foregroundStyle(.white.opacity(0.4))
+                        }
+                        Text(s.revenueMicros.money(s.currency)).font(MMFont.number(26)).tracking(-0.7).foregroundStyle(.white)
                             .contentTransition(.numericText(value: Double(s.revenueMicros))).minimumScaleFactor(0.6).lineLimit(1)
                     }
-                    .padding(.leading, 4)
+                    .padding(.leading, 6).padding(.top, 2)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(s.sales)").font(MMFont.number(24)).foregroundStyle(MMColor.accent).contentTransition(.numericText(value: Double(s.sales)))
-                        Text("ventes").font(MMFont.system(10)).foregroundStyle(MMColor.ink3)
-                    }
-                    .padding(.trailing, 4)
-                }
-                DynamicIslandExpandedRegion(.bottom) {
-                    VStack(spacing: 6) {
-                        LiveCurve(values: s.hourly).frame(height: 34)
-                        if let p = s.lastProject, s.lastAmountMicros > 0 {
-                            HStack {
-                                Text("Dernière vente · \(p)").lineLimit(1)
-                                Spacer()
-                                Text("+\(s.lastAmountMicros.money(s.lastCurrency))").foregroundStyle(MMColor.accent)
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text("VENTES").font(MMFont.system(9, .medium)).tracking(1.6).foregroundStyle(.white.opacity(0.4))
+                        HStack(spacing: 7) {
+                            if let p = m.goalProgress {
+                                WRing(progress: p, lineWidth: 2.4, track: .white.opacity(0.14)).frame(width: 18, height: 18)
                             }
-                            .font(MMFont.system(11)).foregroundStyle(MMColor.ink2)
+                            Text("\(s.sales)").font(MMFont.number(26)).foregroundStyle(.white).contentTransition(.numericText(value: Double(s.sales)))
                         }
                     }
-                    .padding(.horizontal, 4)
+                    .padding(.trailing, 6).padding(.top, 2)
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    VStack(spacing: 8) {
+                        LiveCurve(values: s.hourly).frame(height: m.freshSale ? 24 : 30)
+                        LiveSaleLine(state: s, moment: m, emphasized: true)
+                    }
+                    .padding(.horizontal, 6)
                 }
             } compactLeading: {
-                Image(systemName: "dollarsign.circle.fill").foregroundStyle(MMColor.accent)
+                if let p = m.goalProgress {
+                    WRing(progress: p, lineWidth: 2.2, track: .white.opacity(0.18)).frame(width: 14, height: 14).padding(.leading, 2)
+                } else {
+                    LiveDot()
+                }
             } compactTrailing: {
-                Text(s.revenueMicros.money(s.currency, compact: true)).font(.system(size: 13, weight: .semibold)).monospacedDigit()
-                    .foregroundStyle(MMColor.accent).contentTransition(.numericText(value: Double(s.revenueMicros)))
-                    .frame(maxWidth: 70)
+                Text(s.revenueMicros.money(s.currency, compact: true))
+                    .font(MMFont.number(14, .regular)).foregroundStyle(m.isRecord ? WTone.gold : .white)
+                    .contentTransition(.numericText(value: Double(s.revenueMicros)))
+                    .lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: 72)
             } minimal: {
-                Image(systemName: "dollarsign").font(.system(size: 12, weight: .bold)).foregroundStyle(MMColor.accent)
+                Text(s.revenueMicros.money(s.currency, compact: true))
+                    .font(MMFont.number(11, .regular)).foregroundStyle(.white)
+                    .lineLimit(1).minimumScaleFactor(0.5)
+                    .contentTransition(.numericText(value: Double(s.revenueMicros)))
             }
-            .keylineTint(MMColor.accent)
+            .keylineTint(.clear)
             .widgetURL(URL(string: "moneymaker://today"))
         }
+    }
+}
+
+/// Ligne « tiroir-caisse » : la dernière vente. Fraîche (< 8 s au rendu, c.-à-d. le push qui
+/// fait s'ouvrir l'île), elle passe au premier plan : « +9,99 € » vert, grand, transition numérique.
+/// Ensuite elle redevient discrète, avec l'ancienneté qui défile seule (`Text(date, style:)`).
+struct LiveSaleLine: View {
+    let state: RevenueActivityAttributes.ContentState
+    let moment: LiveMoment
+    var emphasized = false
+
+    var body: some View {
+        let s = state
+        VStack(alignment: .leading, spacing: 4) {
+            if s.lastAmountMicros > 0 {
+                let fresh = emphasized && moment.freshSale
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if fresh { Image(systemName: "plus").font(.system(size: 11, weight: .bold)).foregroundStyle(WTone.moneyBright) }
+                    Text((fresh ? "" : "+") + s.lastAmountMicros.money(s.lastCurrency))
+                        .font(fresh ? MMFont.number(19) : MMFont.system(12))
+                        .foregroundStyle(fresh ? WTone.moneyBright : .white)
+                        .contentTransition(.numericText(value: Double(s.lastAmountMicros)))
+                    Text(s.lastCountry.map { flagEmoji($0) } ?? "").font(MMFont.system(12)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+                    Spacer(minLength: 0)
+                    if let d = moment.saleDate {
+                        WAgo(date: d, live: true).font(MMFont.system(10)).foregroundStyle(.white.opacity(0.35)).monospacedDigit().lineLimit(1)
+                            .frame(maxWidth: 70, alignment: .trailing)
+                    }
+                }
+                .transition(.push(from: .bottom))
+                .id(s.lastSaleAt ?? s.updatedAt)
+            }
+            if let r = moment.record, r.isRecord {
+                Text("+\(r.gain.formatted(.percent.precision(.fractionLength(0)))) vs ancien record (\(r.previousBest.money(s.currency, compact: true)))")
+                    .font(MMFont.system(10, .medium)).foregroundStyle(WTone.gold.opacity(0.85)).lineLimit(1)
+            }
+        }
+    }
+}
+
+/// Le « direct » : un point blanc, un fin anneau autour. Rien d'autre.
+struct LiveDot: View {
+    var body: some View {
+        Circle().fill(.white).frame(width: 6, height: 6)
+            .padding(3)
+            .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 1))
+            .padding(.leading, 2)
     }
 }
 
 struct LiveLockScreen: View {
     let state: RevenueActivityAttributes.ContentState
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Circle().fill(MMColor.accent).frame(width: 6, height: 6).shadow(color: MMColor.accent, radius: 4)
-                    Text("REVENUS DU JOUR").font(MMFont.system(10, .medium)).tracking(1.8).foregroundStyle(MMColor.ink3)
+        let m = LiveMoment(state)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Circle().fill(.white).frame(width: 5, height: 5).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                Text("REVENUS DU JOUR").font(MMFont.system(10, .medium)).tracking(1.6).foregroundStyle(.white.opacity(0.4))
+                if m.isRecord {
+                    Image(systemName: "trophy.fill").font(.system(size: 9, weight: .semibold)).foregroundStyle(WTone.gold)
                 }
-                Text(state.revenueMicros.money(state.currency)).font(MMFont.number(34)).tracking(-1).foregroundStyle(.white)
-                    .contentTransition(.numericText(value: Double(state.revenueMicros))).minimumScaleFactor(0.6).lineLimit(1)
-                Text("\(state.sales) ventes · \(state.trials) essais").font(MMFont.system(12)).foregroundStyle(MMColor.ink2)
+                Spacer()
+                Text("MoneyMaker").font(MMFont.system(10, .medium)).foregroundStyle(.white.opacity(0.3))
             }
-            Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 6) {
-                LiveCurve(values: state.hourly).frame(width: 120, height: 44)
-                if let p = state.lastProject, state.lastAmountMicros > 0 {
-                    Text("+\(state.lastAmountMicros.money(state.lastCurrency)) · \(p)").font(MMFont.system(11)).foregroundStyle(MMColor.accent).lineLimit(1)
+            HStack(alignment: .bottom, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .center, spacing: 8) {
+                        Text(state.revenueMicros.money(state.currency)).font(MMFont.number(34)).tracking(-1).foregroundStyle(.white)
+                            .contentTransition(.numericText(value: Double(state.revenueMicros))).minimumScaleFactor(0.6).lineLimit(1)
+                        if let p = m.goalProgress { WRing(progress: p, lineWidth: 2.6, track: .white.opacity(0.14)).frame(width: 20, height: 20) }
+                    }
+                    Text("\(state.sales) ventes · \(state.trials) essais").font(MMFont.system(12)).foregroundStyle(.white.opacity(0.55))
                 }
+                .fixedSize()
+                LiveCurve(values: state.hourly).frame(height: 44)
+            }
+            if state.lastProject != nil, state.lastAmountMicros > 0 {
+                Rectangle().fill(.white.opacity(0.08)).frame(height: 0.75)
+                LiveSaleLine(state: state, moment: m, emphasized: true)
             }
         }
-        .padding(18)
+        .padding(16)
+        .background(alignment: .topTrailing) { WDots(anchor: .topTrailing, reach: 0.5, maxOpacity: 0.16).environment(\.colorScheme, .dark) }
     }
 }
 
-/// Courbe cumulée de la journée, jusqu'à l'heure courante (pas de Charts : léger et sûr en Live Activity).
+/// Courbe cumulée de la journée jusqu'à l'heure courante — même tracé que les widgets.
 struct LiveCurve: View {
     let values: [Double]
     var body: some View {
         let hour = min(values.count, max(2, Calendar.current.component(.hour, from: .now) + 1))
-        let v = Array(values.prefix(hour))
-        let maxV = max(v.max() ?? 1, 0.0001)
-        GeometryReader { g in
-            let pts = v.enumerated().map { CGPoint(x: g.size.width * CGFloat($0.offset) / CGFloat(max(v.count - 1, 1)), y: g.size.height * (1 - CGFloat($0.element / maxV) * 0.9)) }
-            ZStack {
-                Path { p in
-                    guard let f = pts.first else { return }
-                    p.move(to: CGPoint(x: f.x, y: g.size.height)); pts.forEach { p.addLine(to: $0) }; p.addLine(to: CGPoint(x: pts.last!.x, y: g.size.height))
-                }
-                .fill(LinearGradient(colors: [MMColor.accent.opacity(0.3), .clear], startPoint: .top, endPoint: .bottom))
-                Path { p in p.addLines(pts) }
-                    .stroke(MMColor.chartGradient, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                    .shadow(color: MMColor.accent.opacity(0.6), radius: 4)
-            }
-        }
+        WLine(values: Array(values.prefix(hour)), lineWidth: 1.8)
     }
 }
 
@@ -367,7 +520,7 @@ struct MoneyMakerTodayControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: "MoneyMakerTodayControl") {
             ControlWidgetButton(action: OpenURLIntent(URL(string: "moneymaker://today")!)) {
-                Label("Revenus du jour", systemImage: "dollarsign.circle.fill")
+                Label("Revenus du jour", systemImage: "chart.line.uptrend.xyaxis")
             }
         }
         .displayName("Revenus du jour")

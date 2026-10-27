@@ -18,7 +18,7 @@ extension View {
             .background {
                 ZStack {
                     MMBackdrop()
-                    if stars { MMStarfield().ignoresSafeArea() }
+                    if stars && !PerfProbe.isOff("stars") { MMStarfield().ignoresSafeArea() }
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
@@ -32,7 +32,7 @@ extension View {
             glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
         } else {
             background(.ultraThinMaterial, in: shape)
-                .overlay { shape.stroke(Color.white.opacity(0.10), lineWidth: 1) }
+                .overlay { shape.stroke(MMColor.fg(0.10), lineWidth: 1) }
         }
     }
 
@@ -57,29 +57,28 @@ extension EnvironmentValues {
     }
 }
 
-/// Apparition des sections : montée de 22 pt + fondu + léger flou, en cascade (70 ms entre deux).
-/// Au lancement, attend que le logo soit posé, pour que tout arrive dans l'ordre.
+/// Apparition des sections : fondu + montée de 14 pt, en cascade (50 ms entre deux).
+/// Rejouée à chaque arrivée sur l'onglet ; au lancement, attend que le logo soit posé.
 private struct AppearModifier: ViewModifier {
     let index: Int
     @State private var shown = false
     @ObservedObject private var launch = LaunchCoordinator.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.mmTabVisible) private var tabVisible
-    @ViewBuilder
     func body(content: Content) -> some View {
-        if BuildDemo.isOn { content.mmBuild() } else { cascade(content) }
-    }
-    private func cascade(_ content: Content) -> some View {
         content
             .opacity(shown ? 1 : 0)
-            .offset(y: shown || reduceMotion ? 0 : 22)
+            .offset(y: shown || reduceMotion ? 0 : 14)
             .onAppear { if launch.revealed && tabVisible { show() } }
             .onChange(of: launch.revealed) { _, r in if r && tabVisible { show() } }
-            .onChange(of: tabVisible) { _, v in if v && launch.revealed { show() } }
+            .onChange(of: tabVisible) { _, v in
+                // Onglet quitté : remis à zéro hors écran, pour rejouer l'arrivée la prochaine fois.
+                if v { if launch.revealed { show() } } else { shown = false }
+            }
     }
     private func show() {
         guard !shown else { return }
-        withAnimation(.spring(response: 0.55, dampingFraction: 0.9).delay(Double(index) * 0.07)) { shown = true }
+        withAnimation(.smooth(duration: 0.45).delay(Double(min(index, 6)) * 0.05)) { shown = true }
     }
 }
 
@@ -93,7 +92,7 @@ struct MMPressStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? scale : 1)
             .opacity(configuration.isPressed ? 0.85 : 1)
             .animation(.spring(response: 0.28, dampingFraction: 0.7), value: configuration.isPressed)
-            .sensoryFeedback(.impact(weight: .light), trigger: configuration.isPressed) { _, new in new }
+            .sensoryFeedback(.impact(weight: .light), trigger: configuration.isPressed) { _, new in new && AppPrefs.haptics }
     }
 }
 
@@ -150,7 +149,7 @@ struct MMSegmented<T: Hashable>: View {
                         .foregroundStyle(on ? MMColor.ink : MMColor.ink3)
                         .frame(maxWidth: .infinity).padding(.vertical, 8)
                         .background {
-                            if on { Capsule().fill(Color.white.opacity(0.12)).matchedGeometryEffect(id: "pill", in: ns) }
+                            if on { Capsule().fill(MMColor.fg(0.12)).matchedGeometryEffect(id: "pill", in: ns) }
                         }
                         .contentShape(Capsule())
                 }
@@ -158,7 +157,7 @@ struct MMSegmented<T: Hashable>: View {
             }
         }
         .padding(3)
-        .background(Color.white.opacity(0.04), in: Capsule())
+        .background(MMColor.fg(0.04), in: Capsule())
         .overlay { Capsule().strokeBorder(MMColor.hairline, lineWidth: 1) }
         .sensoryFeedback(.selection, trigger: selection)
     }
@@ -175,7 +174,7 @@ struct MMRing: View {
 
     var body: some View {
         ZStack {
-            Circle().stroke(Color.white.opacity(0.08), lineWidth: lineWidth)
+            Circle().stroke(MMColor.fg(0.08), lineWidth: lineWidth)
             Circle().trim(from: 0, to: shown)
                 .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
@@ -192,7 +191,7 @@ struct MMShimmer: ViewModifier {
     func body(content: Content) -> some View {
         content.overlay {
             GeometryReader { g in
-                LinearGradient(colors: [.clear, Color.white.opacity(0.08), .clear], startPoint: .leading, endPoint: .trailing)
+                LinearGradient(colors: [.clear, MMColor.fg(0.08), .clear], startPoint: .leading, endPoint: .trailing)
                     .frame(width: g.size.width * 0.6)
                     .offset(x: phase * g.size.width * 1.6)
             }
@@ -207,7 +206,13 @@ struct MMShimmer: ViewModifier {
 struct MMStarfield: View {
     var count = 110
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.scenePhase) private var scenePhase
+    /// Hors écran (onglet caché, page empilée), l'horloge s'arrête.
+    @State private var onScreen = false
     private let stars: [Star]
+    /// Étoiles blanches sur fond sombre, gris ardoise sur fond clair.
+    private var starInk: Color { scheme == .light ? Color(red: 0.35, green: 0.36, blue: 0.45) : .white }
 
     init(count: Int = 110, seed: UInt64 = 0xB16B00B5) {
         self.count = count
@@ -218,7 +223,10 @@ struct MMStarfield: View {
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { t in
+        // En pause pendant le défilement, hors écran et app en arrière-plan : 30 i/s de Canvas plein
+        // écran derrière une page qui défile coûtaient des images au défilement.
+        let paused = reduceMotion || !onScreen || scenePhase != .active || ScrollActivity.shared.scrolling
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: paused)) { t in
             let time = reduceMotion ? 0 : t.date.timeIntervalSinceReferenceDate
             Canvas { ctx, size in
                 var buckets = [Path](repeating: Path(), count: 6)
@@ -228,12 +236,14 @@ struct MMStarfield: View {
                     buckets[b].addEllipse(in: CGRect(x: s.x * size.width - s.r, y: s.y * size.height - s.r, width: s.r * 2, height: s.r * 2))
                 }
                 for (i, p) in buckets.enumerated() where !p.isEmpty {
-                    ctx.fill(p, with: .color(.white.opacity(0.06 + 0.40 * (Double(i) + 0.5) / 6)))
+                    ctx.fill(p, with: .color(starInk.opacity(0.06 + 0.40 * (Double(i) + 0.5) / 6)))
                 }
             }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+        .onAppear { onScreen = true }
+        .onDisappear { onScreen = false }
     }
 
     private struct Star { let x, y: Double; let r: CGFloat; let phase, speed: Double }

@@ -10,14 +10,37 @@ struct MoneyMakerApp: App {
             RootView()
                 // La synchro descend de la Dynamic Island par-dessus toute l'app (comme V2).
                 .overlay(alignment: .top) { IslandRefreshBanner(state: .home).ignoresSafeArea() }
-                .overlay { if showsSplash { LaunchSplashView { showsSplash = false } } }
+                .overlay { if showsSplash { splash } }
                 .onOpenURL { Router.shared.open($0) }
-                // fixed-scheme: the whole product (dashboard, widgets) is dark-only.
-                .preferredColorScheme(.dark)
+                // Apparence choisie dans les Réglages (mm.theme) : Système, Clair ou Sombre.
+                .mmAppTheme()
                 .tint(MMColor.accent)
+                .onAppear { PerfProbe.start() }
         }
     }
 }
+
+extension MoneyMakerApp {
+    /// Visite filmée (DEBUG) : écran noir jusqu'au début de l'enregistrement, puis l'ouverture se joue.
+    @ViewBuilder
+    private var splash: some View {
+        #if DEBUG
+        TourGate { LaunchSplashView { showsSplash = false } }
+        #else
+        LaunchSplashView { showsSplash = false }
+        #endif
+    }
+}
+
+#if DEBUG
+private struct TourGate<C: View>: View {
+    @ViewBuilder var content: () -> C
+    @ObservedObject private var tour = AutoTour.shared
+    var body: some View {
+        if tour.ready { content() } else { Color.black.ignoresSafeArea().onAppear { tour.startIfNeeded() } }
+    }
+}
+#endif
 
 extension Color {
     static let mmGreen = MMColor.accent
@@ -27,18 +50,68 @@ extension Color {
 @MainActor
 final class Store: ObservableObject {
     @Published var token: String? = MoneyMakerClient.stored.token
-    @Published var overview: Overview? = MoneyMakerClient.cachedOverview
-    @Published var alerts: [RankingAlert] = MoneyMakerClient.cachedAlerts
+    @Published var overview: Overview? { didSet { memoValid = false } }
+    @Published var alerts: [RankingAlert] = [] { didSet { memoValid = false } }
     @Published var days = max(7, UserDefaults.standard.object(forKey: "mm.period") as? Int ?? 28)
     @Published var error: String?
     @Published var loading = false
-    @Published var today: Today? = MMShared.cachedToday
-    @Published var feed: [FeedEvent] = MMShared.cachedFeed
+    @Published var today: Today?
+    @Published var feed: [FeedEvent] = []
+
+    init() {
+        observePrefs()
+        // Cache disque (trousseau + JSON) lu et décodé hors du fil principal. Le splash de lancement
+        // dure plus d'une seconde : les données sont posées bien avant que le contenu n'apparaisse.
+        // On n'écrase jamais une valeur déjà arrivée du réseau entre-temps.
+        guard token != nil else { return }
+        Task { [weak self] in
+            let c = await Task.detached(priority: .userInitiated) {
+                (MoneyMakerClient.cachedOverview, MoneyMakerClient.cachedAlerts, MMShared.cachedToday, MMShared.cachedFeed)
+            }.value
+            guard let self, self.token != nil else { return }
+            if self.overview == nil { self.overview = c.0 }
+            if self.alerts.isEmpty { self.alerts = c.1 }
+            if self.today == nil { self.today = c.2 }
+            if self.feed.isEmpty { self.feed = c.3 }
+        }
+    }
     /// Pulsation déclenchée à chaque nouvel événement reçu en direct.
     @Published var liveTick = 0
+    /// Change à chaque réglage d'affichage (UTC, détail par business, ouverture…) : les vues qui lisent
+    /// AppPrefs se redessinent, avec animation, sans attendre le prochain rafraîchissement.
+    @Published var prefsRevision = 0
+    /// Vrai pendant un recalcul déclenché par un réglage (devise) : les chiffres se floutent puis reviennent.
+    @Published var reformatting = false
+    private var prefsObserver: NSObjectProtocol?
+    private var prefsSnapshot = Store.displayPrefs()
+
+    private static func displayPrefs() -> [String] {
+        let d = UserDefaults.standard
+        return [AppPrefs.utcKey, AppPrefs.perBusinessKey, AppPrefs.openAsKey, AppTheme.storageKey].map { "\(d.object(forKey: $0) ?? "")" }
+    }
+
+    func observePrefs() {
+        guard prefsObserver == nil else { return }
+        prefsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let now = Store.displayPrefs()
+                guard now != self.prefsSnapshot else { return }
+                self.prefsSnapshot = now
+                withAnimation(MMMotion.data) { self.prefsRevision += 1 }
+            }
+        }
+    }
+
+    /// Recalcul après un changement de devise : flou bref, puis les montants roulent vers leurs nouvelles valeurs.
+    func reformat() async {
+        withAnimation(MMMotion.settle) { reformatting = true }
+        await refresh()
+        withAnimation(MMMotion.data) { reformatting = false }
+    }
     /// Business affichés (sélection multiple, au moins un). Vide = jamais choisi → tous. Mémorisé.
     @Published var selectedIds: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "mm.selectedProjects") ?? []) {
-        didSet { UserDefaults.standard.set(Array(selectedIds), forKey: "mm.selectedProjects") }
+        didSet { memoValid = false; UserDefaults.standard.set(Array(selectedIds), forKey: "mm.selectedProjects") }
     }
     /// Période de l'Accueil : 0 = aujourd'hui, sinon nombre de jours (28 par défaut).
     @Published var period: Int = UserDefaults.standard.object(forKey: "mm.period") as? Int ?? 28 {
@@ -48,7 +121,7 @@ final class Store: ObservableObject {
     var allProjects: [ProjectSummary] { overview?.projects ?? [] }
 
     /// Logo touché sur l'Accueil : on ne regarde que ce business, sans changer la sélection.
-    @Published var focusId: String?
+    @Published var focusId: String? { didSet { memoValid = false } }
 
     /// Périmètre réellement affiché : le business mis en avant, sinon la sélection.
     var viewIds: Set<String> { memo.view }
@@ -95,7 +168,6 @@ final class Store: ObservableObject {
     // changent qu'avec l'overview, les alertes, la sélection ou le business mis en avant.
 
     private struct ScopeMemo {
-        var key = ""
         var active: Set<String> = []
         var view: Set<String> = []
         var selectedProjects: [ProjectSummary] = []
@@ -104,11 +176,13 @@ final class Store: ObservableObject {
         var alerts: [RankingAlert] = []
     }
     private var memoStore = ScopeMemo()
+    /// Invalidé par les `didSet` des entrées : l'ancienne clé (chaîne + tri de la sélection)
+    /// était reconstruite à chaque accès, des dizaines de fois par image.
+    private var memoValid = false
 
     private var memo: ScopeMemo {
-        let key = "\(overview?.generatedAt ?? 0)|\(overview?.projects.count ?? 0)|\(selectedIds.sorted())|\(focusId ?? "")|\(alerts.count)|\(alerts.first?.id ?? "")"
-        if memoStore.key == key { return memoStore }
-        var m = ScopeMemo(key: key)
+        if memoValid { return memoStore }
+        var m = ScopeMemo()
         let all = allProjects, allIds = Set(all.map(\.projectId))
         let valid = selectedIds.intersection(allIds)
         m.active = valid.isEmpty ? allIds : valid
@@ -128,11 +202,14 @@ final class Store: ObservableObject {
                                     downloads: dl.isEmpty ? nil : dl.reduce(0, +), hasTrials: ps.contains { $0.hasTrials ?? ($0.activeTrials > 0) })
             }
         }
+        // Seulement nos apps : les concurrents suivis (ex. Whoop) n'apparaissent jamais dans l'Accueil.
+        let alerts = alerts.filter { $0.own != false }
         if m.view.count == all.count { m.alerts = alerts } else {
             let names = Set(m.viewProjects.map(\.name))
             m.alerts = alerts.filter { a in a.projectId.map(m.view.contains) ?? names.contains(a.projectName ?? "") }
         }
         memoStore = m
+        memoValid = true
         return m
     }
 
@@ -144,11 +221,11 @@ final class Store: ObservableObject {
 
     /// « Tous les business », « V2 », « V2 + 10K Design », « 3 business ».
     var scopeLabel: String {
-        if isAll { return allProjects.count > 1 ? "Tous les business" : (allProjects.first?.name ?? "MoneyMaker") }
+        if isAll { return allProjects.count > 1 ? String(localized: "Tous les business") : (allProjects.first?.name ?? "MoneyMaker") }
         let ps = viewProjects
         if ps.count == 1 { return ps[0].name }
         if ps.count == 2 { return "\(ps[0].name) + \(ps[1].name)" }
-        return "\(ps.count) business"
+        return String(localized: "\(ps.count) business")
     }
 
     /// Coche / décoche un business. Refuse de retirer le dernier (retourne false).
@@ -182,11 +259,17 @@ final class Store: ObservableObject {
 
     func signIn(_ raw: String) async {
         let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard t.hasPrefix("mm_pat_") || t == "mm_demo" else { error = "Le jeton doit commencer par mm_pat_"; return }
+        guard t.hasPrefix("mm_pat_") || t == "mm_demo" else { error = String(localized: "Le jeton doit commencer par mm_pat_"); return }
         token = t
+        authRejected = false
         await refresh()
-        if error == nil { MoneyMakerClient.save(token: t) } else { token = nil }
+        // Seul un refus du serveur (jeton invalide) annule la connexion : hors ligne, on garde le jeton
+        // et l'app réessaiera au prochain rafraîchissement au lieu de renvoyer vers la connexion web.
+        if authRejected { token = nil } else { MoneyMakerClient.save(token: t) }
     }
+
+    /// Le dernier rafraîchissement a été refusé par le serveur (jeton révoqué ou invalide).
+    private var authRejected = false
 
     var isDemo: Bool { token == "mm_demo" }
 
@@ -199,16 +282,24 @@ final class Store: ObservableObject {
     func refresh() async {
         loading = true; defer { loading = false }
         let c = client
-        async let o = Result.capture { try await c.overview(days: days) }
+        let d = days
+        // Une nouvelle tentative sur les erreurs passagères (réseau, annulation) avant d'afficher un échec.
+        async let o = Result.capture {
+            do { return try await c.overview(days: d) } catch { try await Task.sleep(for: .milliseconds(600)); return try await c.overview(days: d) }
+        }
         async let a = try? c.alerts()
         let ids = scopeIds
         async let t = try? c.today(projectIds: ids)
         async let f = try? c.feed(projectIds: ids)
         switch await o {
-        case .success(let v): overview = v; error = nil
-        case .failure(let e): self.error = e.localizedDescription
+        case .success(let v): withAnimation(MMMotion.data) { overview = v; error = nil }
+        case .failure(let e):
+            // Une annulation n'est pas une panne : on garde les données affichées.
+            if e is CancellationError || (e as? URLError)?.code == .cancelled { break }
+            if let status = (e as? APIError)?.status, status == 401 || status == 403 { authRejected = true }
+            self.error = e.localizedDescription
         }
-        if let v = await a { alerts = v }
+        if let v = await a { withAnimation(MMMotion.data) { alerts = v } }
         await applyLive(today: t, feed: f)
     }
 
@@ -229,6 +320,8 @@ final class Store: ObservableObject {
             if let f { feed = f }
         }
         if let t, isAll { await LiveActivityManager.shared.refresh(with: t) }
+        // Historique 365 j (record, série, projection, objectif auto) : rechargé au plus toutes les 3 h.
+        if isAll { Task.detached(priority: .utility) { _ = await MoneyMakerClient.stored.history() } }
     }
 }
 

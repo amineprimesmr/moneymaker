@@ -15,7 +15,7 @@ struct ProjectInsights: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
                 if p.hasTrials ?? (p.activeTrials > 0) {
-                    RateTile(title: "Conversion essai", value: p.trialConversionRate, color: MMColor.accent)
+                    RateTile(title: String(localized: "Conversion essai"), value: p.trialConversionRate, color: MMColor.accent)
                 }
                 RateTile(title: "Churn", value: p.churnRate, color: MMColor.red)
             }
@@ -32,7 +32,7 @@ struct ProjectInsights: View {
             }
             if !events.isEmpty {
                 HStack {
-                    MMLabel(text: "Activité")
+                    MMLabel(text: String(localized: "Activité"))
                     NavigationLink(value: p) {
                         Text("Tout voir").font(MMFont.system(12, .medium)).foregroundStyle(MMColor.ink2)
                     }

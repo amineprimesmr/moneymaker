@@ -9,10 +9,12 @@ struct RootView: View {
             if store.token == nil {
                 SignInView().transition(.opacity.combined(with: .scale(scale: 1.04)))
             } else {
-                RootTabView().transition(.opacity)
+                RootTabView()
+                    .mmUpdating(store.reformatting)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
         }
-        .animation(.easeInOut(duration: 0.45), value: store.token == nil)
+        .animation(MMMotion.reveal, value: store.token == nil)
         .environmentObject(store)
         .onReceive(Router.shared.$pendingToken.compactMap { $0 }) { t in
             Router.shared.pendingToken = nil
@@ -50,7 +52,7 @@ struct SignInView: View {
             Spacer()
 
             VStack(spacing: 14) {
-                MMPrimaryButton(title: "Se connecter ou créer un compte", loading: store.loading) { WebSignIn.shared.start { result in
+                MMPrimaryButton(title: String(localized: "Se connecter ou créer un compte"), loading: store.loading) { WebSignIn.shared.start { result in
                     switch result {
                     case .success(let t): Task { await store.signIn(t) }
                     case .failure(let e): authError = e.localizedDescription
@@ -88,9 +90,9 @@ struct SignInView: View {
                     Text(e).font(MMFont.system(13)).foregroundStyle(MMColor.red).multilineTextAlignment(.center).transition(.opacity)
                 }
                 HStack(spacing: 14) {
-                    Link("Confidentialité", destination: URL(string: "https://moneymaker-io.web.app/privacy")!)
-                    Link("Conditions", destination: URL(string: "https://moneymaker-io.web.app/terms")!)
-                    Link("Aide", destination: URL(string: "https://moneymaker-io.web.app/support")!)
+                    Link("Confidentialité", destination: URL(string: "https://usemoneymaker.com/privacy")!)
+                    Link("Conditions", destination: URL(string: "https://usemoneymaker.com/terms")!)
+                    Link("Aide", destination: URL(string: "https://usemoneymaker.com/support")!)
                 }
                 .font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
                 .padding(.top, 4)
@@ -115,25 +117,16 @@ struct RootTabView: View {
     @State private var menuOpen = false
 
     private let items: [MMTabBar.Item] = [
-        .init(tag: 0, title: "Accueil", icon: "square.grid.2x2.fill"),
-        .init(tag: 1, title: "Ventes", icon: "bolt.fill"),
-        .init(tag: 2, title: "Planète", icon: "globe.europe.africa.fill"),
+        .init(tag: 0, title: String(localized: "Accueil"), icon: "square.grid.2x2.fill"),
+        .init(tag: 1, title: String(localized: "Ventes"), icon: "bolt.fill"),
+        .init(tag: 3, title: String(localized: "Classement"), icon: "trophy.fill"),
     ]
     @State private var showSettings = false
 
     var body: some View {
-        SideMenu(isEnabled: tab == 0 && homePath.isEmpty, isExpanded: $menuOpen, contentKey: "\(tab)|\(homePath.count)") { _ in
-            BusinessSideBar(isExpanded: $menuOpen) { p in
-                homePath = NavigationPath(); homePath.append(p)
-            } openSettings: {
-                menuOpen = false
-                showSettings = true
-            }
-        } content: { _ in
-            tabs
-        }
+        shell
         .task { LaunchSync.runOnce(store) }
-        .sheet(isPresented: $showSettings) { LiveSettingsView() }
+        .fullScreenCover(isPresented: $showSettings) { LiveSettingsView() }
         .task { await prompt.presentIfNeeded() }
         .sheet(isPresented: $prompt.isPresented) {
             NotificationPermissionView { prompt.enable() } secondaryAction: { prompt.later() }
@@ -145,21 +138,62 @@ struct RootTabView: View {
             route(router.pending)
             #if DEBUG
             if ProcessInfo.processInfo.environment["MM_OPEN_SETTINGS"] != nil { router.pending = .settings }
+            // Captures App Store : écran d'arrivée (moneymaker://feed…), sans la confirmation d'openurl.
+            if let r = ProcessInfo.processInfo.environment["MM_ROUTE"], let u = URL(string: r) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { router.open(u) }
+            }
             #endif
         }
         .onChange(of: store.overview?.projects.count) { _, _ in route(router.pending) }
     }
 
+    @ViewBuilder
+    private var shell: some View {
+        let key: AnyHashable = "\(tab)|\(homePath.count)"
+        if #available(iOS 26.0, *) {
+            // Menu façon Instagram : page entière cachée à gauche, l'app glisse vers la droite.
+            IGAccessoryView(isEnabled: tab == 0 && homePath.isEmpty, isVisible: $menuOpen, contentKey: key, accessoryKey: sideBarKey,
+                            backdrop: AnyView(SideBarBackdrop())) {
+                sideBar
+            } content: { tabs }
+        } else {
+            SideMenu(isEnabled: tab == 0 && homePath.isEmpty, isExpanded: $menuOpen, contentKey: key) { _ in sideBar } content: { _ in tabs }
+        }
+    }
+
+    /// Ce que le menu affiche : il n'est reconstruit que si l'un de ces éléments change.
+    private var sideBarKey: AnyHashable {
+        AnyHashable([AnyHashable(store.overview?.projects ?? []), AnyHashable(store.activeIds), AnyHashable(store.client.token)])
+    }
+
+    private var sideBar: some View {
+        BusinessSideBar(projects: store.overview?.projects ?? [], activeIds: store.activeIds, client: store.client,
+                        isExpanded: $menuOpen, toggleProject: { store.toggle($0) }) { p in
+            homePath = NavigationPath(); homePath.append(p)
+        } openSettings: {
+            menuOpen = false
+            showSettings = true
+        }
+        .equatable()
+    }
+
+    @ViewBuilder
+    private var tabBar: some View {
+        let reselect: (Int) -> Void = { t in if t == 0 { withAnimation { homePath = NavigationPath() } } }
+        // Tab bar d'origine, qui rétrécit au défilement (effet Instagram).
+        ShrinkingTabBar { MMTabBar(selection: $tab, items: items, onReselect: reselect) }
+    }
+
     private var tabs: some View {
         ZStack(alignment: .bottom) {
-            Color.black.ignoresSafeArea()
+            MMColor.bg.ignoresSafeArea()
             // L'Accueil reste monté (scroll et état conservés) ;
             // la planète n'est rendue que visible : elle anime 60 i/s.
             OverviewView(path: $homePath, menuOpen: $menuOpen).tabLayer(tab == 0)
             // Onglets secondaires : rendus seulement quand ils sont visibles (rien ne tourne en arrière-plan).
             if tab == 1 { NavigationStack { FeedScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
-            if tab == 2 { NavigationStack { GlobeScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
-            MMTabBar(selection: $tab, items: items) { t in if t == 0 { withAnimation { homePath = NavigationPath() } } }
+            if tab == 3 { NavigationStack { LeaderboardScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
+            tabBar
                 .padding(.bottom, 4)
                 .ignoresSafeArea(.keyboard)
         }
@@ -174,7 +208,8 @@ struct RootTabView: View {
             switch d {
             case .today: tab = 0; homePath = NavigationPath()
             case .feed: tab = 1
-            case .globe: tab = 2
+            case .globe: tab = 0; homePath = NavigationPath(); homePath.append(d)
+            case .leaderboard: tab = 3
             case .settings:
                 // Après l'ouverture : une feuille présentée pendant le splash est ignorée.
                 Task {
@@ -199,28 +234,25 @@ struct OverviewView: View {
     @ObservedObject private var launch = LaunchCoordinator.shared
     @Binding var path: NavigationPath
     @Binding var menuOpen: Bool
+    @State private var showSettings = false
     @State private var selected: Date?
+    @Namespace private var zoomNS
 
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     header
-                    EnableAlertsCard().mmAppear(1)
+                        .fullScreenCover(isPresented: $showSettings) { LiveSettingsView() }
+                    if !TourFlags.isOn { EnableAlertsCard().mmAppear(1) }
                     // Tout ce qui suit dépend du business choisi : changer d'identité rejoue la cascade
                     // avec les nouvelles données — l'Accueil se transforme au lieu d'ouvrir une page.
                     if let o = store.scoped {
                         let scope = store.viewIds
-                        RevenueCard().mmAppear(1).mmDataSwap(scope)
-                        NetCard().mmAppear(2).mmDataSwap(scope, delay: 0.03)
-                        mrrCard(o).mmAppear(2).mmDataSwap(scope, delay: 0.04)
-                        stats(o).mmAppear(3).mmDataSwap(scope, delay: 0.08)
-                        if !store.scopedAlerts.isEmpty { alerts.mmAppear(4).mmDataSwap(scope, delay: 0.12) }
-                        if let p = store.selectedProject {
-                            ProjectInsights(p: p).mmAppear(5).transition(.opacity.combined(with: .move(edge: .bottom)))
-                        } else {
-                            businesses(o).mmAppear(5).mmDataSwap(scope, delay: 0.16)
-                        }
+                        // Grille de tuiles reprise de la page Effort de V2 ; toucher ouvre le détail.
+                        Group { if !PerfProbe.isOff("tiles") { HomeTiles(o: o, today: store.today).mmDataSwap(scope) } }
+                            .task(id: scope) { await PosthogStore.shared.load(o.projects.map(\.projectId), client: store.client) }
+                        if !PerfProbe.isOff("globe") { GlobeSection() }
                         Text("Mis à jour \(Date(timeIntervalSince1970: o.generatedAt / 1000).formatted(.relative(presentation: .named)))")
                             .font(MMFont.system(11)).foregroundStyle(MMColor.ink3).frame(maxWidth: .infinity).padding(.top, 6)
                     } else {
@@ -233,18 +265,26 @@ struct OverviewView: View {
                 .padding(.horizontal, 16).padding(.bottom, 24)
             }
             .scrollIndicators(.hidden)
+            .environment(\.homeZoom, zoomNS)
+            .igShrinksTabBar()
             .simultaneousGesture(TapGesture().onEnded { store.clearFocus() })
             .islandRefreshable(.home) { await store.refresh(); return store.error == nil }
             .navigationDestination(for: ProjectSummary.self) { ProjectView(p: $0) }
+            .navigationDestination(for: HomeMetric.self) { HomeMetricDetail(metric: $0).modifier(ZoomDestination(id: $0, ns: zoomNS)) }
+            .navigationDestination(for: PosthogRoute.self) { _ in PosthogFunnelDetail() }
             .navigationDestination(for: Router.Destination.self) { d in
                 if case .project(let id) = d, let p = store.overview?.projects.first(where: { $0.projectId == id }) { ProjectView(p: p) }
                 else if case .charts(let id) = d, let pid = id ?? store.selectedProject?.projectId ?? store.overview?.projects.first?.projectId {
                     ChartsScreen(projectId: pid)
                 }
+                else if case .globe = d { GlobeExplorer().modifier(GlobeZoomDestination(ns: zoomNS)) }
             }
             .toolbar(.hidden, for: .navigationBar)
             .mmPage()
         }
+        #if DEBUG
+        .onReceive(AutoTour.shared.$metric) { m in if let m { path.append(m) } }
+        #endif
     }
 
     private var header: some View {
@@ -254,22 +294,31 @@ struct OverviewView: View {
                 .frame(height: 40)
                 .shadow(color: .white.opacity(0.18), radius: 10)
                 .background {
-                    GeometryReader { g in
-                        Color.clear
-                            .onAppear { LaunchCoordinator.shared.headerLogoFrame = g.frame(in: .global) }
-                            .onChange(of: g.frame(in: .global)) { _, f in LaunchCoordinator.shared.headerLogoFrame = f }
+                    // Utile seulement pour l'atterrissage du logo au lancement : retiré ensuite,
+                    // sinon le cadre global serait relu et comparé à chaque image du défilement.
+                    if !launch.logoLanded {
+                        GeometryReader { g in
+                            Color.clear
+                                .onAppear { LaunchCoordinator.shared.headerLogoFrame = g.frame(in: .global) }
+                                .onChange(of: g.frame(in: .global)) { _, f in
+                                    if !LaunchCoordinator.shared.logoLanded { LaunchCoordinator.shared.headerLogoFrame = f }
+                                }
+                        }
                     }
                 }
                 .opacity(launch.logoLanded ? 1 : 0)
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .leading) {
-                    Button { menuOpen = true } label: {
-                        Image(systemName: "square.stack.3d.up.fill")
-                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
-                            .frame(width: 42, height: 42).mmGlass(in: Circle(), interactive: true)
+                    menuButton.mmAppear(0)
+                }
+                .overlay(alignment: .trailing) {
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 16, weight: .semibold)).foregroundStyle(MMColor.ink)
+                            .frame(width: 34, height: 34)
                     }
                     .buttonStyle(MMPressStyle(scale: 0.92))
-                    .accessibilityLabel("Business connectés")
+                    .accessibilityLabel("Réglages")
                     .mmAppear(0)
                 }
                 .accessibilityLabel("MoneyMaker")
@@ -280,10 +329,41 @@ struct OverviewView: View {
         .padding(.top, 8)
     }
 
+    @ViewBuilder
+    private var menuButton: some View {
+        if #available(iOS 26.0, *) {
+            IGMenuButton { menuOpen = true }
+        } else {
+            Button { menuOpen = true } label: {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(MMColor.ink)
+                    .frame(width: 42, height: 42).mmGlass(in: Circle(), interactive: true)
+            }
+            .buttonStyle(MMPressStyle(scale: 0.92))
+            .accessibilityLabel("Business connectés")
+        }
+    }
+
     /// Titre = périmètre affiché. Toucher ouvre le sélecteur.
     /// Le périmètre affiché, sans texte : l'éventail 3D des logos choisis. Toucher ouvre le sélecteur.
     private var scopeTitle: some View {
-        LogoFan(projects: store.selectedProjects, focusId: store.focusId) { store.focus($0) }
+        HStack(spacing: 12) {
+            LogoFan(projects: store.selectedProjects, focusId: store.focusId) { store.focus($0) }
+            // Business mis en avant : son nom et sa plateforme (Apple pour une app, Stripe sinon).
+            if let id = store.focusId, let p = store.selectedProjects.first(where: { $0.projectId == id }) {
+                HStack(spacing: 8) {
+                    PlatformMark(stores: p.stores ?? [], size: 26)
+                    Text(p.name).font(MMFont.system(15, .semibold)).lineLimit(1)
+                }
+                .padding(.leading, 5).padding(.trailing, 14).padding(.vertical, 5)
+                .mmGlass(in: Capsule())
+                .transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: -10)).combined(with: .scale(scale: 0.9, anchor: .leading)),
+                                        removal: .opacity))
+                .id(id)
+            }
+            Spacer(minLength: 0)
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.86), value: store.focusId)
             .padding(.top, 6)
             .padding(.bottom, 4)
     }
@@ -316,18 +396,18 @@ struct OverviewView: View {
 
     private func stats(_ o: Overview) -> some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
-            StatTile(icon: "eurosign", title: "Revenu \(o.periodDays) j", value: o.revenueMicros.money(o.currency, compact: true))
-            StatTile(icon: "creditcard", title: "Users payants", value: (o.payingCustomers ?? o.activeSubscriptions).formatted())
-            if let dl = o.downloads { StatTile(icon: "arrow.down.app", title: "Téléchargements", value: dl.formatted()) }
-            if o.hasTrials ?? (o.activeTrials > 0) { StatTile(icon: "hourglass", title: "Essais", value: o.activeTrials.formatted()) }
-            StatTile(icon: "arrow.triangle.2.circlepath", title: "Abonnés actifs", value: o.activeSubscriptions.formatted())
-            if o.downloads == nil && !(o.hasTrials ?? (o.activeTrials > 0)) { StatTile(icon: "sparkle", title: "Nouveaux", value: o.newCustomers.formatted()) }
+            StatTile(icon: "eurosign", title: String(localized: "Revenu \(o.periodDays) j"), value: o.revenueMicros.money(o.currency, compact: true))
+            StatTile(icon: "creditcard", title: String(localized: "Users payants"), value: (o.payingCustomers ?? o.activeSubscriptions).formatted())
+            if let dl = o.downloads { StatTile(icon: "arrow.down.app", title: String(localized: "Téléchargements"), value: dl.formatted()) }
+            if o.hasTrials ?? (o.activeTrials > 0) { StatTile(icon: "hourglass", title: String(localized: "Essais"), value: o.activeTrials.formatted()) }
+            StatTile(icon: "arrow.triangle.2.circlepath", title: String(localized: "Abonnés actifs"), value: o.activeSubscriptions.formatted())
+            if o.downloads == nil && !(o.hasTrials ?? (o.activeTrials > 0)) { StatTile(icon: "sparkle", title: String(localized: "Nouveaux"), value: o.newCustomers.formatted()) }
         }
     }
 
     private var alerts: some View {
         VStack(alignment: .leading, spacing: 10) {
-            MMLabel(text: "Classements App Store").padding(.horizontal, 4).padding(.top, 8)
+            MMLabel(text: String(localized: "Classements App Store")).padding(.horizontal, 4).padding(.top, 8)
             ScrollView(.horizontal) {
                 HStack(spacing: 10) {
                     ForEach(store.scopedAlerts.prefix(8)) { AlertCard(a: $0) }
@@ -342,7 +422,7 @@ struct OverviewView: View {
 
     private func businesses(_ o: Overview) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            MMLabel(text: "Business", trailing: "\(o.projects.count)").padding(.horizontal, 4).padding(.top, 8)
+            MMLabel(text: String(localized: "Business"), trailing: "\(o.projects.count)").padding(.horizontal, 4).padding(.top, 8)
             if o.projects.isEmpty {
                 MMCard { Text("Aucun business. Crée-en un sur le dashboard.").font(MMFont.system(14)).foregroundStyle(MMColor.ink2) }
             } else {
@@ -399,7 +479,7 @@ struct ProjectRow: View {
             }
             Spacer(minLength: 8)
             MMSparkline(values: dailySeries(p.revenueByDay, days: 30).map(\.value)).frame(width: 54, height: 24)
-            Text(p.mrrMicros.money(p.currency, compact: true)).font(MMFont.number(15, .regular)).foregroundStyle(MMColor.ink)
+            Text(p.mrrMicros.money(p.currency, compact: true)).font(MMFont.number(15, .regular)).foregroundStyle(MMColor.ink).mmNumeric()
                 .frame(minWidth: 64, alignment: .trailing)
         }
         .padding(.horizontal, 18).padding(.vertical, 14)
@@ -444,20 +524,27 @@ struct ProjectView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text(p.name).font(MMFont.system(34, .bold)).tracking(-0.8).lineLimit(2).mmAppear(0)
+                HStack(spacing: 14) {
+                    ProjectIcon(project: p, size: 56)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(p.name).font(MMFont.system(30, .bold)).tracking(-0.8).lineLimit(2)
+                        StoreBadges(stores: p.stores ?? [], size: 13)
+                    }
+                }
+                .mmAppear(0)
                 hero.mmAppear(1)
                 rates.mmAppear(2)
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
-                    StatTile(icon: "eurosign", title: "Revenu", value: p.netRevenueMicros.money(p.currency, compact: true))
-                    StatTile(icon: "person.2", title: "Abonnés", value: "\(p.activeSubscriptions)")
-                    StatTile(icon: "hourglass", title: "Essais", value: "\(p.activeTrials)")
-                    StatTile(icon: "sparkle", title: "Nouveaux", value: "\(p.newCustomers)")
+                    StatTile(icon: "eurosign", title: String(localized: "Revenu"), value: p.netRevenueMicros.money(p.currency, compact: true))
+                    StatTile(icon: "person.2", title: String(localized: "Abonnés"), value: "\(p.activeSubscriptions)")
+                    StatTile(icon: "hourglass", title: String(localized: "Essais"), value: "\(p.activeTrials)")
+                    StatTile(icon: "sparkle", title: String(localized: "Nouveaux"), value: "\(p.newCustomers)")
                 }
                 .mmAppear(3)
                 GrowthSections(p: p).mmAppear(4)
                 if p.billingIssues > 0 {
                     MMCard(padding: 16, radius: 22, glow: MMColor.orange) {
-                        Label("\(p.billingIssues) problème(s) de paiement en cours", systemImage: "exclamationmark.triangle.fill")
+                        Label("\(p.billingIssues) problèmes de paiement en cours", systemImage: "exclamationmark.triangle.fill")
                             .font(MMFont.system(14, .medium)).foregroundStyle(MMColor.orange)
                     }
                 }
@@ -465,7 +552,8 @@ struct ProjectView: View {
                     MMLabel(text: "App Store").padding(.horizontal, 4).padding(.top, 8)
                     ForEach(apps) { TrackedAppCard(app: $0).mmScrollReveal() }
                 }
-                MMLabel(text: "Activité", trailing: events.isEmpty ? nil : "\(events.count)").padding(.horizontal, 4).padding(.top, 8)
+                countries
+                MMLabel(text: String(localized: "Activité"), trailing: events.isEmpty ? nil : "\(events.count)").padding(.horizontal, 4).padding(.top, 8)
                 if events.isEmpty {
                     MMCard { Text("Aucun événement pour l'instant.").font(MMFont.system(14)).foregroundStyle(MMColor.ink2) }
                 } else {
@@ -488,13 +576,35 @@ struct ProjectView: View {
         .task { await load() }
     }
 
+    /// Revenu par pays du projet.
+    @ViewBuilder private var countries: some View {
+        let rows = (p.revenueByCountry ?? [:]).filter { $0.key != "??" && $0.value > 0 }.sorted { $0.value > $1.value }
+        if !rows.isEmpty {
+            MMLabel(text: String(localized: "Pays"), trailing: "\(rows.count)").padding(.horizontal, 4).padding(.top, 8)
+            MMCard(padding: 0) {
+                VStack(spacing: 0) {
+                    ForEach(Array(rows.prefix(15).enumerated()), id: \.element.key) { i, r in
+                        if i > 0 { Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 52) }
+                        HStack(spacing: 12) {
+                            Text(flagEmoji(r.key)).font(.system(size: 20)).frame(width: 26)
+                            Text(GlobeData.name(r.key)).font(MMFont.system(14, .medium)).lineLimit(1)
+                            Spacer()
+                            Text(r.value.money(p.currency, compact: true)).font(MMFont.number(14, .regular)).mmNumeric()
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 11)
+                    }
+                }
+            }
+        }
+    }
+
     private var hero: some View {
         let pts = dailySeries(p.revenueByDay, days: 30)
         let point = selected.flatMap { d in pts.min { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) } }
         return MMCard(padding: 20, glow: MMColor.accent) {
             VStack(alignment: .leading, spacing: 16) {
-                MMLabel(text: point == nil ? "MRR" : "Revenu du jour",
-                        trailing: point.map { $0.date.formatted(.dateTime.day().month(.abbreviated)) } ?? "30 jours")
+                MMLabel(text: point == nil ? "MRR" : String(localized: "Revenu du jour"),
+                        trailing: point.map { $0.date.formatted(.dateTime.day().month(.abbreviated)) } ?? String(localized: "30 jours"))
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(point.map { Int($0.value * 1e6).money(p.currency) } ?? p.mrrMicros.money(p.currency))
                         .font(MMFont.number(48)).tracking(-1.4).lineLimit(1).minimumScaleFactor(0.5)
@@ -510,8 +620,8 @@ struct ProjectView: View {
 
     private var rates: some View {
         HStack(spacing: 12) {
-            RateTile(title: "Conversion essai", value: p.trialConversionRate, color: MMColor.accent)
-            RateTile(title: "Churn", value: p.churnRate, color: MMColor.red)
+            RateTile(title: String(localized: "Conversion essai"), value: p.trialConversionRate, color: MMColor.accent)
+            RateTile(title: String(localized: "Churn"), value: p.churnRate, color: MMColor.red)
         }
     }
 
@@ -562,7 +672,7 @@ struct EventRow: View {
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 3) {
                 if let m = e.priceMicros, m > 0, let c = e.currency {
-                    Text(m.money(c)).font(MMFont.number(14, .regular)).foregroundStyle(MMColor.ink)
+                    Text(m.money(c)).font(MMFont.number(14, .regular)).foregroundStyle(MMColor.ink).mmNumeric()
                 }
                 Text(Date(timeIntervalSince1970: e.at / 1000).formatted(.relative(presentation: .numeric)))
                     .font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
@@ -572,10 +682,10 @@ struct EventRow: View {
     }
 
     private var label: String {
-        ["INITIAL_PURCHASE": "Nouvel abonné", "RENEWAL": "Renouvellement", "TRIAL_STARTED": "Essai démarré", "TRIAL_CONVERTED": "Essai converti",
-         "CANCELLATION": "Annulation", "UNCANCELLATION": "Réactivation", "EXPIRATION": "Expiration", "BILLING_ISSUE": "Problème de paiement",
-         "BILLING_RECOVERED": "Paiement récupéré", "REFUND": "Remboursement", "PRODUCT_CHANGE": "Changement d'offre",
-         "NON_RENEWING_PURCHASE": "Achat", "GRANT": "Accès offert", "REVOKED": "Révoqué", "PAUSED": "En pause", "TEST": "Test"][e.type] ?? e.type
+        ["INITIAL_PURCHASE": String(localized: "Nouvel abonné"), "RENEWAL": String(localized: "Renouvellement"), "TRIAL_STARTED": String(localized: "Essai démarré"), "TRIAL_CONVERTED": String(localized: "Essai converti"),
+         "CANCELLATION": String(localized: "Annulation"), "UNCANCELLATION": String(localized: "Réactivation"), "EXPIRATION": String(localized: "Expiration"), "BILLING_ISSUE": String(localized: "Problème de paiement"),
+         "BILLING_RECOVERED": String(localized: "Paiement récupéré"), "REFUND": String(localized: "Remboursement"), "PRODUCT_CHANGE": String(localized: "Changement d'offre"),
+         "NON_RENEWING_PURCHASE": String(localized: "Achat"), "GRANT": String(localized: "Accès offert"), "REVOKED": String(localized: "Révoqué"), "PAUSED": String(localized: "En pause"), "TEST": String(localized: "Test")][e.type] ?? e.type
     }
     private var color: Color {
         switch e.type {
@@ -587,42 +697,90 @@ struct EventRow: View {
     }
 }
 
+/// Classement App Store d'une app, façon Toplify : en-tête (icône, notes, nombre de pays),
+/// puis les dernières positions par pays avec la progression depuis le relevé précédent.
 struct TrackedAppCard: View {
     let app: TrackedAppSummary
     var body: some View {
-        MMCard(padding: 16, radius: 22) {
-            VStack(alignment: .leading, spacing: 14) {
+        MMCard(padding: 0, radius: 22) {
+            VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 12) {
                     CachedImage(url: app.icon.flatMap(URL.init(string:))) { MMColor.cardFill }
                         .frame(width: 46, height: 46).clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                         .overlay { RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(MMColor.hairline) }
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(app.name ?? app.appId).font(MMFont.system(15, .medium)).lineLimit(1)
-                        Text(app.rating.map { "★ \($0.formatted(.number.precision(.fractionLength(2)))) · \((app.ratingCount ?? 0).formatted()) notes" } ?? "Pas encore de notes")
-                            .font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(app.bestRank.map { "#\($0)" } ?? "—").font(MMFont.number(24)).foregroundStyle(MMColor.accent)
-                        Text("\(app.countriesRanked ?? 0) pays").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
-                    }
-                }
-                if let top = app.topRankings, !top.isEmpty {
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 6) {
-                            ForEach(top, id: \.self) { r in
-                                Text("\(flagEmoji(r.cc)) #\(r.rank)\(r.scope == "genre" ? " cat." : "")")
-                                    .font(MMFont.system(12, .medium)).monospacedDigit()
-                                    .padding(.horizontal, 10).padding(.vertical, 6)
-                                    .background(Color.white.opacity(0.06), in: Capsule())
-                                    .overlay { Capsule().strokeBorder(MMColor.hairline) }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(app.name ?? app.appId).font(MMFont.system(15, .semibold)).lineLimit(1)
+                        if let r = app.rating {
+                            HStack(spacing: 4) {
+                                Stars(value: r)
+                                Text("\(r.formatted(.number.precision(.fractionLength(1)))) · \((app.ratingCount ?? 0).formatted()) notes")
+                                    .font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
                             }
+                        } else {
+                            Text("Pas encore de notes").font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
                         }
                     }
-                    .scrollIndicators(.hidden)
+                    Spacer(minLength: 8)
+                    Rectangle().fill(MMColor.hairline).frame(width: 1, height: 44)
+                    VStack(spacing: 3) {
+                        Text("\(app.countriesRanked ?? 0)").font(MMFont.number(18, .semibold))
+                            .frame(width: 40, height: 40).background(MMColor.fg(0.10), in: Circle())
+                        Text("Pays").font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
+                    }
+                    .padding(.leading, 4)
+                }
+                .padding(14)
+                if let top = app.topRankings, !top.isEmpty {
+                    Rectangle().fill(MMColor.hairline).frame(height: 1)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("TOP CLASSEMENT iOS").font(MMFont.system(12, .semibold)).tracking(0.6)
+                        Spacer()
+                        if let best = app.bestRank { Text("Meilleur #\(best)").font(MMFont.system(12, .medium)).foregroundStyle(MMColor.accent) }
+                    }
+                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 6)
+                    Text("DERNIÈRES POSITIONS").font(MMFont.system(10.5, .semibold)).tracking(1.2).foregroundStyle(MMColor.ink3)
+                        .padding(.horizontal, 16).padding(.bottom, 4)
+                    ForEach(Array(top.sorted { $0.rank < $1.rank }.prefix(10).enumerated()), id: \.element) { i, r in
+                        if i > 0 { Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 56) }
+                        HStack(spacing: 12) {
+                            Text(flagEmoji(r.cc)).font(.system(size: 22)).frame(width: 28)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(GlobeData.name(r.cc)).font(MMFont.system(14, .medium)).lineLimit(1)
+                                if r.scope == "genre" { Text("Catégorie").font(MMFont.system(11)).foregroundStyle(MMColor.ink3) }
+                            }
+                            Spacer()
+                            if let prev = r.prevRank, prev != r.rank {
+                                let up = r.rank < prev
+                                HStack(spacing: 2) {
+                                    Image(systemName: up ? "arrow.up" : "arrow.down").font(.system(size: 10, weight: .bold))
+                                    Text("\(abs(prev - r.rank))").font(MMFont.number(12, .medium))
+                                }
+                                .foregroundStyle(up ? MMColor.accent : MMColor.ink3)
+                            }
+                            Text("\(r.rank)").font(MMFont.number(14, .semibold)).monospacedDigit()
+                                .frame(minWidth: 34).padding(.vertical, 5)
+                                .background(MMColor.fg(0.10), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 10)
+                    }
+                    .padding(.bottom, 6)
                 }
             }
         }
+    }
+}
+
+/// Cinq étoiles remplies selon la note (demi-étoile comprise).
+struct Stars: View {
+    let value: Double
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(0..<5, id: \.self) { i in
+                let v = value - Double(i)
+                Image(systemName: v >= 0.75 ? "star.fill" : v >= 0.25 ? "star.leadinghalf.filled" : "star")
+            }
+        }
+        .font(.system(size: 10, weight: .semibold)).foregroundStyle(Color(red: 1, green: 0.78, blue: 0.25))
     }
 }
 

@@ -4,6 +4,7 @@
 // et pousse via pushInsight + fanOut (Slack/Discord). Parties pures testées : tests/anomalies.test.cjs.
 
 import { db, Project } from "./store";
+import { anomalyText, weeklyText, money as fmtMoney } from "./i18n";
 
 const DAY = 86400000;
 
@@ -11,7 +12,6 @@ export const ANOMALY_METRICS = ["revenue", "newSubscriptions", "trials", "refund
 export type AnomalyMetric = typeof ANOMALY_METRICS[number];
 /** Sens « mauvais » d'une hausse : pour les remboursements, une hausse est négative. */
 const UP_IS_BAD: Record<AnomalyMetric, boolean> = { revenue: false, newSubscriptions: false, trials: false, refunds: true, billingIssues: true, churn: true };
-const LABEL: Record<AnomalyMetric, string> = { revenue: "Revenu", newSubscriptions: "Nouveaux abonnés", trials: "Essais", refunds: "Remboursements", billingIssues: "Problèmes de paiement", churn: "Abonnements perdus" };
 /** Volume minimal (moyenne ou valeur du jour) sous lequel on ne signale rien : bruit des petits nombres. */
 const MIN_VOLUME: Record<AnomalyMetric, number> = { revenue: 20e6, newSubscriptions: 3, trials: 3, refunds: 3, billingIssues: 3, churn: 3 };
 
@@ -19,7 +19,7 @@ export interface DayRow { revenue: number; newSubscriptions: number; trials: num
 export interface Anomaly {
   metric: AnomalyMetric; date: string; value: number; mean: number; std: number; zScore: number;
   direction: "up" | "down"; severity: "warning" | "critical"; good: boolean; projectId: string; projectName: string;
-  type: string; title: string; body: string; at: number;
+  type: string; title: string; body: string; titleEn: string; bodyEn: string; at: number;
 }
 
 export function meanStd(xs: number[]) {
@@ -35,7 +35,6 @@ export function detectAnomalies(project: { id: string; name: string }, history: 
   opts: { threshold?: number; now?: number } = {}): Anomaly[] {
   const threshold = opts.threshold ?? 3, now = opts.now ?? Date.now();
   if (history.length < 14) return [];
-  const money = (v: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency, maximumFractionDigits: 0 }).format(v / 1e6);
   const out: Anomaly[] = [];
   for (const metric of ANOMALY_METRICS) {
     const xs = history.map(d => d[metric] ?? 0), value = yesterday[metric] ?? 0;
@@ -47,14 +46,14 @@ export function detectAnomalies(project: { id: string; name: string }, history: 
     if (Math.abs(z) < threshold) continue;
     const direction = z > 0 ? "up" : "down";
     const good = (direction === "up") !== UP_IS_BAD[metric];
-    const fmt = (v: number) => metric === "revenue" ? money(v) : (Math.round(v * 10) / 10).toString();
-    const verb = direction === "up" ? "inhabituellement haut" : "inhabituellement bas";
+    const fmt = (lang: "fr" | "en", v: number) => metric === "revenue" ? fmtMoney(lang, v, currency, 0) : (Math.round(v * 10) / 10).toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
+    const fr = anomalyText("fr", metric, direction === "up", project.name, fmt("fr", value), fmt("fr", mean), z);
+    const en = anomalyText("en", metric, direction === "up", project.name, fmt("en", value), fmt("en", mean), z);
     out.push({
       metric, date, value, mean: Math.round(mean * 100) / 100, std: Math.round(std * 100) / 100, zScore: Math.round(z * 100) / 100,
       direction, severity: Math.abs(z) >= threshold + 2 ? "critical" : "warning", good, projectId: project.id, projectName: project.name,
       type: `ANOMALY_${metric.toUpperCase()}_${direction.toUpperCase()}`,
-      title: `${LABEL[metric]} ${verb} · ${project.name}`,
-      body: `Hier ${fmt(value)} contre ${fmt(mean)} en moyenne sur 28 jours (z = ${z.toFixed(1)}).`, at: now,
+      title: fr.title, body: fr.body, titleEn: en.title, bodyEn: en.body, at: now,
     });
   }
   return out;
@@ -83,7 +82,7 @@ export function dailyRows(txs: TxLite[], events: EvLite[], start: number, days: 
 }
 
 export interface WeeklySummary { projectId: string; projectName: string; currency: string; weekStart: string; revenueMicros: number; previousRevenueMicros: number;
-  revenueChange: number | null; mrrMicros: number; newSubscriptions: number; topCountry: string | null; title: string; body: string }
+  revenueChange: number | null; mrrMicros: number; newSubscriptions: number; topCountry: string | null; title: string; body: string; titleEn: string; bodyEn: string }
 
 /** Pure : semaine écoulée (7 j) vs semaine d'avant. */
 export function weeklySummary(project: { id: string; name: string }, txs: TxLite[], events: EvLite[], mrrMicros: number, currency: string, now = Date.now()): WeeklySummary {
@@ -96,14 +95,13 @@ export function weeklySummary(project: { id: string; name: string }, txs: TxLite
     byCountry.set(t.country ?? "??", (byCountry.get(t.country ?? "??") ?? 0) + Number(t.amountMicrosProject));
   const top = [...byCountry.entries()].filter(([c]) => c !== "??").sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
   const change = previous > 0 ? (revenue - previous) / previous : null;
-  const money = (v: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency, maximumFractionDigits: 0 }).format(v / 1e6);
-  const wow = change === null ? "" : ` (${change >= 0 ? "+" : "−"}${Math.abs(Math.round(change * 100))} % vs semaine précédente)`;
+  const fr = weeklyText("fr", project.name, fmtMoney("fr", revenue, currency, 0), fmtMoney("fr", mrrMicros, currency, 0), change, newSubs, top);
+  const en = weeklyText("en", project.name, fmtMoney("en", revenue, currency, 0), fmtMoney("en", mrrMicros, currency, 0), change, newSubs, top);
   return {
     projectId: project.id, projectName: project.name, currency, weekStart: new Date(start).toISOString().slice(0, 10),
     revenueMicros: Math.round(revenue), previousRevenueMicros: Math.round(previous), revenueChange: change === null ? null : Math.round(change * 1000) / 1000,
     mrrMicros: Math.round(mrrMicros), newSubscriptions: newSubs, topCountry: top,
-    title: `Ta semaine · ${project.name} : ${money(revenue)}`,
-    body: [`Revenu ${money(revenue)}${wow}`, `MRR ${money(mrrMicros)}`, `${newSubs} nouvel${newSubs > 1 ? "s" : ""} abonné${newSubs > 1 ? "s" : ""}`, top ? `top pays ${top}` : ""].filter(Boolean).join(" · "),
+    title: fr.title, body: fr.body, titleEn: en.title, bodyEn: en.body,
   };
 }
 

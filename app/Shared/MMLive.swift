@@ -41,7 +41,7 @@ struct Today: Codable, Hashable {
     static let placeholder = Today(currency: "EUR", tz: "Europe/Paris", dayStart: Date().timeIntervalSince1970 * 1000, revenueMicros: 1_284_000_000,
         refundsMicros: 0, sales: 38, renewals: 21, trials: 14, newSubscribers: 31,
         hourly: [0, 0, 9, 9, 18, 18, 40, 88, 130, 190, 260, 340, 420, 470, 560, 640, 720, 790, 880, 960, 1040, 1150, 1230, 1284].map { $0 * 1_000_000 },
-        last: Last(projectName: "Mon app", amountMicros: 59_990_000, currency: "EUR", productId: "annual", country: "FR", at: Date().timeIntervalSince1970 * 1000),
+        last: Last(projectName: String(localized: "Mon app"), amountMicros: 59_990_000, currency: "EUR", productId: "annual", country: "FR", at: Date().timeIntervalSince1970 * 1000),
         generatedAt: nil)
 }
 
@@ -59,14 +59,20 @@ struct FeedEvent: Codable, Identifiable, Hashable {
     let isTrial: Bool?
     let periodMonths: Double?
     let at: Double
+    /// Client et achat (fiche transaction, historique de l'abonné).
+    var appUserId: String? = nil
+    var purchaseId: String? = nil
+    var expiresAt: Double? = nil
+    var displayMicros: Int? = nil
+    var displayCurrency: String? = nil
 
     var date: Date { Date(timeIntervalSince1970: at / 1000) }
     var isRevenue: Bool { ["INITIAL_PURCHASE", "NON_RENEWING_PURCHASE", "TRIAL_CONVERTED", "RENEWAL"].contains(type) && isTrial != true && (priceMicros ?? 0) > 0 }
     var title: String {
-        ["INITIAL_PURCHASE": "Nouvel abonné", "RENEWAL": "Renouvellement", "TRIAL_STARTED": "Essai démarré", "TRIAL_CONVERTED": "Essai converti",
-         "CANCELLATION": "Annulation", "UNCANCELLATION": "Réactivation", "EXPIRATION": "Expiration", "BILLING_ISSUE": "Problème de paiement",
-         "BILLING_RECOVERED": "Paiement récupéré", "REFUND": "Remboursement", "PRODUCT_CHANGE": "Changement d'offre",
-         "NON_RENEWING_PURCHASE": "Achat", "GRANT": "Accès offert", "REVOKED": "Révoqué", "PAUSED": "En pause"][type] ?? type
+        ["INITIAL_PURCHASE": String(localized: "Nouvel abonné"), "RENEWAL": String(localized: "Renouvellement"), "TRIAL_STARTED": String(localized: "Essai démarré"), "TRIAL_CONVERTED": String(localized: "Essai converti"),
+         "CANCELLATION": String(localized: "Annulation"), "UNCANCELLATION": String(localized: "Réactivation"), "EXPIRATION": String(localized: "Expiration"), "BILLING_ISSUE": String(localized: "Problème de paiement"),
+         "BILLING_RECOVERED": String(localized: "Paiement récupéré"), "REFUND": String(localized: "Remboursement"), "PRODUCT_CHANGE": String(localized: "Changement d'offre"),
+         "NON_RENEWING_PURCHASE": String(localized: "Achat"), "GRANT": String(localized: "Accès offert"), "REVOKED": String(localized: "Révoqué"), "PAUSED": String(localized: "En pause")][type] ?? type
     }
     var symbol: String {
         switch type {
@@ -78,16 +84,22 @@ struct FeedEvent: Codable, Identifiable, Hashable {
         default: return "circle"
         }
     }
+    /// Montant dans la devise d'affichage (converti par le serveur), sinon d'origine.
+    var shownMicros: Int? { displayMicros ?? priceMicros }
+    var shownCurrency: String? { displayCurrency ?? currency }
+
     var amountText: String? {
-        guard let m = priceMicros, m > 0, let c = currency, isTrial != true else { return nil }
+        guard let m0 = priceMicros, m0 > 0, let c0 = currency, isTrial != true else { return nil }
+        // Converti dans la devise d'affichage quand le serveur l'a fait.
+        let m = displayMicros ?? m0, c = displayCurrency ?? c0
         return (type == "REFUND" ? -m : m).money(c)
     }
 
     static let samples: [FeedEvent] = [
-        .init(id: "1", projectId: "p", projectName: "Mon app", type: "INITIAL_PURCHASE", productId: "annual", priceMicros: 59_990_000, currency: "EUR", country: "FR", store: "app_store", isSandbox: false, isTrial: false, periodMonths: 12, at: Date().timeIntervalSince1970 * 1000 - 60_000),
-        .init(id: "2", projectId: "p", projectName: "Mon app", type: "RENEWAL", productId: "monthly", priceMicros: 9_990_000, currency: "USD", country: "US", store: "app_store", isSandbox: false, isTrial: false, periodMonths: 1, at: Date().timeIntervalSince1970 * 1000 - 600_000),
-        .init(id: "3", projectId: "p", projectName: "Autre app", type: "TRIAL_STARTED", productId: "annual", priceMicros: 0, currency: "EUR", country: "DE", store: "play_store", isSandbox: false, isTrial: true, periodMonths: 12, at: Date().timeIntervalSince1970 * 1000 - 1_800_000),
-        .init(id: "4", projectId: "p", projectName: "Mon app", type: "TRIAL_CONVERTED", productId: "weekly", priceMicros: 4_990_000, currency: "GBP", country: "GB", store: "app_store", isSandbox: false, isTrial: false, periodMonths: 0.25, at: Date().timeIntervalSince1970 * 1000 - 3_600_000),
+        .init(id: "1", projectId: "p", projectName: String(localized: "Mon app"), type: "INITIAL_PURCHASE", productId: "annual", priceMicros: 59_990_000, currency: "EUR", country: "FR", store: "app_store", isSandbox: false, isTrial: false, periodMonths: 12, at: Date().timeIntervalSince1970 * 1000 - 60_000),
+        .init(id: "2", projectId: "p", projectName: String(localized: "Mon app"), type: "RENEWAL", productId: "monthly", priceMicros: 9_990_000, currency: "USD", country: "US", store: "app_store", isSandbox: false, isTrial: false, periodMonths: 1, at: Date().timeIntervalSince1970 * 1000 - 600_000),
+        .init(id: "3", projectId: "p", projectName: String(localized: "Autre app"), type: "TRIAL_STARTED", productId: "annual", priceMicros: 0, currency: "EUR", country: "DE", store: "play_store", isSandbox: false, isTrial: true, periodMonths: 12, at: Date().timeIntervalSince1970 * 1000 - 1_800_000),
+        .init(id: "4", projectId: "p", projectName: String(localized: "Mon app"), type: "TRIAL_CONVERTED", productId: "weekly", priceMicros: 4_990_000, currency: "GBP", country: "GB", store: "app_store", isSandbox: false, isTrial: false, periodMonths: 0.25, at: Date().timeIntervalSince1970 * 1000 - 3_600_000),
     ]
 }
 
@@ -167,7 +179,7 @@ enum MMShared {
 
 extension MoneyMakerClient {
     func send<T: Decodable>(_ method: String, _ path: String, body: [String: Any]? = nil) async throws -> T {
-        guard let token, !token.isEmpty else { throw APIError(message: "Ajoute ton jeton personnel (mm_pat_…).") }
+        guard let token, !token.isEmpty else { throw APIError(message: String(localized: "Ajoute ton jeton personnel (mm_pat_…).")) }
         var req = URLRequest(url: URL(string: "\(MM.baseURL.absoluteString)/\(path)")!)
         req.httpMethod = method
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -179,7 +191,7 @@ extension MoneyMakerClient {
         let (data, res) = try await URLSession.shared.data(for: req)
         guard let http = res as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let msg = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
-            throw APIError(message: msg ?? "Erreur \((res as? HTTPURLResponse)?.statusCode ?? 0)")
+            throw APIError(message: msg ?? String(localized: "Erreur \((res as? HTTPURLResponse)?.statusCode ?? 0)"), status: (res as? HTTPURLResponse)?.statusCode ?? 0)
         }
         return try JSONDecoder().decode(T.self, from: data)
     }
@@ -188,16 +200,22 @@ extension MoneyMakerClient {
     /// Revenus du jour (tous les business, ou un seul). Seule la vue « tous » alimente le cache des widgets.
     func today(projectIds: [String]? = nil) async throws -> Today {
         let tz = TimeZone.current.identifier.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "UTC"
-        let t: Today = try await get("today?tz=\(tz)" + (projectIds.map { "&projectIds=\($0.joined(separator: ","))" } ?? ""))
+        let t: Today = try await get("today?tz=\(tz)" + (MoneyMakerClient.displayCurrency.map { "&currency=\($0)" } ?? "") + (projectIds.map { "&projectIds=\($0.joined(separator: ","))" } ?? ""))
         if projectIds == nil, let data = try? JSONEncoder().encode(t) { MM.write("today", data) }
         return t
     }
 
     func feed(limit: Int = 30, projectIds: [String]? = nil) async throws -> [FeedEvent] {
         struct R: Decodable { let events: [FeedEvent] }
-        let r: R = try await get("feed?limit=\(limit)" + (projectIds.map { "&projectIds=\($0.joined(separator: ","))" } ?? ""))
+        let r: R = try await get("feed?limit=\(limit)" + (MoneyMakerClient.displayCurrency.map { "&currency=\($0)" } ?? "") + (projectIds.map { "&projectIds=\($0.joined(separator: ","))" } ?? ""))
         if projectIds == nil, let data = try? JSONEncoder().encode(Array(r.events.prefix(20))) { MM.write("feed", data) }
         return r.events
+    }
+
+    /// Fiche d'un client : achats, total dépensé et tout son historique d'événements.
+    func customer(projectId: String, appUserId: String) async throws -> CustomerDetail {
+        let id = appUserId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? appUserId
+        return try await get("projects/\(projectId)/customers/\(id)")
     }
 
     struct Ack: Decodable {}
@@ -207,6 +225,7 @@ extension MoneyMakerClient {
         var body = fields
         body["tz"] = TimeZone.current.identifier
         body["env"] = MMShared.apnsEnvironment
+        body["lang"] = MMLang.isFrench ? "fr" : "en"
         let _: Ack = try await send("PUT", "devices/\(MMShared.deviceId)", body: body)
     }
 
@@ -238,10 +257,15 @@ struct RevenueActivityAttributes: ActivityAttributes {
         var lastCurrency: String
         var hourly: [Double]
         var updatedAt: Int
+        /// Pays de la dernière vente (facultatif : absent des anciens pushs).
+        var lastCountry: String? = nil
+        /// Heure de la dernière vente (s, epoch) — effet « tiroir-caisse ».
+        var lastSaleAt: Int? = nil
 
         init(today t: Today) {
             revenueMicros = t.netMicros; currency = t.currency; sales = t.transactions; trials = t.trials
-            lastProject = t.last?.projectName; lastAmountMicros = t.last?.amountMicros ?? 0; lastCurrency = t.last?.currency ?? t.currency
+            lastProject = t.last?.projectName; lastAmountMicros = t.last?.amountMicros ?? 0; lastCurrency = t.last?.currency ?? t.currency; lastCountry = t.last?.country
+            lastSaleAt = t.last.map { Int($0.at / 1000) }
             hourly = t.hourly.map { Double($0) / 1e6 }; updatedAt = Int(Date().timeIntervalSince1970)
         }
     }
@@ -256,7 +280,7 @@ struct ProjectEntity: AppEntity {
     let id: String
     let name: String
     var displayRepresentation: DisplayRepresentation { DisplayRepresentation(title: "\(name)") }
-    static let all = ProjectEntity(id: "*", name: "Tous les business")
+    static let all = ProjectEntity(id: "*", name: String(localized: "Tous les business"))
 }
 
 struct ProjectQuery: EntityQuery {
@@ -274,4 +298,37 @@ struct MRRWidgetIntent: WidgetConfigurationIntent {
     @Parameter(title: "Business") var project: ProjectEntity?
     @Parameter(title: "Objectif de MRR", description: "En unités de ta devise, ex. 10000") var goal: Int?
     init() {}
+}
+
+
+struct CustomerDetail: Decodable {
+    struct Purchase: Decodable, Identifiable, Hashable {
+        let id: String
+        let store: String?
+        let productId: String?
+        let status: String?
+        let active: Bool?
+        let purchasedAt: Double?
+        let expiresAt: Double?
+        let willRenew: Bool?
+        let isTrial: Bool?
+        let isSandbox: Bool?
+        let billingIssue: Bool?
+    }
+    let appUserId: String
+    let purchases: [Purchase]
+    let activeEntitlements: [String]?
+    let firstSeenAt: Double?
+    let lastSeenAt: Double?
+    let country: String?
+    let totalSpentMicros: Int?
+    let isPaying: Bool?
+    let currency: String?
+    let events: [FeedEvent]
+}
+
+/// Texte serveur bilingue : la variante anglaise quand l'app tourne en anglais.
+enum MMLang {
+    static let isFrench = Bundle.main.preferredLocalizations.first?.hasPrefix("fr") ?? true
+    static func pick(_ fr: String?, _ en: String?) -> String? { isFrench ? fr : (en ?? fr) }
 }

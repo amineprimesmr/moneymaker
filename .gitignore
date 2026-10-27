@@ -16,3 +16,7 @@ local.properties
 service-account*.json
 app/signing/
 submission/reviewer-credentials.txt
+
+# Médias lourds (vidéos, rendus marketing) : hors dépôt
+/marketing/
+/*.mp4

@@ -3,7 +3,7 @@ import Security
 import WidgetKit
 
 enum MM {
-    static let baseURL = URL(string: "https://moneymaker-io.web.app/v1")!
+    static let baseURL = URL(string: "https://usemoneymaker.com/v1")!
     /// Shared with the widget extension through a keychain access group (no App Group needed).
     static let accessGroup = "F2CJGJ69XU.io.moneymaker.shared"
 
@@ -46,6 +46,8 @@ struct ProjectSummary: Codable, Identifiable, Hashable {
     var revenueByCountry: [String: Int]? = nil
     /// Icône App Store de l'app du business (512 px), si suivie.
     var iconUrl: String? = nil
+    /// Sources de revenus connectées : app_store, stripe, play_store…
+    var stores: [String]? = nil
     var id: String { projectId }
 }
 
@@ -88,8 +90,8 @@ struct RankingAlert: Codable, Identifiable, Hashable {
     var projectId: String? = nil
 
     var title: String {
-        ["NEW_COUNTRY": "Nouveau pays", "TOP_100": "Retour dans le top 100", "TOP_10": "Top 10", "TOP_1": "Numéro 1",
-         "JUMP": "Forte hausse", "DROP": "Forte baisse", "LEFT_CHART": "Sortie du classement"][type] ?? type
+        ["NEW_COUNTRY": String(localized: "Nouveau pays"), "TOP_100": String(localized: "Retour dans le top 100"), "TOP_10": String(localized: "Top 10"), "TOP_1": String(localized: "Numéro 1"),
+         "JUMP": String(localized: "Forte hausse"), "DROP": String(localized: "Forte baisse"), "LEFT_CHART": String(localized: "Sortie du classement")][type] ?? type
     }
     var symbol: String {
         switch type {
@@ -101,7 +103,7 @@ struct RankingAlert: Codable, Identifiable, Hashable {
         default: return "chart.line.uptrend.xyaxis"
         }
     }
-    var chartLabel: String { (["free": "Gratuites", "paid": "Payantes", "grossing": "Revenus"][chart] ?? chart) + (scope == "genre" ? " · catégorie" : "") }
+    var chartLabel: String { (["free": String(localized: "Gratuites"), "paid": String(localized: "Payantes"), "grossing": String(localized: "Revenus")][chart] ?? chart) + (scope == "genre" ? String(localized: " · catégorie") : "") }
 }
 
 struct TrackedAppSummary: Codable, Identifiable, Hashable {
@@ -136,34 +138,69 @@ struct EventItem: Codable, Identifiable, Hashable {
     let isSandbox: Bool?
 }
 
-struct APIError: LocalizedError { let message: String; var errorDescription: String? { message } }
+struct APIError: LocalizedError { let message: String; var status: Int = 0; var errorDescription: String? { message } }
 
 struct MoneyMakerClient {
     var token: String?
 
-    static var stored: MoneyMakerClient { MoneyMakerClient(token: MM.read("pat").flatMap { String(data: $0, encoding: .utf8) }) }
+    /// Jeton mis en cache dans l'app (le trousseau était relu à chaque appel). Les extensions
+    /// (widgets) relisent toujours : l'app peut changer le jeton depuis un autre processus.
+    private static let tokenLock = NSLock()
+    private static var cachedToken: String??
+    private static let cachesToken = !Bundle.main.bundlePath.hasSuffix(".appex")
+
+    static var stored: MoneyMakerClient {
+        func load() -> String? { MM.read("pat").flatMap { String(data: $0, encoding: .utf8) } }
+        guard cachesToken else { return MoneyMakerClient(token: load()) }
+        tokenLock.lock(); defer { tokenLock.unlock() }
+        if let t = cachedToken { return MoneyMakerClient(token: t) }
+        let t = load()
+        cachedToken = .some(t)
+        return MoneyMakerClient(token: t)
+    }
 
     static func save(token: String?) {
         MM.write("pat", token.map { Data($0.utf8) })
+        tokenLock.lock(); cachedToken = .some(token); tokenLock.unlock()
         if token == nil { MM.write("overview", nil) }
         WidgetCenter.shared.reloadAllTimelines()
     }
 
     func get<T: Decodable>(_ path: String) async throws -> T {
-        guard let token, !token.isEmpty else { throw APIError(message: "Ajoute ton jeton personnel (mm_pat_…).") }
+        guard let token, !token.isEmpty else { throw APIError(message: String(localized: "Ajoute ton jeton personnel (mm_pat_…).")) }
         var req = URLRequest(url: URL(string: "\(MM.baseURL.absoluteString)/\(path)")!)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.timeoutInterval = 20
         let (data, res) = try await URLSession.shared.data(for: req)
         guard let http = res as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let msg = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
-            throw APIError(message: msg ?? "Erreur \((res as? HTTPURLResponse)?.statusCode ?? 0)")
+            throw APIError(message: msg ?? String(localized: "Erreur \((res as? HTTPURLResponse)?.statusCode ?? 0)"), status: (res as? HTTPURLResponse)?.statusCode ?? 0)
         }
         return try JSONDecoder().decode(T.self, from: data)
     }
 
+    /// Devise d'affichage choisie dans les Réglages. Les widgets n'ont pas accès aux préférences de l'app :
+    /// l'app la recopie dans le trousseau partagé à chaque lecture, les widgets la lisent là.
+    static var displayCurrency: String? {
+        let isApp = Bundle.main.bundleURL.pathExtension == "app"
+        if isApp {
+            let v = UserDefaults.standard.string(forKey: "mm.currency") ?? ""
+            let stored = MM.read("currency").flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            if v != stored { MM.write("currency", v.isEmpty ? nil : Data(v.utf8)) }
+            return v.isEmpty ? deviceCurrency : v
+        }
+        return MM.read("currency").flatMap { String(data: $0, encoding: .utf8) }.flatMap { $0.isEmpty ? nil : $0 } ?? deviceCurrency
+    }
+    /// « Auto » = devise de l'iPhone (€ en France), jamais celle d'un business pris au hasard.
+    private static var deviceCurrency: String? {
+        let c = Locale.current.currency?.identifier ?? "EUR"
+        return ["EUR", "USD", "GBP", "CHF", "CAD", "AUD", "JPY"].contains(c) ? c : "USD"
+    }
+
     func overview(days: Int = 28) async throws -> Overview {
-        let o: Overview = try await get("overview?days=\(days)")
+        // Devise d'affichage choisie dans les Réglages (sinon celle du compte).
+        let cur = MoneyMakerClient.displayCurrency.map { "&currency=\($0)" } ?? ""
+        let o: Overview = try await get("overview?days=\(days)\(cur)")
         if days == 28, let data = try? JSONEncoder().encode(o) {
             MM.write("overview", data)
             WidgetCenter.shared.reloadAllTimelines()
@@ -199,15 +236,42 @@ struct MoneyMakerClient {
     }
 }
 
+/// Caches de `money` : appelé pour chaque ligne, chaque libellé de graphique et chaque tuile à
+/// chaque rendu. La regex compilée et le résultat formaté sont réutilisés (NSCache est thread-safe,
+/// le widget et les tâches de fond peuvent aussi formater).
+private enum MoneyCache {
+    static let results: NSCache<NSString, NSString> = { let c = NSCache<NSString, NSString>(); c.countLimit = 2000; return c }()
+    static let symbolGap = try! NSRegularExpression(pattern: "[\\s\u{00A0}\u{202F}]+(?=\\D+$)")
+    static let symbols: NSCache<NSString, NSString> = NSCache()
+    static func symbol(_ currency: String) -> String {
+        if let s = symbols.object(forKey: currency as NSString) { return s as String }
+        let f = NumberFormatter(); f.numberStyle = .currency; f.currencyCode = currency
+        let s = f.currencySymbol ?? currency
+        symbols.setObject(s as NSString, forKey: currency as NSString)
+        return s
+    }
+}
+
 extension Int {
     func money(_ currency: String, compact: Bool = false) -> String {
+        let key = "\(self)|\(currency)|\(compact ? 1 : 0)" as NSString
+        if let hit = MoneyCache.results.object(forKey: key) { return hit as String }
+        let out = formatMoney(currency, compact: compact)
+        MoneyCache.results.setObject(out as NSString, forKey: key)
+        return out
+    }
+
+    private func formatMoney(_ currency: String, compact: Bool) -> String {
         let value = Double(self) / 1_000_000
         if compact && abs(value) >= 10_000 {
-            let sym = Locale.current.currencySymbol.flatMap { _ in
-                let f = NumberFormatter(); f.numberStyle = .currency; f.currencyCode = currency; return f.currencySymbol } ?? currency
-            let (v, suffix) = abs(value) >= 1_000_000 ? (value / 1_000_000, " M") : (value / 1000, " k")
-            return "\(v.formatted(.number.precision(.fractionLength(0...1))))\(suffix) \(sym)"
+            let sym = Locale.current.currencySymbol.flatMap { _ in MoneyCache.symbol(currency) } ?? currency
+            let (v, suffix) = abs(value) >= 1_000_000 ? (value / 1_000_000, String(localized: " M", comment: "Suffixe compact des millions")) : (value / 1000, String(localized: " k", comment: "Suffixe compact des milliers"))
+            return "\(v.formatted(.number.locale(Locale.current).precision(.fractionLength(0...1))))\(suffix)\(sym)"
         }
-        return value.formatted(.currency(code: currency).precision(.fractionLength(abs(value) >= 1000 ? 0 : 2)))
+        // Toujours à la française (« 1 234 € », « 9,99 € ») et jamais de « ,00 » inutile.
+        let whole = abs(value) >= 1000 || value.rounded() == value
+        let text = value.formatted(.currency(code: currency).locale(Locale.current).precision(.fractionLength(whole ? 0 : 2)))
+        // Symbole collé au montant : « 12€ » (les espaces des milliers restent).
+        return MoneyCache.symbolGap.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "")
     }
 }

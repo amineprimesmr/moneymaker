@@ -10,9 +10,9 @@
 | Classification | 4+ (aucun contenu sensible) |
 | Prix | Gratuit, sans achat intégré |
 | Appareils | iPhone uniquement (iOS 17+) |
-| URL de confidentialité | https://moneymaker-io.web.app/privacy |
-| URL d'assistance | https://moneymaker-io.web.app/support |
-| URL marketing | https://moneymaker-io.web.app/support |
+| URL de confidentialité | https://usemoneymaker.com/privacy |
+| URL d'assistance | https://usemoneymaker.com/support |
+| URL marketing | https://usemoneymaker.com/support |
 | Copyright | © 2026 MoneyMaker |
 
 **Mots-clés (100)** : `abonnements,indie,développeur,dashboard,widget,churn,saas,compta,urssaf,chiffre,affaires,finance,startup`

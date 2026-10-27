@@ -12,6 +12,7 @@
 
 import SwiftUI
 import Charts
+import UIKit
 
 // MARK: - Palette
 
@@ -27,16 +28,51 @@ enum MMColor {
     static let red = hex(0xFF4D5E)
     static let orange = hex(0xFFA23C)
 
-    static let edge = Color(.sRGB, red: 0.012, green: 0.012, blue: 0.016)
-    static let mid = Color(.sRGB, red: 0.055, green: 0.055, blue: 0.064)
-    static let well = Color(.sRGB, red: 0.092, green: 0.093, blue: 0.104)
+    /// Couleur qui suit le mode clair / sombre (dynamique UIKit : bascule instantanée, sheets et widgets compris).
+    static func dyn(light: UIColor, dark: UIColor) -> Color {
+        Color(UIColor { $0.userInterfaceStyle == .light ? light : dark })
+    }
+    static func dynHex(light: UInt32, dark: UInt32) -> Color {
+        func u(_ v: UInt32) -> UIColor { UIColor(red: CGFloat((v >> 16) & 0xFF) / 255, green: CGFloat((v >> 8) & 0xFF) / 255, blue: CGFloat(v & 0xFF) / 255, alpha: 1) }
+        return dyn(light: u(light), dark: u(dark))
+    }
+    /// Encre à une opacité donnée : blanc·o en sombre (identique à l'ancien `Color.white.opacity(o)`),
+    /// encre presque noire en clair (légèrement renforcée pour garder le contraste sur fond clair).
+    /// Mémorisée par opacité (au millième) : appelée des centaines de fois par image, elle créait à
+    /// chaque fois deux UIColor et une fermeture dynamique, que SwiftUI ne savait pas comparer.
+    static func fg(_ o: Double) -> Color {
+        let key = Int((max(0, min(1, o)) * 1000).rounded())
+        fgLock.lock(); defer { fgLock.unlock() }
+        if let c = fgCache[key] { return c }
+        let a = Double(key) / 1000
+        let c = dyn(light: UIColor(red: 0.07, green: 0.07, blue: 0.09, alpha: CGFloat(min(1, a * 1.05))),
+                    dark: UIColor(white: 1, alpha: CGFloat(a)))
+        fgCache[key] = c
+        return c
+    }
+    private static var fgCache: [Int: Color] = [:]
+    private static let fgLock = NSLock()
 
-    static let ink = Color.white
-    static let ink2 = Color.white.opacity(0.62)
-    static let ink3 = Color.white.opacity(0.34)
-    static let hairline = Color.white.opacity(0.08)
-    static let cardFill = Color.white.opacity(0.062)
-    static let cardBorder = Color.white.opacity(0.096)
+    static let edge = dyn(light: UIColor(red: 0.949, green: 0.949, blue: 0.965, alpha: 1), dark: UIColor(red: 0.012, green: 0.012, blue: 0.016, alpha: 1))
+    static let mid = dyn(light: UIColor(red: 0.973, green: 0.973, blue: 0.984, alpha: 1), dark: UIColor(red: 0.055, green: 0.055, blue: 0.064, alpha: 1))
+    static let well = dyn(light: .white, dark: UIColor(red: 0.092, green: 0.093, blue: 0.104, alpha: 1))
+
+    /// Fond de page / sheet : noir pur en sombre, gris groupé Apple (#F2F2F7) en clair.
+    static let bg = dyn(light: UIColor(red: 0.949, green: 0.949, blue: 0.969, alpha: 1), dark: .black)
+    /// Surface élevée (sheets, menus) : noir en sombre, blanc en clair.
+    static let surface = dyn(light: .white, dark: .black)
+
+    static let ink = dyn(light: UIColor(red: 0.07, green: 0.07, blue: 0.09, alpha: 1), dark: .white)
+    /// Encre inverse (texte sur une pastille `ink`).
+    static let inkInverse = dyn(light: .white, dark: .black)
+    static let ink2 = fg(0.62)
+    static let ink3 = dyn(light: UIColor(red: 0.07, green: 0.07, blue: 0.09, alpha: 0.42), dark: UIColor(white: 1, alpha: 0.34))
+    static let hairline = fg(0.08)
+    /// Carte : verre blanc 6,2 % en sombre, carte blanche opaque en clair.
+    static let cardFill = dyn(light: .white, dark: UIColor(white: 1, alpha: 0.062))
+    static let cardBorder = dyn(light: UIColor(white: 0, alpha: 0.07), dark: UIColor(white: 1, alpha: 0.096))
+    /// Ombre douce des cartes : invisible en sombre, légère en clair.
+    static let cardShadow = dyn(light: UIColor(white: 0, alpha: 0.06), dark: .clear)
 
     static let chartGradient = LinearGradient(colors: [blue, accent], startPoint: .leading, endPoint: .trailing)
 }
@@ -69,8 +105,49 @@ enum MMFont {
 
 /// Fond de page : noir pur, de A à Z.
 struct MMBackdrop: View {
+    @Environment(\.colorScheme) private var scheme
     var body: some View {
-        Color.black.ignoresSafeArea().allowsHitTesting(false).accessibilityHidden(true)
+        Group {
+            if scheme == .light { light } else { dark }
+        }
+        .ignoresSafeArea().allowsHitTesting(false).accessibilityHidden(true)
+    }
+
+    /// Clair : gris groupé Apple, une lueur blanche au centre, bords qui fonçent à peine.
+    private var light: some View {
+        let edge = Color(red: 0.925, green: 0.925, blue: 0.945)
+        return ZStack {
+            edge
+            EllipticalGradient(stops: [
+                .init(color: Color(red: 0.985, green: 0.985, blue: 0.992), location: 0),
+                .init(color: Color(red: 0.955, green: 0.955, blue: 0.970), location: 0.42),
+                .init(color: edge, location: 0.85),
+            ], center: UnitPoint(x: 0.5, y: 0.40), startRadiusFraction: 0.06, endRadiusFraction: 0.85)
+        }
+    }
+
+    private var dark: some View {
+        // Fond de V2 (AppPageBackdrop) : gris anthracite en ovale, bords qui retombent au noir.
+        let edge = Color(red: 0.022, green: 0.022, blue: 0.026)
+        return ZStack {
+            edge
+            EllipticalGradient(stops: [
+                .init(color: Color(red: 0.112, green: 0.113, blue: 0.124), location: 0),
+                .init(color: Color(red: 0.068, green: 0.068, blue: 0.078), location: 0.38),
+                .init(color: edge, location: 0.78),
+                .init(color: edge, location: 1),
+            ], center: UnitPoint(x: 0.5, y: 0.40), startRadiusFraction: 0.06, endRadiusFraction: 0.82)
+            LinearGradient(stops: [
+                .init(color: .black.opacity(0.70), location: 0), .init(color: .black.opacity(0.32), location: 0.12),
+                .init(color: .black.opacity(0.08), location: 0.24), .init(color: .clear, location: 0.36),
+                .init(color: .clear, location: 0.64), .init(color: .black.opacity(0.08), location: 0.76),
+                .init(color: .black.opacity(0.32), location: 0.88), .init(color: .black.opacity(0.70), location: 1),
+            ], startPoint: .leading, endPoint: .trailing)
+            LinearGradient(stops: [
+                .init(color: .black.opacity(0.28), location: 0), .init(color: .clear, location: 0.16),
+                .init(color: .clear, location: 0.72), .init(color: .black.opacity(0.38), location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+        }
     }
 }
 
@@ -81,6 +158,7 @@ struct MMCard<Content: View>: View {
     var radius: CGFloat = 28
     var glow: Color? = nil
     @ViewBuilder var content: () -> Content
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -91,7 +169,7 @@ struct MMCard<Content: View>: View {
                 shape.fill(MMColor.cardFill)
                     .overlay {
                         shape.strokeBorder(
-                            LinearGradient(colors: [Color.white.opacity(0.16), MMColor.cardBorder, Color.white.opacity(0.04)],
+                            LinearGradient(colors: [MMColor.fg(0.16), MMColor.cardBorder, MMColor.fg(0.04)],
                                            startPoint: .top, endPoint: .bottom), lineWidth: 1)
                     }
                     .overlay {
@@ -102,6 +180,14 @@ struct MMCard<Content: View>: View {
                     }
             }
             .clipShape(shape)
+            // L'ombre (passe hors écran floutée, sur tout le contenu) n'existe qu'en clair : en sombre elle
+            // était transparente mais toujours calculée, pour chaque carte, à chaque image du défilement.
+            // Tracée depuis la seule forme : le contenu n'est plus rastérisé pour la flouter.
+            .background {
+                if scheme == .light {
+                    shape.fill(MMColor.cardFill).shadow(color: MMColor.cardShadow, radius: 12, y: 4)
+                }
+            }
     }
 }
 
@@ -181,10 +267,10 @@ struct MMGlowChart: View {
             if area, let s = selected {
                 RuleMark(x: .value("Jour", s.date))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
-                    .foregroundStyle(Color.white.opacity(0.35))
+                    .foregroundStyle(MMColor.fg(0.35))
                 PointMark(x: .value("Jour", s.date), y: .value("Valeur", s.value))
                     .symbol {
-                        Circle().fill(.white).frame(width: 9, height: 9)
+                        Circle().fill(MMColor.ink).frame(width: 9, height: 9)
                             .background(Circle().fill(MMColor.accent.opacity(0.35)).frame(width: 22, height: 22))
                     }
             }

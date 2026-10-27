@@ -20,6 +20,8 @@ private struct AnyKey: CodingKey {
 struct ChartRow: Decodable, Hashable {
     var date: String = ""
     var values: [String: Double] = [:]
+    /// Date analysée une seule fois au décodage (avant : à chaque rendu, donc à chaque image du glisser).
+    private(set) var day: Date?
     subscript(_ k: String) -> Double? { values[k] }
 
     init(from decoder: Decoder) throws {
@@ -28,9 +30,8 @@ struct ChartRow: Decodable, Hashable {
             if k.stringValue == "date" { date = (try? c.decode(String.self, forKey: k)) ?? "" }
             else if let v = try? c.decode(Double.self, forKey: k) { values[k.stringValue] = v }
         }
+        day = ChartRow.parser.date(from: date)
     }
-
-    var day: Date? { ChartRow.parser.date(from: date) }
     static let parser: DateFormatter = {
         let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = TimeZone(identifier: "UTC"); f.dateFormat = "yyyy-MM-dd"; return f
@@ -76,6 +77,8 @@ struct AnomalyItem: Decodable, Hashable, Identifiable {
     var date: String? = nil
     var title: String? = nil
     var body: String? = nil
+    var titleEn: String? = nil
+    var bodyEn: String? = nil
     var direction: String? = nil
     var severity: String? = nil
     var good: Bool? = nil
@@ -174,16 +177,16 @@ struct ChartDef: Hashable, Identifiable {
     }
     static let all: [ChartDef] = [
         .init(name: "mrr", title: "MRR"),
-        .init(name: "revenue", title: "Revenu"),
-        .init(name: "active_subscriptions", title: "Abonnés"),
-        .init(name: "active_subscriptions_movement", title: "Mouvements"),
-        .init(name: "new_customers", title: "Nouveaux clients"),
-        .init(name: "active_trials", title: "Essais"),
-        .init(name: "trial_conversion_funnel", title: "Entonnoir essai"),
-        .init(name: "churn", title: "Churn"),
-        .init(name: "subscription_retention", title: "Rétention"),
-        .init(name: "realized_ltv_per_paying_customer", title: "LTV réalisée"),
-        .init(name: "refund_rate", title: "Remboursements"),
+        .init(name: "revenue", title: String(localized: "Revenu")),
+        .init(name: "active_subscriptions", title: String(localized: "Abonnés")),
+        .init(name: "active_subscriptions_movement", title: String(localized: "Mouvements")),
+        .init(name: "new_customers", title: String(localized: "Nouveaux clients")),
+        .init(name: "active_trials", title: String(localized: "Essais")),
+        .init(name: "trial_conversion_funnel", title: String(localized: "Entonnoir essai")),
+        .init(name: "churn", title: String(localized: "Churn")),
+        .init(name: "subscription_retention", title: String(localized: "Rétention")),
+        .init(name: "realized_ltv_per_paying_customer", title: String(localized: "LTV réalisée")),
+        .init(name: "refund_rate", title: String(localized: "Remboursements")),
     ]
 }
 
@@ -195,7 +198,6 @@ struct ChartsScreen: View {
     @State private var data: ChartData?
     @State private var loading = true
     @State private var error: String?
-    @State private var selected: Date?
 
     private var resolution: String { days <= 31 ? "day" : days <= 120 ? "week" : "month" }
     private var projectName: String? { store.overview?.projects.first { $0.projectId == projectId }?.name }
@@ -209,7 +211,7 @@ struct ChartsScreen: View {
                 }
                 .mmAppear(0)
                 chips.mmAppear(1)
-                MMSegmented(options: [(30, "30 j"), (90, "90 j"), (365, "1 an")], selection: $days).mmAppear(1)
+                MMSegmented(options: [(30, String(localized: "30 j")), (90, String(localized: "90 j")), (365, String(localized: "1 an"))], selection: $days).mmAppear(1)
                 content.mmAppear(2)
                 if let note = data?.note {
                     Text(note).font(MMFont.system(11)).foregroundStyle(MMColor.ink3).padding(.horizontal, 4)
@@ -229,12 +231,12 @@ struct ChartsScreen: View {
                 ForEach(ChartDef.all) { c in
                     let on = c == chart
                     Button {
-                        withAnimation(.snappy) { chart = c; selected = nil }
+                        withAnimation(.snappy) { chart = c }
                     } label: {
                         Text(c.title).font(MMFont.system(13, on ? .medium : .regular))
-                            .foregroundStyle(on ? Color.black : MMColor.ink2)
+                            .foregroundStyle(on ? MMColor.inkInverse : MMColor.ink2)
                             .padding(.horizontal, 14).padding(.vertical, 8)
-                            .background(on ? AnyShapeStyle(MMColor.ink) : AnyShapeStyle(Color.white.opacity(0.06)), in: Capsule())
+                            .background(on ? AnyShapeStyle(MMColor.ink) : AnyShapeStyle(MMColor.fg(0.06)), in: Capsule())
                             .overlay { Capsule().strokeBorder(on ? .clear : MMColor.hairline, lineWidth: 1) }
                     }
                     .buttonStyle(MMPressStyle())
@@ -251,9 +253,9 @@ struct ChartsScreen: View {
         if loading && data == nil {
             MMCard(padding: 20) {
                 VStack(alignment: .leading, spacing: 14) {
-                    RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.06)).frame(width: 120, height: 12)
-                    RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06)).frame(width: 180, height: 40)
-                    RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.04)).frame(height: 180)
+                    RoundedRectangle(cornerRadius: 6).fill(MMColor.fg(0.06)).frame(width: 120, height: 12)
+                    RoundedRectangle(cornerRadius: 8).fill(MMColor.fg(0.06)).frame(width: 180, height: 40)
+                    RoundedRectangle(cornerRadius: 12).fill(MMColor.fg(0.04)).frame(height: 180)
                 }
                 .modifier(MMShimmer())
             }
@@ -262,7 +264,7 @@ struct ChartsScreen: View {
         } else if let d = data {
             VStack(alignment: .leading, spacing: 14) {
                 switch chart.kind {
-                case .line: LineChartCard(data: d, title: chart.title, selected: $selected)
+                case .line: LineChartCard(data: d, title: chart.title)
                 case .movement: MovementChartCard(data: d, title: chart.title)
                 case .retention: RetentionGrid(data: d)
                 case .funnel: FunnelCard(data: d)
@@ -287,9 +289,9 @@ struct ChartsScreen: View {
 
 /// Résumé chiffré : libellés français des champs secondaires renvoyés par l'API.
 private let summaryLabels: [(String, String)] = [
-    ("new", "Nouveaux"), ("reactivated", "Réactivés"), ("churned", "Perdus"), ("net", "Net"),
-    ("revenue", "Brut"), ("refunds", "Remb."), ("transactions", "Transactions"),
-    ("customers", "Clients"), ("payingCustomers", "Payants"), ("started", "Essais"), ("converted", "Convertis"),
+    ("new", String(localized: "Nouveaux")), ("reactivated", String(localized: "Réactivés")), ("churned", String(localized: "Perdus")), ("net", String(localized: "Net")),
+    ("revenue", String(localized: "Brut")), ("refunds", String(localized: "Remb.")), ("transactions", String(localized: "Transactions")),
+    ("customers", String(localized: "Clients")), ("payingCustomers", String(localized: "Payants")), ("started", String(localized: "Essais")), ("converted", String(localized: "Convertis")),
 ]
 
 private struct SummaryRow: View {
@@ -311,13 +313,20 @@ private struct SummaryRow: View {
     }
 }
 
+/// La sélection au doigt vit ici : glisser ne redessine que cette carte, et les points sont
+/// calculés à l'init (pas à chaque image du glisser).
 private struct LineChartCard: View {
     let data: ChartData
     let title: String
-    @Binding var selected: Date?
+    private let pts: [MMPoint]
+    @State private var selected: Date?
+
+    init(data: ChartData, title: String) {
+        self.data = data; self.title = title
+        pts = data.series.compactMap { r in r.day.flatMap { d in r["value"].map { MMPoint(date: d, value: $0) } } }
+    }
 
     var body: some View {
-        let pts = data.series.compactMap { r in r.day.flatMap { d in r["value"].map { MMPoint(date: d, value: $0) } } }
         let point = selected.flatMap { d in pts.min { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) } }
         let headline = point?.value ?? data.summary?["value"] ?? pts.last?.value
         MMCard(padding: 20, glow: MMColor.accent) {
@@ -339,25 +348,29 @@ private struct LineChartCard: View {
                 }
             }
         }
+        // Changer de graphique efface la sélection (comme avant).
+        .onChange(of: title) { selected = nil }
     }
 }
 
 private func resolutionLabel(_ r: String?) -> String {
-    ["day": "par jour", "week": "par semaine", "month": "par mois"][r ?? ""] ?? ""
+    ["day": String(localized: "par jour"), "week": String(localized: "par semaine"), "month": String(localized: "par mois")][r ?? ""] ?? ""
 }
 
 private struct MovementChartCard: View {
     let data: ChartData
     let title: String
 
-    private struct Bar: Identifiable { let id = UUID(); let date: Date; let kind: String; let value: Double }
+    /// Identifiant stable (date + type) : un UUID par rendu forçait Charts à tout recréer.
+    private struct Bar: Identifiable { let date: Date; let kind: String; let value: Double; var id: String { "\(date.timeIntervalSince1970)|\(kind)" } }
 
     var body: some View {
+        let kNew = String(localized: "Nouveaux"), kReactivated = String(localized: "Réactivés"), kChurned = String(localized: "Perdus")
         let bars: [Bar] = data.series.flatMap { r -> [Bar] in
             guard let d = r.day else { return [] }
-            return [Bar(date: d, kind: "Nouveaux", value: r["new"] ?? 0),
-                    Bar(date: d, kind: "Réactivés", value: r["reactivated"] ?? 0),
-                    Bar(date: d, kind: "Perdus", value: -abs(r["churned"] ?? 0))]
+            return [Bar(date: d, kind: kNew, value: r["new"] ?? 0),
+                    Bar(date: d, kind: kReactivated, value: r["reactivated"] ?? 0),
+                    Bar(date: d, kind: kChurned, value: -abs(r["churned"] ?? 0))]
         }
         let unit: Calendar.Component = data.resolution == "month" ? .month : data.resolution == "week" ? .weekOfYear : .day
         MMCard(padding: 20, glow: MMColor.accent) {
@@ -371,7 +384,7 @@ private struct MovementChartCard: View {
                         .foregroundStyle(by: .value("Type", b.kind))
                         .cornerRadius(2)
                 }
-                .chartForegroundStyleScale(["Nouveaux": MMColor.accent, "Réactivés": MMColor.blue, "Perdus": MMColor.red])
+                .chartForegroundStyleScale([kNew: MMColor.accent, kReactivated: MMColor.blue, kChurned: MMColor.red])
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                         AxisValueLabel(format: .dateTime.day().month(.abbreviated)).font(MMFont.system(10)).foregroundStyle(MMColor.ink3)
@@ -396,7 +409,7 @@ private struct RetentionGrid: View {
         let cols = (0..<12).filter { k in cohorts.contains { $0["p\(k)"] != nil } }
         MMCard(padding: 18, glow: MMColor.accent) {
             VStack(alignment: .leading, spacing: 14) {
-                MMLabel(text: "Rétention par cohorte", trailing: data.summary?["customers"].map { "\(Int($0)) clients" })
+                MMLabel(text: String(localized: "Rétention par cohorte"), trailing: data.summary?["customers"].map { String(localized: "\(Int($0)) clients") })
                 if cohorts.isEmpty {
                     Text("Aucune cohorte sur la période.").font(MMFont.system(13)).foregroundStyle(MMColor.ink3)
                 } else {
@@ -419,7 +432,7 @@ private struct RetentionGrid: View {
                                     ForEach(cols, id: \.self) { k in
                                         let v = r["p\(k)"]
                                         RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                            .fill(v.map { MMColor.accent.opacity(0.08 + 0.72 * $0) } ?? Color.white.opacity(0.03))
+                                            .fill(v.map { MMColor.accent.opacity(0.08 + 0.72 * $0) } ?? MMColor.fg(0.03))
                                             .frame(width: 34, height: 28)
                                             .overlay {
                                                 if let v {
@@ -445,15 +458,15 @@ private struct FunnelCard: View {
         let s = data.summary
         let started = max(s?["started"] ?? 0, 1)
         let steps: [(String, Double, Color)] = [
-            ("Essais démarrés", s?["started"] ?? 0, MMColor.blue),
-            ("Convertis", s?["converted"] ?? 0, MMColor.accent),
-            ("Toujours abonnés", s?["stillActive"] ?? 0, MMColor.accent.opacity(0.7)),
-            ("Annulés", s?["cancelled"] ?? 0, MMColor.red),
-            ("En cours", s?["pending"] ?? 0, MMColor.ink3),
+            (String(localized: "Essais démarrés"), s?["started"] ?? 0, MMColor.blue),
+            (String(localized: "Convertis"), s?["converted"] ?? 0, MMColor.accent),
+            (String(localized: "Toujours abonnés"), s?["stillActive"] ?? 0, MMColor.accent.opacity(0.7)),
+            (String(localized: "Annulés"), s?["cancelled"] ?? 0, MMColor.red),
+            (String(localized: "En cours"), s?["pending"] ?? 0, MMColor.ink3),
         ]
         MMCard(padding: 20, glow: MMColor.accent) {
             VStack(alignment: .leading, spacing: 16) {
-                MMLabel(text: "Entonnoir essai", trailing: "taux de conversion")
+                MMLabel(text: String(localized: "Entonnoir essai"), trailing: String(localized: "taux de conversion"))
                 Text(data.format(s?["value"])).font(MMFont.number(44)).tracking(-1.2)
                 VStack(spacing: 12) {
                     ForEach(steps, id: \.0) { label, v, color in
@@ -467,7 +480,7 @@ private struct FunnelCard: View {
                             }
                             GeometryReader { g in
                                 ZStack(alignment: .leading) {
-                                    Capsule().fill(Color.white.opacity(0.05))
+                                    Capsule().fill(MMColor.fg(0.05))
                                     Capsule().fill(color).frame(width: max(4, g.size.width * min(1, v / started)))
                                 }
                             }
@@ -520,7 +533,7 @@ struct GrowthSections: View {
     private func ltvCard(_ l: LTVPrediction) -> some View {
         MMCard(padding: 18) {
             VStack(alignment: .leading, spacing: 12) {
-                MMLabel(text: "Prévision LTV", trailing: "12 / 24 mois")
+                MMLabel(text: String(localized: "Prévision LTV"), trailing: String(localized: "12 / 24 mois"))
                 ForEach(l.groups.prefix(6)) { g in
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -529,8 +542,8 @@ struct GrowthSections: View {
                                 .font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
                         }
                         Spacer(minLength: 8)
-                        Text(g.ltv12.map { $0.money(l.currency) } ?? "—").font(MMFont.number(15, .regular)).monospacedDigit()
-                        Text(g.ltv24.map { $0.money(l.currency) } ?? "—").font(MMFont.number(15, .regular)).monospacedDigit()
+                        Text(g.ltv12.map { $0.money(l.currency) } ?? "—").font(MMFont.number(15, .regular)).monospacedDigit().mmNumeric()
+                        Text(g.ltv24.map { $0.money(l.currency) } ?? "—").font(MMFont.number(15, .regular)).monospacedDigit().mmNumeric()
                             .foregroundStyle(MMColor.accent).frame(minWidth: 74, alignment: .trailing)
                     }
                 }
@@ -539,13 +552,13 @@ struct GrowthSections: View {
     }
 
     private func confidence(_ c: String?) -> String {
-        ["high": "élevée", "medium": "moyenne", "low": "faible"][c ?? ""] ?? "—"
+        ["high": String(localized: "élevée"), "medium": String(localized: "moyenne"), "low": String(localized: "faible")][c ?? ""] ?? "—"
     }
 
     private var anomaliesCard: some View {
         MMCard(padding: 18, glow: anomalies.contains { $0.good == false } ? MMColor.orange : nil) {
             VStack(alignment: .leading, spacing: 12) {
-                MMLabel(text: "Anomalies", trailing: "\(anomalies.count)")
+                MMLabel(text: String(localized: "Anomalies"), trailing: "\(anomalies.count)")
                 ForEach(anomalies.prefix(5)) { a in
                     let color = a.good == true ? MMColor.accent : a.severity == "critical" ? MMColor.red : MMColor.orange
                     HStack(alignment: .top, spacing: 12) {
@@ -553,8 +566,8 @@ struct GrowthSections: View {
                             .font(.system(size: 11, weight: .bold)).foregroundStyle(color)
                             .frame(width: 26, height: 26).background(color.opacity(0.12), in: Circle())
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(a.title ?? a.metric ?? "Anomalie").font(MMFont.system(13, .medium))
-                            if let b = a.body { Text(b).font(MMFont.system(11)).foregroundStyle(MMColor.ink2).lineLimit(2) }
+                            Text(MMLang.pick(a.title, a.titleEn) ?? a.metric ?? String(localized: "Anomalie")).font(MMFont.system(13, .medium))
+                            if let b = MMLang.pick(a.body, a.bodyEn) { Text(b).font(MMFont.system(11)).foregroundStyle(MMColor.ink2).lineLimit(2) }
                         }
                         Spacer(minLength: 4)
                         if let d = a.date.flatMap({ ChartRow.parser.date(from: $0) }) {
@@ -568,7 +581,7 @@ struct GrowthSections: View {
 
     private var experimentsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            MMLabel(text: "Tests A/B").padding(.horizontal, 4).padding(.top, 8)
+            MMLabel(text: String(localized: "Tests A/B")).padding(.horizontal, 4).padding(.top, 8)
             ForEach(experiments, id: \.0.id) { e, r in
                 MMCard(padding: 18) {
                     VStack(alignment: .leading, spacing: 12) {
@@ -593,7 +606,7 @@ struct GrowthSections: View {
                                     }
                                     GeometryReader { g in
                                         ZStack(alignment: .leading) {
-                                            Capsule().fill(Color.white.opacity(0.05))
+                                            Capsule().fill(MMColor.fg(0.05))
                                             Capsule().fill(v.id == best ? MMColor.accent : MMColor.blue.opacity(0.7))
                                                 .frame(width: max(4, g.size.width * v.probabilityToBeBest))
                                         }

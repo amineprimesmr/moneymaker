@@ -12,6 +12,7 @@ import { connect, ClientHttp2Session, constants } from "http2";
 import { createPrivateKey, sign, KeyObject } from "crypto";
 import { db, Project } from "./store";
 import { convertMicros } from "./engine";
+import { Lang, normLang, money, EVENT_TITLES, periodLabel, todayLine, todayLabel, liveActivityStart, RANK_TITLES, CHART_NAMES, categoryLabel, previousRank, dailySummaryText } from "./i18n";
 
 export const BUNDLE_ID = "io.moneymaker.app";
 
@@ -48,6 +49,7 @@ export interface Device {
   prefs: PushPrefs;
   tz: string;
   currency: string;
+  lang?: Lang;          // langue des textes push ("fr" | "en") ; absent = "fr"
   updatedAt: number;
 }
 
@@ -89,6 +91,7 @@ export function sanitizeDevice(id: string, body: any, current?: Partial<Device>)
       startedAt: la.updateToken ? Date.now() : la.updateToken === null ? undefined : current?.liveActivity?.startedAt,
     },
     prefs, tz,
+    lang: body?.lang !== undefined && body?.lang !== null ? normLang(body.lang, "en") : current?.lang ?? "fr",
     currency: typeof body?.currency === "string" && /^[A-Z]{3}$/.test(body.currency) ? body.currency : current?.currency ?? "EUR",
     updatedAt: Date.now(),
   }));
@@ -108,23 +111,16 @@ const PREF_FOR: Record<string, keyof PushPrefs> = {
   REFUND: "refunds", REVOKED: "refunds", UNCANCELLATION: "sales", TEST: "sales",
 };
 
-const TITLES: Record<string, string> = {
-  INITIAL_PURCHASE: "Nouvel abonné", NON_RENEWING_PURCHASE: "Nouvel achat", TRIAL_CONVERTED: "Essai converti", RENEWAL: "Renouvellement",
-  TRIAL_STARTED: "Essai démarré", CANCELLATION: "Annulation", EXPIRATION: "Abonnement expiré", BILLING_ISSUE: "Problème de paiement",
-  BILLING_RECOVERED: "Paiement récupéré", REFUND: "Remboursement", REVOKED: "Accès révoqué", UNCANCELLATION: "Réactivation", TEST: "Notification de test",
-};
 
 const REVENUE = new Set(["INITIAL_PURCHASE", "NON_RENEWING_PURCHASE", "TRIAL_CONVERTED", "RENEWAL"]);
 
-export function formatMoney(micros: number, currency: string) {
-  const v = micros / 1e6;
-  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: currency || "EUR", maximumFractionDigits: Math.abs(v) >= 1000 ? 0 : 2 }).format(v);
+export function formatMoney(micros: number, currency: string, lang: Lang = "fr") {
+  return money(lang, micros, currency);
 }
 
 const flag = (cc?: string | null) => cc && /^[A-Z]{2}$/i.test(cc)
   ? String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1f1a5 + c.charCodeAt(0))) : "";
 
-const period = (m?: number) => m === 12 ? "annuel" : m === 1 ? "mensuel" : m === 3 ? "trimestriel" : m === 6 ? "semestriel" : m === 0.25 ? "hebdo" : "";
 
 /** Whether this device wants this event. Pure — unit-tested. */
 export function wants(prefs: PushPrefs, projectId: string, e: Record<string, any>): boolean {
@@ -135,13 +131,14 @@ export function wants(prefs: PushPrefs, projectId: string, e: Record<string, any
 }
 
 /** APNs alert payload for a subscription event. Pure — unit-tested. */
-export function eventNotification(project: Project, e: Record<string, any>, prefs: PushPrefs, todayMicros?: number, currency = "EUR") {
+export function eventNotification(project: Project, e: Record<string, any>, prefs: PushPrefs, todayMicros?: number, currency = "EUR", lang: Lang = "fr") {
+  const TITLES = EVENT_TITLES[lang];
   const isRevenue = REVENUE.has(e.type) && !e.isTrial && e.priceMicros > 0;
-  const amount = e.priceMicros > 0 && !e.isTrial ? formatMoney(e.type === "REFUND" ? -e.priceMicros : e.priceMicros, e.currency) : "";
+  const amount = e.priceMicros > 0 && !e.isTrial ? formatMoney(e.type === "REFUND" ? -e.priceMicros : e.priceMicros, e.currency, lang) : "";
   const title = isRevenue ? `+${amount} · ${project.name}` : `${TITLES[e.type] ?? e.type} · ${project.name}`;
-  const bits = [isRevenue ? TITLES[e.type] : amount, period(e.periodMonths), e.productId, `${flag(e.country)} ${e.country ?? ""}`.trim(), e.isSandbox ? "sandbox" : ""]
+  const bits = [isRevenue ? TITLES[e.type] : amount, periodLabel(lang, e.periodMonths), e.productId, `${flag(e.country)} ${e.country ?? ""}`.trim(), e.isSandbox ? "sandbox" : ""]
     .filter(Boolean);
-  const subtitle = isRevenue && todayMicros !== undefined ? `Aujourd'hui : ${formatMoney(todayMicros, currency)}` : undefined;
+  const subtitle = isRevenue && todayMicros !== undefined ? todayLine(lang, formatMoney(todayMicros, currency, lang)) : undefined;
   const loud = isRevenue || e.type === "BILLING_ISSUE" || e.type === "REFUND";
   return {
     aps: {
@@ -157,12 +154,11 @@ export function eventNotification(project: Project, e: Record<string, any>, pref
   };
 }
 
-export function rankingNotification(project: Project, a: Record<string, any>) {
-  const titles: Record<string, string> = { NEW_COUNTRY: "Nouveau pays", TOP_100: "Retour dans le top 100", TOP_10: "Top 10", TOP_1: "Numéro 1 🥇", JUMP: "Forte hausse", DROP: "Forte baisse" };
-  const charts: Record<string, string> = { free: "Gratuites", paid: "Payantes", grossing: "Revenus" };
+export function rankingNotification(project: Project, a: Record<string, any>, lang: Lang = "fr") {
+  const titles = RANK_TITLES[lang], charts = CHART_NAMES[lang];
   return {
     aps: {
-      alert: { title: `${titles[a.type] ?? a.type} · ${a.appName ?? project.name}`, body: `#${a.rank ?? "–"} ${flag(a.cc)} ${a.cc} · ${charts[a.chart] ?? a.chart}${a.scope === "genre" ? " · catégorie" : ""}${a.prevRank ? ` (avant #${a.prevRank})` : ""}` },
+      alert: { title: `${titles[a.type] ?? a.type} · ${a.appName ?? project.name}`, body: `#${a.rank ?? "–"} ${flag(a.cc)} ${a.cc} · ${charts[a.chart] ?? a.chart}${a.scope === "genre" ? ` · ${categoryLabel(lang)}` : ""}${a.prevRank ? ` (${previousRank(lang, a.prevRank)})` : ""}` },
       sound: a.type === "TOP_1" || a.type === "TOP_10" ? "default" : undefined,
       "thread-id": `rankings-${project.id}`, "interruption-level": "active", category: "RANKING",
     },
@@ -236,7 +232,8 @@ export async function todayFor(uid: string, tz: string, currency?: string, proje
 export function liveActivityState(t: Today) {
   return {
     revenueMicros: t.revenueMicros - t.refundsMicros, currency: t.currency, sales: t.sales + t.renewals, trials: t.trials,
-    lastProject: t.last?.projectName ?? null, lastAmountMicros: t.last?.amountMicros ?? 0, lastCurrency: t.last?.currency ?? t.currency,
+    lastProject: t.last?.projectName ?? null, lastAmountMicros: t.last?.amountMicros ?? 0, lastCurrency: t.last?.currency ?? t.currency, lastCountry: (t.last as any)?.country ?? null,
+    lastSaleAt: t.last ? Math.floor(t.last.at / 1000) : null,
     hourly: t.hourly.map(v => Math.round(v / 10000) / 100), updatedAt: Math.floor(Date.now() / 1000),
   };
 }
@@ -349,7 +346,7 @@ export async function pushEvent(project: Project, e: Record<string, any>): Promi
     const prefs = { ...DEFAULT_PREFS, ...d.prefs };
     const t = isRevenue && !e.isSandbox ? await today(d).catch(() => undefined) : undefined;
     const jobs: Promise<void>[] = [];
-    if (d.apnsToken && wants(prefs, project.id, e)) jobs.push(apnsSend(d.env, d.apnsToken, "alert", eventNotification(project, e, prefs, t ? t.revenueMicros - t.refundsMicros : undefined, d.currency))
+    if (d.apnsToken && wants(prefs, project.id, e)) jobs.push(apnsSend(d.env, d.apnsToken, "alert", eventNotification(project, e, prefs, t ? t.revenueMicros - t.refundsMicros : undefined, d.currency, normLang(d.lang)))
       .then(async r => { r.status === 200 ? stats.alerts++ : stats.failed++; await prune(d, "apnsToken", r); }));
     if (isRevenue && !e.isSandbox) {
       if (d.widgetPushToken) jobs.push(apnsSend(d.env, d.widgetPushToken, "widgets", { aps: { "content-changed": true } })
@@ -366,7 +363,8 @@ export async function pushEvent(project: Project, e: Record<string, any>): Promi
 async function updateLiveActivity(d: Device & { uid: string }, t: Today, prefs: PushPrefs, e: Record<string, any>): Promise<number> {
   const state = liveActivityState(t);
   const now = Math.floor(Date.now() / 1000);
-  const alert = e.priceMicros > 0 ? { title: `+${formatMoney(e.priceMicros, e.currency)}`, body: `Aujourd'hui : ${formatMoney(state.revenueMicros, t.currency)}` } : undefined;
+  const lang = normLang(d.lang);
+  const alert = e.priceMicros > 0 ? { title: `+${formatMoney(e.priceMicros, e.currency, lang)}`, body: todayLine(lang, formatMoney(state.revenueMicros, t.currency, lang)) } : undefined;
   const la = d.liveActivity ?? {};
   const fresh = la.updateToken && la.startedAt && Date.now() - la.startedAt < 8 * 3600000;
   if (fresh) {
@@ -380,7 +378,7 @@ async function updateLiveActivity(d: Device & { uid: string }, t: Today, prefs: 
   if (prefs.liveActivityAuto && la.pushToStartToken) {
     const r = await apnsSend(d.env, la.pushToStartToken, "liveactivity", {
       aps: { timestamp: now, event: "start", "content-state": state, "attributes-type": "RevenueActivityAttributes",
-        attributes: { title: "Aujourd'hui" }, "stale-date": now + 3 * 3600, ...(alert ? { alert } : { alert: { title: "MoneyMaker", body: "Revenus du jour en direct" } }) },
+        attributes: { title: todayLabel(lang) }, "stale-date": now + 3 * 3600, ...(alert ? { alert } : { alert: { title: "MoneyMaker", body: liveActivityStart(lang) } }) },
     }, { priority: 10 });
     await prune(d, "liveActivity.pushToStartToken", r);
     return r.status === 200 ? 1 : 0;
@@ -392,17 +390,18 @@ export async function pushRanking(project: Project, a: Record<string, any>): Pro
   const devices = await devicesFor(project.members);
   let sent = 0;
   await Promise.all(devices.filter(d => d.apnsToken && { ...DEFAULT_PREFS, ...d.prefs }.rankings && !(d.prefs?.mutedProjects ?? []).includes(project.id) && (a.own !== false))
-    .map(async d => { const r = await apnsSend(d.env, d.apnsToken!, "alert", rankingNotification(project, a)); if (r.status === 200) sent++; await prune(d, "apnsToken", r); }));
+    .map(async d => { const r = await apnsSend(d.env, d.apnsToken!, "alert", rankingNotification(project, a, normLang(d.lang))); if (r.status === 200) sent++; await prune(d, "apnsToken", r); }));
   return sent;
 }
 
 /** Alerte intelligente (plan.ts) → notification à chaque membre qui l'accepte. */
-export async function pushInsight(project: Project, i: { title: string; body: string; type: string; good?: boolean }): Promise<number> {
+export async function pushInsight(project: Project, i: { title: string; body: string; titleEn?: string; bodyEn?: string; type: string; good?: boolean }): Promise<number> {
   const devices = await devicesFor(project.members);
   let sent = 0;
   await Promise.all(devices.filter(d => d.apnsToken && { ...DEFAULT_PREFS, ...d.prefs }.insights && !(d.prefs?.mutedProjects ?? []).includes(project.id)).map(async d => {
+    const en = normLang(d.lang) === "en" && i.titleEn && i.bodyEn;
     const r = await apnsSend(d.env, d.apnsToken!, "alert", {
-      aps: { alert: { title: i.title, body: i.body }, "thread-id": `insights-${project.id}`, "interruption-level": i.type === "WEEKLY_SUMMARY" ? "passive" : i.type === "SALES_SPIKE" || i.type === "FIRST_SALE_COUNTRY" || i.good ? "active" : "time-sensitive", category: "EVENT", sound: "default" },
+      aps: { alert: en ? { title: i.titleEn, body: i.bodyEn } : { title: i.title, body: i.body }, "thread-id": `insights-${project.id}`, "interruption-level": i.type === "WEEKLY_SUMMARY" ? "passive" : i.type === "SALES_SPIKE" || i.type === "FIRST_SALE_COUNTRY" || i.good ? "active" : "time-sensitive", category: "EVENT", sound: "default" },
       projectId: project.id, url: `moneymaker://project/${project.id}`,
     });
     if (r.status === 200) sent++;
@@ -422,11 +421,9 @@ export async function sendDailySummaries(now = Date.now()): Promise<number> {
     if (hour !== 21 || !d.apnsToken) return;
     const t = await todayFor(uid, d.tz, d.currency);
     const net = t.revenueMicros - t.refundsMicros;
-    const body = net > 0
-      ? [`${t.sales} vente${t.sales > 1 ? "s" : ""}`, t.renewals ? `${t.renewals} renouvellement${t.renewals > 1 ? "s" : ""}` : "", t.trials ? `${t.trials} essai${t.trials > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ")
-      : t.trials ? `${t.trials} essai${t.trials > 1 ? "s" : ""} démarré${t.trials > 1 ? "s" : ""}, pas encore de vente` : "Pas de vente aujourd'hui — demain sera meilleur.";
+    const { title, body } = dailySummaryText(normLang(d.lang), t, net, t.currency);
     const r = await apnsSend(d.env, d.apnsToken, "alert", {
-      aps: { alert: { title: `Ta journée : ${formatMoney(net, t.currency)}`, body }, "thread-id": "daily", "interruption-level": "passive", category: "SUMMARY" },
+      aps: { alert: { title, body }, "thread-id": "daily", "interruption-level": "passive", category: "SUMMARY" },
       url: "moneymaker://today",
     });
     if (r.status === 200) sent++;

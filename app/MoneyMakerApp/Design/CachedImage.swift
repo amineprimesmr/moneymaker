@@ -32,7 +32,8 @@ final class ImageStore {
         let t = Task<UIImage?, Never> {
             guard let (data, _) = try? await session.data(from: url) else { return nil }
             // Décodage + préparation hors du thread principal (pas d'à-coup au premier affichage).
-            return await Task.detached(priority: .utility) { UIImage(data: data)?.preparingForDisplay() }.value
+            // preparingForDisplay() peut renvoyer nil (simulateur, certains PNG) : on garde alors l'image brute.
+            return await Task.detached(priority: .utility) { UIImage(data: data).map { $0.preparingForDisplay() ?? $0 } }.value
         }
         inflight[url] = t
         let img = await t.value
@@ -45,20 +46,29 @@ final class ImageStore {
 struct CachedImage<Placeholder: View>: View {
     let url: URL?
     @ViewBuilder var placeholder: () -> Placeholder
-    @State private var image: UIImage?
+    /// Image chargée, avec l'URL dont elle vient : quand l'URL change (vue réutilisée pour un autre
+    /// business), l'ancienne image n'est plus affichée et la nouvelle se charge (avant, `image != nil`
+    /// bloquait le chargement et l'ancienne icône restait).
+    @State private var loaded: (url: URL, image: UIImage)?
 
     var body: some View {
         Group {
-            if let img = image ?? url.flatMap({ ImageStore.shared.cached($0) }) {
+            if let img = current {
                 Image(uiImage: img).resizable().scaledToFill()
             } else {
                 placeholder()
             }
         }
         .task(id: url) {
-            guard let url, image == nil, ImageStore.shared.cached(url) == nil else { return }
-            let img = await ImageStore.shared.load(url)
-            withAnimation(.easeOut(duration: 0.2)) { image = img }
+            guard let url, loaded?.url != url, ImageStore.shared.cached(url) == nil else { return }
+            guard let img = await ImageStore.shared.load(url), !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.2)) { loaded = (url, img) }
         }
+    }
+
+    private var current: UIImage? {
+        guard let url else { return nil }
+        if let l = loaded, l.url == url { return l.image }
+        return ImageStore.shared.cached(url)
     }
 }

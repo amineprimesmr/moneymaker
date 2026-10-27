@@ -17,16 +17,16 @@
 import SwiftUI
 
 struct NotificationPermissionConfig {
-    var title = "Sois prévenu à chaque vente"
-    var description = "Le « cha-ching » en direct, tes revenus du jour\nsur l'écran verrouillé et un récap chaque soir."
+    var title = String(localized: "Sois prévenu à chaque vente")
+    var description = String(localized: "Le « cha-ching » en direct, tes revenus du jour\nsur l'écran verrouillé et un récap chaque soir.")
     var tint: Color = MMColor.accent
-    var primaryButtonTitle = "Activer les notifications"
-    var secondaryButtonTitle = "Plus tard"
+    var primaryButtonTitle = String(localized: "Activer les notifications")
+    var secondaryButtonTitle = String(localized: "Plus tard")
     var showsSecondaryButton = true
 
-    var topNotification = Notification(title: "+59,99 € · Mon app", caption: "Nouvel abonné · annuel · 🇫🇷 FR")
-    var centerNotification = Notification(title: "+9,99 € · Mon app", caption: "Essai converti · mensuel · 🇺🇸 US")
-    var bottomNotification = Notification(title: "Numéro 1 🥇 · Mon app", caption: "#1 🇫🇷 FR · Payantes · catégorie")
+    var topNotification = Notification(title: String(localized: "+\(59.99.formatted(.currency(code: "EUR"))) · Mon app"), caption: String(localized: "Nouvel abonné · annuel · 🇫🇷 FR"))
+    var centerNotification = Notification(title: String(localized: "+\(9.99.formatted(.currency(code: "EUR"))) · Mon app"), caption: String(localized: "Essai converti · mensuel · 🇺🇸 US"))
+    var bottomNotification = Notification(title: String(localized: "Numéro 1 🥇 · Mon app"), caption: String(localized: "#1 🇫🇷 FR · Payantes · catégorie"))
 
     struct Notification {
         var assetName = "AppMark"
@@ -40,7 +40,9 @@ struct NotificationPermissionView: View {
     var primaryAction: () -> Void
     var secondaryAction: () -> Void
 
-    private let containerCornerRadius: CGFloat = 22
+    @State private var containerCornerRadius: CGFloat = 22
+    @Environment(\.horizontalSizeClass) private var hClass
+    @Environment(\.verticalSizeClass) private var vClass
 
     var body: some View {
         VStack(spacing: 10) {
@@ -67,6 +69,7 @@ struct NotificationPermissionView: View {
                 LinearKeyframe(3, duration: 1)
                 SpringKeyframe(4, duration: 1, spring: .bouncy(duration: 0.9, extraBounce: 0))
             }
+            .modifier(ConcentricRadiusReader(radius: $containerCornerRadius))
 
             contents()
         }
@@ -76,10 +79,10 @@ struct NotificationPermissionView: View {
         .presentationDetents([.height(460)])
         .modifier(PageFittedSizing())
         .presentationCompactAdaptation(.sheet)
-        .presentationBackground(Color.black)
+        .presentationBackground(MMColor.surface)
         .presentationCornerRadius(38)
         .interactiveDismissDisabled()
-        .environment(\.colorScheme, .dark)
+        .modifier(VerticalToolbarDisabled(status: vClass == .regular && hClass == .compact))
     }
 
     // MARK: Pile de notifications
@@ -113,9 +116,9 @@ struct NotificationPermissionView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: 50, height: 50)
-                .clipShape(RoundedRectangle(cornerRadius: containerCornerRadius - 5, style: .continuous))
+                .modifier(ConcentricClip(radius: containerCornerRadius - 5))
             VStack(alignment: .leading, spacing: 4) {
-                Text(value.title).font(MMFont.system(15, .medium)).foregroundStyle(.white)
+                Text(value.title).font(MMFont.system(15, .medium)).foregroundStyle(MMColor.ink)
                 Text(value.caption).font(MMFont.system(12)).foregroundStyle(.gray)
             }
             .lineLimit(1)
@@ -174,7 +177,7 @@ struct NotificationPermissionView: View {
         VStack(spacing: 10) {
             Text(config.title)
                 .font(MMFont.system(20, .bold)).tracking(-0.4)
-                .foregroundStyle(.white)
+                .foregroundStyle(MMColor.ink)
                 .lineLimit(1)
             Text(config.description)
                 .multilineTextAlignment(.center)
@@ -205,6 +208,44 @@ struct NotificationPermissionView: View {
 
 // MARK: - Repli selon la version d'iOS
 
+/// Rayon concentrique réel du conteneur (iOS 27), 22 avant.
+private struct ConcentricRadiusReader: ViewModifier {
+    @Binding var radius: CGFloat
+    func body(content: Content) -> some View {
+        if #available(iOS 27.0, *) {
+            content.onGeometryChange(for: CGFloat.self) {
+                let r = $0.concentricCornerRadii
+                return max(max(r?.topLeading ?? 0, r?.topTrailing ?? 0), 15)
+            } action: { radius = $0 }
+        } else {
+            content
+        }
+    }
+}
+
+private struct ConcentricClip: ViewModifier {
+    let radius: CGFloat
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.clipShape(ConcentricRectangle(corners: .concentric, isUniform: true))
+        } else {
+            content.clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        }
+    }
+}
+
+/// iPhone pliable : barre d'outils verticale désactivée (iOS 27.1).
+private struct VerticalToolbarDisabled: ViewModifier {
+    let status: Bool
+    func body(content: Content) -> some View {
+        if #available(iOS 27.1, *) {
+            content.toolbarVerticalBehavior(status ? .disabled : .automatic)
+        } else {
+            content
+        }
+    }
+}
+
 private struct NotificationGlass: ViewModifier {
     let radius: CGFloat
     func body(content: Content) -> some View {
@@ -215,7 +256,7 @@ private struct NotificationGlass: ViewModifier {
         } else {
             content
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
+                .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(MMColor.fg(0.12), lineWidth: 0.5))
         }
     }
 }

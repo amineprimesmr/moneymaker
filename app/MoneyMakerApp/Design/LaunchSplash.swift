@@ -16,8 +16,9 @@ import SwiftUI
 @MainActor
 final class LaunchCoordinator: ObservableObject {
     static let shared = LaunchCoordinator()
-    /// Cadre global du logo d'en-tête de l'Accueil.
-    @Published var headerLogoFrame: CGRect?
+    /// Cadre global du logo d'en-tête de l'Accueil. Volontairement non publié : il change à chaque
+    /// image du défilement, et le publier redessinait toute la page d'Accueil à chaque image.
+    var headerLogoFrame: CGRect?
     /// Le logo est posé : les sections et le logo d'en-tête prennent le relais.
     @Published private(set) var revealed = false
     /// Le logo volant est arrivé : le logo d'en-tête s'affiche à sa place exacte.
@@ -48,7 +49,7 @@ struct LaunchSplashView: View {
             let width = landed ? (target?.width ?? startWidth) : startWidth
             let position = landed ? (target.map { CGPoint(x: $0.midX, y: $0.midY) } ?? center) : center
             ZStack {
-                Color.black.opacity(landed ? 0 : 1)
+                MMColor.bg.opacity(landed ? 0 : 1)
                 Image("Logo")
                     .resizable().scaledToFit()
                     .frame(width: width)

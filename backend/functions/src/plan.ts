@@ -10,6 +10,7 @@
 
 import { db } from "./store";
 import { convertMicros } from "./engine";
+import { insightText, money as fmtMoney, payoutLabel, DEADLINE_LABEL } from "./i18n";
 import { computeWaterfall, financeSettings, FinanceSettings, Tx, VAT } from "./finance";
 
 const DAY = 86400000;
@@ -40,7 +41,7 @@ export function expensesOverPeriod(list: Expense[], days: number, currency: stri
 
 // ── Versements attendus ─────────────────────────────────────────────────────
 
-export interface Payout { store: string; date: number; amountMicros: number; label: string }
+export interface Payout { store: string; date: number; amountMicros: number; label: string; labelEn: string }
 
 /** Pure : regroupe les transactions encore non versées en virements à venir — unit-tested. */
 export function upcomingPayouts(txs: Tx[], s: FinanceSettings, currency: string, now = Date.now(), stripeDelayDays = 7): Payout[] {
@@ -50,18 +51,18 @@ export function upcomingPayouts(txs: Tx[], s: FinanceSettings, currency: string,
     const w = computeWaterfall([t], s, currency, 30);
     const net = w.netRevenueMicros + (t.store === "stripe" ? w.vatMicros : 0); // Stripe verse la TVA avec le reste (à reverser ensuite)
     const d = new Date(t.at);
-    let date: number, key: string, label: string;
+    let date: number, key: string, label: string, labelEn: string;
     if (t.store === "app_store") {
       const end = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
-      date = end + 33 * DAY; key = `app_store|${end}`; label = `Apple · ventes de ${d.toLocaleDateString("fr-FR", { month: "long", timeZone: "UTC" })}`;
+      date = end + 33 * DAY; key = `app_store|${end}`; label = payoutLabel("fr", "app_store", t.at); labelEn = payoutLabel("en", "app_store", t.at);
     } else if (t.store === "play_store") {
-      date = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 15); key = `play_store|${date}`; label = `Google Play · ventes de ${d.toLocaleDateString("fr-FR", { month: "long", timeZone: "UTC" })}`;
+      date = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 15); key = `play_store|${date}`; label = payoutLabel("fr", "play_store", t.at); labelEn = payoutLabel("en", "play_store", t.at);
     } else if (t.store === "stripe") {
       const day = Math.floor(t.at / DAY) * DAY + stripeDelayDays * DAY;
-      date = day; key = `stripe|${day}`; label = "Stripe";
+      date = day; key = `stripe|${day}`; label = labelEn = "Stripe";
     } else continue;
     if (date < now - DAY) continue; // déjà versé
-    const p = buckets.get(key) ?? { store: t.store, date, amountMicros: 0, label };
+    const p = buckets.get(key) ?? { store: t.store, date, amountMicros: 0, label, labelEn };
     p.amountMicros += net;
     buckets.set(key, p);
   }
@@ -70,22 +71,22 @@ export function upcomingPayouts(txs: Tx[], s: FinanceSettings, currency: string,
 
 // ── Échéances fiscales ──────────────────────────────────────────────────────
 
-export interface Deadline { date: number; label: string; amountMicros: number; kind: "urssaf" | "is" | "vat" }
+export interface Deadline { date: number; label: string; labelEn: string; amountMicros: number; kind: "urssaf" | "is" | "vat" }
 
 /** Pure : prochaines échéances selon le montage, avec le montant estimé à provisionner. */
 export function deadlines(structure: FinanceSettings["structure"], monthly: { social: number; corporate: number; vat: number }, now = Date.now()): Deadline[] {
   const out: Deadline[] = [];
   const d = new Date(now), y = d.getUTCFullYear(), m = d.getUTCMonth();
   if (structure.startsWith("micro") && monthly.social > 0) {
-    out.push({ date: Date.UTC(y, m + 2, 0), kind: "urssaf", amountMicros: Math.round(monthly.social), label: "Déclaration URSSAF du mois" });
+    out.push({ date: Date.UTC(y, m + 2, 0), kind: "urssaf", amountMicros: Math.round(monthly.social), label: DEADLINE_LABEL.fr.urssaf, labelEn: DEADLINE_LABEL.en.urssaf });
   }
   if ((structure === "sasu_is" || structure === "eurl_is") && monthly.corporate > 0) {
     const next = [2, 5, 8, 11].map(mm => Date.UTC(mm <= m && !(mm === m && d.getUTCDate() < 15) ? y + 1 : y, mm, 15)).sort((a, b) => a - b)[0];
-    out.push({ date: next, kind: "is", amountMicros: Math.round(monthly.corporate * 3), label: "Acompte d'impôt sur les sociétés" });
+    out.push({ date: next, kind: "is", amountMicros: Math.round(monthly.corporate * 3), label: DEADLINE_LABEL.fr.is, labelEn: DEADLINE_LABEL.en.is });
   }
   if (monthly.vat > 0) {
     const q = Math.floor(m / 3);
-    out.push({ date: Date.UTC(y, (q + 1) * 3 + 1, 0), kind: "vat", amountMicros: Math.round(monthly.vat * 3), label: "TVA OSS (ventes Stripe UE) du trimestre" });
+    out.push({ date: Date.UTC(y, (q + 1) * 3 + 1, 0), kind: "vat", amountMicros: Math.round(monthly.vat * 3), label: DEADLINE_LABEL.fr.vat, labelEn: DEADLINE_LABEL.en.vat });
   }
   return out.sort((a, b) => a.date - b.date);
 }
@@ -197,24 +198,29 @@ export async function accountingCsv(uid: string, month: string, projectIds?: str
 
 // ── Alertes intelligentes ───────────────────────────────────────────────────
 
-export interface Insight { type: "SALES_DROP" | "SALES_SPIKE" | "REFUND_SPIKE" | "BILLING_FAILURES" | "FIRST_SALE_COUNTRY"; projectId: string; projectName: string; title: string; body: string; at: number }
+export interface Insight { type: "SALES_DROP" | "SALES_SPIKE" | "REFUND_SPIKE" | "BILLING_FAILURES" | "FIRST_SALE_COUNTRY"; projectId: string; projectName: string; title: string; body: string; titleEn: string; bodyEn: string; at: number }
 
 /** Pure : compare la veille aux 28 jours précédents — unit-tested. */
 export function detectInsights(project: { id: string; name: string }, yesterday: { revenue: number; refunds: number; billing: number; countries: string[] },
   baseline: { revenuePerDay: number; refundsPerDay: number; billingPerDay: number; knownCountries: Set<string> }, currency: string, now = Date.now()): Insight[] {
   const out: Insight[] = [];
-  const money = (v: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency, maximumFractionDigits: 0 }).format(v / 1e6);
+  const fr = (v: number) => fmtMoney("fr", v, currency, 0), en = (v: number) => fmtMoney("en", v, currency, 0);
   const base = { projectId: project.id, projectName: project.name, at: now };
+  const both = (type: Insight["type"], f: (lang: "fr" | "en") => { title: string; body: string }) => {
+    const a = f("fr"), b = f("en");
+    out.push({ ...base, type, title: a.title, body: a.body, titleEn: b.title, bodyEn: b.body });
+  };
+  const m = (lang: "fr" | "en") => lang === "fr" ? fr : en;
   if (baseline.revenuePerDay >= 20e6 && yesterday.revenue < baseline.revenuePerDay * 0.4)
-    out.push({ ...base, type: "SALES_DROP", title: `Ventes en baisse · ${project.name}`, body: `Hier ${money(yesterday.revenue)} contre ${money(baseline.revenuePerDay)} en moyenne. À vérifier : paywall, prix, classement.` });
+    both("SALES_DROP", l => insightText.SALES_DROP(l, project.name, m(l)(yesterday.revenue), m(l)(baseline.revenuePerDay)));
   if (baseline.revenuePerDay > 0 && yesterday.revenue >= Math.max(baseline.revenuePerDay * 2.5, 50e6))
-    out.push({ ...base, type: "SALES_SPIKE", title: `Journée record · ${project.name}`, body: `Hier ${money(yesterday.revenue)}, soit ${(yesterday.revenue / baseline.revenuePerDay).toFixed(1)}× ta moyenne.` });
+    both("SALES_SPIKE", l => insightText.SALES_SPIKE(l, project.name, m(l)(yesterday.revenue), yesterday.revenue / baseline.revenuePerDay));
   if (yesterday.refunds >= 3 && yesterday.refunds > baseline.refundsPerDay * 3)
-    out.push({ ...base, type: "REFUND_SPIKE", title: `Pic de remboursements · ${project.name}`, body: `${yesterday.refunds} remboursements hier (moyenne ${baseline.refundsPerDay.toFixed(1)}/jour).` });
+    both("REFUND_SPIKE", l => insightText.REFUND_SPIKE(l, project.name, yesterday.refunds, baseline.refundsPerDay));
   if (yesterday.billing >= 3 && yesterday.billing > baseline.billingPerDay * 3)
-    out.push({ ...base, type: "BILLING_FAILURES", title: `Paiements en échec · ${project.name}`, body: `${yesterday.billing} problèmes de paiement hier : vérifie ta relance et le délai de grâce.` });
+    both("BILLING_FAILURES", l => insightText.BILLING_FAILURES(l, project.name, yesterday.billing));
   for (const cc of yesterday.countries) if (!baseline.knownCountries.has(cc) && cc !== "??")
-    out.push({ ...base, type: "FIRST_SALE_COUNTRY", title: `Première vente en ${cc} · ${project.name}`, body: `Nouveau pays : ${cc}. Pense à localiser ta fiche App Store.` });
+    both("FIRST_SALE_COUNTRY", l => insightText.FIRST_SALE_COUNTRY(l, project.name, cc));
   return out;
 }
 

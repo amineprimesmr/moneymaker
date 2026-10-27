@@ -661,7 +661,9 @@ private struct IslandPullTracker: ViewModifier {
             content.onScrollGeometryChange(for: CGFloat.self) { geometry in
                 min(max(-(geometry.contentOffset.y + geometry.contentInsets.top) / 130, 0), 1)
             } action: { _, progress in
-                state.pull = progress
+                // Écrit seulement quand la traction bouge vraiment (ou revient à 0 / atteint 1) :
+                // chaque écriture réévalue la bannière et son verre.
+                if progress == 0 || progress == 1 || abs(progress - state.pull) > 0.008 { state.pull = progress }
             }
         } else {
             content
@@ -679,7 +681,9 @@ extension View {
             .background { RefreshSpinnerHider() }
             .refreshable {
                 state.status.begin()
-                let succeeded = await action()
+                // Tâche non structurée : si SwiftUI annule le geste (vue redessinée pendant le chargement),
+                // la requête continue au lieu d'échouer en « annulée ».
+                let succeeded = await Task { @MainActor in await action() }.value
                 state.status.finish(succeeded: succeeded, playCompletionSound: false)
             }
     }

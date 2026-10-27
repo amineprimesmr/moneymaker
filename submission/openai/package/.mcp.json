@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "moneymaker": {
-      "url": "https://usemoneymaker.com/mcp"
+      "url": "https://moneymaker-io.web.app/mcp"
     }
   }
 }

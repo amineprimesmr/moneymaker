@@ -17,16 +17,20 @@ final class WebSignIn: NSObject, ASWebAuthenticationPresentationContextProviding
 
     /// `.none` = l'utilisateur a fermé la fenêtre.
     func start(_ done: @escaping (Result<String, Error>?) -> Void) {
-        let url = URL(string: "https://moneymaker-io.web.app/app-login")!
-        let s = ASWebAuthenticationSession(url: url, callbackURLScheme: "moneymaker") { callback, error in
-            if let e = error as? ASWebAuthenticationSessionError, e.code == .canceledLogin { done(nil); return }
-            if let error { done(.failure(error)); return }
-            guard let callback, callback.host == "auth",
-                  let token = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "token" })?.value,
-                  token.hasPrefix("mm_pat_") else {
-                done(.failure(APIError(message: "Connexion interrompue, réessaie."))); return
+        let url = URL(string: "https://usemoneymaker.com/app-login")!
+        let s = ASWebAuthenticationSession(url: url, callbackURLScheme: "moneymaker") { [weak self] callback, error in
+            let result: Result<String, Error>?
+            if let e = error as? ASWebAuthenticationSessionError, e.code == .canceledLogin { result = nil }
+            else if let error { result = .failure(error) }
+            else if let callback, callback.host == "auth",
+                    let token = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "token" })?.value,
+                    token.hasPrefix("mm_pat_") { result = .success(token) }
+            else { result = .failure(APIError(message: String(localized: "Connexion interrompue, réessaie."))) }
+            // Le rappel n'est pas garanti sur le fil principal : l'UI (et la session gardée) y reviennent.
+            Task { @MainActor in
+                self?.session = nil
+                done(result)
             }
-            done(.success(token))
         }
         s.presentationContextProvider = self
         s.prefersEphemeralWebBrowserSession = false   // garde la session du navigateur

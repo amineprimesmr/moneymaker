@@ -29,21 +29,25 @@ struct SideMenu<MenuContent: View, Content: View>: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            menuContent(progress)
+            // Le menu n'est réévalué qu'à l'ouverture / fermeture, pas à chaque image du glissé.
+            StableContent(key: isExpanded, content: menuContent(progress))
+                .equatable()
                 .frame(width: sideBarWidth)
                 .frame(maxHeight: .infinity)
                 .opacity(progress)
                 .scaleEffect(0.95 + (0.05 * progress))
+                // Menu toujours sur fond sombre, même en mode clair : la page claire se détache dessus.
+                .environment(\.colorScheme, .dark)
 
             StableContent(key: contentKey, content: content(0))
                 .equatable()
                 .containerRelativeFrame(.horizontal)
                 .frame(maxHeight: .infinity)
-                .background { backgroundShape.fill(Color.black).ignoresSafeArea() }
+                .background { backgroundShape.fill(MMColor.bg).ignoresSafeArea() }
                 .overlay {
                     backgroundShape
-                        .fill(Color.black.opacity(0.45))
-                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        .fill(Self.scrim)
+                        .stroke(Self.scrimStroke, lineWidth: 1)
                         .ignoresSafeArea()
                         .contentShape(.rect)
                         .onTapGesture { withAnimation(animation) { dismissMenu() } }
@@ -55,7 +59,7 @@ struct SideMenu<MenuContent: View, Content: View>: View {
                 .offset(x: xOffset)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.ignoresSafeArea())
+        .background(SideMenuColors.backdrop.ignoresSafeArea())
         .contentShape(.rect)
         .modifier(SideMenuPan(isEnabled: isEnabled, isExpanded: $isExpanded) { state, translationX, velocityX in
             let translation = translationX + (isExpanded ? sideBarWidth : 0)
@@ -96,6 +100,17 @@ struct SideMenu<MenuContent: View, Content: View>: View {
     }
 
     private var animation: Animation { .interactiveSpring(duration: 0.25, extraBounce: 0.02) }
+
+    /// Créées une fois (elles étaient refaites à chaque image du glissé).
+    private static var scrim: Color { SideMenuColors.scrim }
+    private static var scrimStroke: Color { SideMenuColors.stroke }
+}
+
+private enum SideMenuColors {
+    static let scrim = MMColor.dyn(light: UIColor(white: 0, alpha: 0.12), dark: UIColor(white: 0, alpha: 0.45))
+    static let stroke = MMColor.fg(0.12)
+    /// Fond derrière le menu : noir profond dans les deux modes.
+    static let backdrop = Color(red: 0.035, green: 0.035, blue: 0.04)
 }
 
 // MARK: - Geste

@@ -10,15 +10,24 @@
 		0095B39F4DF4E19D7F6A24E0 /* LiveServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F8C9B2ECD231050E024974A /* LiveServices.swift */; };
 		0685C8C572EF2ACAF31FAB44 /* chime.caf in Resources */ = {isa = PBXBuildFile; fileRef = 372A2BB96C797580EEC4C82F /* chime.caf */; };
 		0A6A777943ADFDD061F9E1AE /* WebSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA79FE47B32710C507EFC77 /* WebSignIn.swift */; };
+		0B1388C5F98A32F0381250E8 /* MMBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEDC7A287FA4B2CDD2F6A5FD /* MMBadge.swift */; };
+		0D0CC3F6E9FC91FECA924EBF /* GlobeExplorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51041CC235D80D28C955E179 /* GlobeExplorer.swift */; };
 		0E0DF9F55F63CCCFC43BAF97 /* Finance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9CEEAB6A0F6F975061B40D2 /* Finance.swift */; };
+		0EFF26F53F425A37EC4BB766 /* Rewards.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF399933038A0DE2E6CAE08 /* Rewards.swift */; };
+		13FA1D42D0AB7EBB09392963 /* MMInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = 451D713AE517F26284C13278 /* MMInsights.swift */; };
 		19BDD03E12EDAD86DDEBBDE9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1097FC8E56F8174FC341976B /* Assets.xcassets */; };
 		24B06FD26A971ACE214EAB40 /* countries.json in Resources */ = {isa = PBXBuildFile; fileRef = F8609E850E6E511A47AC0F87 /* countries.json */; };
+		2A578099AE70D450B3FA695A /* HomeMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 583537DA60712D1E76FD440A /* HomeMetrics.swift */; };
 		2AFD4C6B033F517E98B4102C /* NotificationPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */; };
+		2CF983620AD73848582EF209 /* AutoTour.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF2C55340E1A6229E1A78CE /* AutoTour.swift */; };
 		2F13A1B4CC19D980D0A815C3 /* MoneyMakerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4C830002B2BC4B3D96025D8 /* MoneyMakerApp.swift */; };
+		32490C4FFF847939B5F0CA38 /* WidgetIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D0A47CF847D152078B53C9 /* WidgetIcons.swift */; };
+		34C6F46F5402FE92C6EA848F /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = FD14036EDE28FCAC59987859 /* Localizable.xcstrings */; };
 		37B9651D3011145AAE87823A /* LaunchSplash.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4144027ADBE57BF8FB2AC8F /* LaunchSplash.swift */; };
 		3D6DAEE438D7AD2116843369 /* MoneyMakerWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5A389B5ED64940A8BC40C6A3 /* MoneyMakerWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		425C064EB8D2A265790D5C41 /* MMLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */; };
 		4794E62556120F3F01B74FEE /* MMTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDD82E7144DFCD2E9CEB2649 /* MMTabBar.swift */; };
+		4F2756CDDF256A51460EEF0F /* SettingsKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF86CF6F42EC4A1A4D15291 /* SettingsKit.swift */; };
 		5136F7DBC24F48EC3D6CA704 /* cash.caf in Resources */ = {isa = PBXBuildFile; fileRef = 1C16D5B2A5EFA0E3324011BA /* cash.caf */; };
 		524AAF5826767D1D2CB7D926 /* Growth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3363C1059D0F3A8BB7B01D0E /* Growth.swift */; };
 		59ECB948AB8D8B9A1D53DB82 /* SyncIslandThreshold.metal in Sources */ = {isa = PBXBuildFile; fileRef = 788A031366AAAAB5EC2FB323 /* SyncIslandThreshold.metal */; };
@@ -26,24 +35,38 @@
 		6AEB914EAE0C6F91F7B661D2 /* levelup.caf in Resources */ = {isa = PBXBuildFile; fileRef = D388B48B0EC4821BE9AE43EB /* levelup.caf */; };
 		6C437D9CEE116445C4FB19A9 /* MoneyMakerWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7462A45DA2C0BCD45AD96986 /* MoneyMakerWidgets.swift */; };
 		7373A56139635C616E4FEEB0 /* land.json in Resources */ = {isa = PBXBuildFile; fileRef = A925D692B3BCE98ECBB2187E /* land.json */; };
+		761153704D711A83EFB3C6D7 /* PostHog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 953420FF7BA3D03EBFF399BC /* PostHog.swift */; };
 		7811B4F791C9B3EBBC5C17E9 /* SideMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD9FF9FB850F74B6132F8088 /* SideMenu.swift */; };
 		7A09B8560251703819AC48BC /* LiveScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82382FF73CC673CD177B62B /* LiveScreens.swift */; };
+		7C1ED54E28C238AE636DE0C8 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = F3B41418F536B2A74FBF8D7D /* Localizable.xcstrings */; };
 		7ED6C0FF4A3CEFA3B9A620A2 /* pop.caf in Resources */ = {isa = PBXBuildFile; fileRef = 922606E4EBCE1695E58333B6 /* pop.caf */; };
+		81658569C7162E498047F957 /* ThemePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E60F42C528A38425F4894A2 /* ThemePicker.swift */; };
+		87F621A25130DF5D45503D94 /* MMInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = 451D713AE517F26284C13278 /* MMInsights.swift */; };
+		8C6F8BDC9C4CA00008AD03CD /* MMMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82787099D7394842FD610D33 /* MMMotion.swift */; };
 		8EFD41694F6ACF6B5C362766 /* MoneyMakerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */; };
+		9254E7B079A1018DEE1D6D11 /* PerfProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F6E5914B597705EB1396EB8 /* PerfProbe.swift */; };
+		9326301A3D76873B8F70C942 /* MetricCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383FDA69C9F3FCE44ED59A32 /* MetricCards.swift */; };
 		9E22F7E452E61C7687F22A70 /* Globe.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6EDB0BDEE53E198B5CA131 /* Globe.swift */; };
 		9FB0842E3D9190DD976971E0 /* MoneyMakerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */; };
+		A5F141A16DD34B41D89FF132 /* InsightWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31D99055D68451C2DD0901A1 /* InsightWidgets.swift */; };
 		ADADB3EF429F2E44BA31DDA1 /* MMEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8864A5BC74A1FB07813601 /* MMEffects.swift */; };
-		253F3B86C24853A0F93FFD36 /* BuildDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F8170B75D304EE2B5A21D40 /* BuildDemo.swift */; };
 		AEBAE27FA6C291041BA9B259 /* MMTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B41F707AED2D8405F6A5A /* MMTheme.swift */; };
 		AF79FEB78C3C31BD156BF1D8 /* BusinessSideBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B505E5DB6CC437E02CFFDC2 /* BusinessSideBar.swift */; };
 		B7EE6F0D843CE65B903EC25A /* ScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0766FA3E98182D13451DA68 /* ScreenshotTests.swift */; };
+		BC140CFBA30DB38D7ACB9B4C /* RecoveryTileKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16B16214FCB3A9318DAF972D /* RecoveryTileKit.swift */; };
 		C15F68906BCC0285C1E981AD /* Screens.swift in Sources */ = {isa = PBXBuildFile; fileRef = F88B72061DA7660BF3CEB1FD /* Screens.swift */; };
 		C37B661FE683FB08F8463FC6 /* SyncBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FEFF0FBF7420753D830CBF3 /* SyncBanner.swift */; };
+		CEDDC69A385E8CAB9876B54A /* MMBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEDC7A287FA4B2CDD2F6A5FD /* MMBadge.swift */; };
+		CFF1C47E4F810548E456301E /* IGShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FEDDB5B290C751F9B01CBDA /* IGShell.swift */; };
+		D395D7F7DCDBB20354E1772B /* RCWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 336E7C5A2396FA2E832FA819 /* RCWidgets.swift */; };
 		DD055D734B50B18D7BDBA8A8 /* CachedImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98A641DEF15038E8304BEEE0 /* CachedImage.swift */; };
 		E41FCBB3965C52B9646B6A79 /* ProjectInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */; };
 		ED2ECE641415901FA314EA93 /* DashboardWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 911E11FF37AB7E13CD4D68BF /* DashboardWidget.swift */; };
+		F30CF2AE63540FA201FF523B /* WidgetGlobeData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC7F69770847ED8FCED312B /* WidgetGlobeData.swift */; };
 		F8CBAA134547ECEA85DA0F72 /* LiveWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1097A42E4D78F9B3FE75803 /* LiveWidgets.swift */; };
+		F96F2ACCCAAC127BB1C54F40 /* Leaderboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C21C1B609F5745CA0CD1EC26 /* Leaderboard.swift */; };
 		FD7A4899CEF8F43A0B4427DE /* coin.caf in Resources */ = {isa = PBXBuildFile; fileRef = 2E1FFF3CE007852CF4BF785F /* coin.caf */; };
+		FF26D9AD5986E9E2601C40D2 /* WidgetStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 633E91254F00E8FE65CDD502 /* WidgetStyle.swift */; };
 		FF6CF15644F82D3C4793F7B6 /* MMTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B41F707AED2D8405F6A5A /* MMTheme.swift */; };
 /* End PBXBuildFile section */
 
@@ -79,46 +102,67 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0F6E5914B597705EB1396EB8 /* PerfProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerfProbe.swift; sourceTree = "<group>"; };
 		0FEFF0FBF7420753D830CBF3 /* SyncBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncBanner.swift; sourceTree = "<group>"; };
 		1097FC8E56F8174FC341976B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPermissionView.swift; sourceTree = "<group>"; };
+		16B16214FCB3A9318DAF972D /* RecoveryTileKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryTileKit.swift; sourceTree = "<group>"; };
 		1C16D5B2A5EFA0E3324011BA /* cash.caf */ = {isa = PBXFileReference; path = cash.caf; sourceTree = "<group>"; };
+		1E60F42C528A38425F4894A2 /* ThemePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemePicker.swift; sourceTree = "<group>"; };
 		21F9030100E848B1A39A4B16 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		2B505E5DB6CC437E02CFFDC2 /* BusinessSideBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessSideBar.swift; sourceTree = "<group>"; };
 		2E1FFF3CE007852CF4BF785F /* coin.caf */ = {isa = PBXFileReference; path = coin.caf; sourceTree = "<group>"; };
+		31D99055D68451C2DD0901A1 /* InsightWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightWidgets.swift; sourceTree = "<group>"; };
 		3363C1059D0F3A8BB7B01D0E /* Growth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Growth.swift; sourceTree = "<group>"; };
+		336E7C5A2396FA2E832FA819 /* RCWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RCWidgets.swift; sourceTree = "<group>"; };
 		372A2BB96C797580EEC4C82F /* chime.caf */ = {isa = PBXFileReference; path = chime.caf; sourceTree = "<group>"; };
+		383FDA69C9F3FCE44ED59A32 /* MetricCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricCards.swift; sourceTree = "<group>"; };
+		451D713AE517F26284C13278 /* MMInsights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMInsights.swift; sourceTree = "<group>"; };
 		45EBE436171160AF8EA3DF70 /* MoneyMaker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MoneyMaker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		51041CC235D80D28C955E179 /* GlobeExplorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobeExplorer.swift; sourceTree = "<group>"; };
+		583537DA60712D1E76FD440A /* HomeMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeMetrics.swift; sourceTree = "<group>"; };
 		5A389B5ED64940A8BC40C6A3 /* MoneyMakerWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MoneyMakerWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		633E91254F00E8FE65CDD502 /* WidgetStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetStyle.swift; sourceTree = "<group>"; };
+		6FEDDB5B290C751F9B01CBDA /* IGShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IGShell.swift; sourceTree = "<group>"; };
 		7462A45DA2C0BCD45AD96986 /* MoneyMakerWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyMakerWidgets.swift; sourceTree = "<group>"; };
 		788A031366AAAAB5EC2FB323 /* SyncIslandThreshold.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = SyncIslandThreshold.metal; sourceTree = "<group>"; };
 		7F8C9B2ECD231050E024974A /* LiveServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveServices.swift; sourceTree = "<group>"; };
+		82787099D7394842FD610D33 /* MMMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMMotion.swift; sourceTree = "<group>"; };
 		8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyMakerClient.swift; sourceTree = "<group>"; };
 		911E11FF37AB7E13CD4D68BF /* DashboardWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardWidget.swift; sourceTree = "<group>"; };
 		922606E4EBCE1695E58333B6 /* pop.caf */ = {isa = PBXFileReference; path = pop.caf; sourceTree = "<group>"; };
+		953420FF7BA3D03EBFF399BC /* PostHog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostHog.swift; sourceTree = "<group>"; };
 		98A641DEF15038E8304BEEE0 /* CachedImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedImage.swift; sourceTree = "<group>"; };
 		A0766FA3E98182D13451DA68 /* ScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotTests.swift; sourceTree = "<group>"; };
 		A33B41F707AED2D8405F6A5A /* MMTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMTheme.swift; sourceTree = "<group>"; };
 		A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectInsights.swift; sourceTree = "<group>"; };
 		A82382FF73CC673CD177B62B /* LiveScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveScreens.swift; sourceTree = "<group>"; };
 		A925D692B3BCE98ECBB2187E /* land.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = land.json; sourceTree = "<group>"; };
+		AAC7F69770847ED8FCED312B /* WidgetGlobeData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetGlobeData.swift; sourceTree = "<group>"; };
 		AD9FF9FB850F74B6132F8088 /* SideMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideMenu.swift; sourceTree = "<group>"; };
+		B4D0A47CF847D152078B53C9 /* WidgetIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetIcons.swift; sourceTree = "<group>"; };
+		C21C1B609F5745CA0CD1EC26 /* Leaderboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Leaderboard.swift; sourceTree = "<group>"; };
 		C73C4CE142E8383DF54EED22 /* MoneyMaker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MoneyMaker.entitlements; sourceTree = "<group>"; };
 		C7D2D93D296848814FDB457A /* MoneyMakerUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MoneyMakerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CEF2C55340E1A6229E1A78CE /* AutoTour.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoTour.swift; sourceTree = "<group>"; };
 		D388B48B0EC4821BE9AE43EB /* levelup.caf */ = {isa = PBXFileReference; path = levelup.caf; sourceTree = "<group>"; };
 		DDD82E7144DFCD2E9CEB2649 /* MMTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMTabBar.swift; sourceTree = "<group>"; };
 		DF8864A5BC74A1FB07813601 /* MMEffects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMEffects.swift; sourceTree = "<group>"; };
-		0F8170B75D304EE2B5A21D40 /* BuildDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildDemo.swift; sourceTree = "<group>"; };
 		E69CC078545BF8CD48C90C01 /* Widgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Widgets.entitlements; sourceTree = "<group>"; };
 		EA6EDB0BDEE53E198B5CA131 /* Globe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Globe.swift; sourceTree = "<group>"; };
+		EEDC7A287FA4B2CDD2F6A5FD /* MMBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMBadge.swift; sourceTree = "<group>"; };
 		F1097A42E4D78F9B3FE75803 /* LiveWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveWidgets.swift; sourceTree = "<group>"; };
 		F31884D50702504A2657805C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		F3B41418F536B2A74FBF8D7D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		F4144027ADBE57BF8FB2AC8F /* LaunchSplash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchSplash.swift; sourceTree = "<group>"; };
 		F4C830002B2BC4B3D96025D8 /* MoneyMakerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyMakerApp.swift; sourceTree = "<group>"; };
 		F8609E850E6E511A47AC0F87 /* countries.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = countries.json; sourceTree = "<group>"; };
 		F88B72061DA7660BF3CEB1FD /* Screens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Screens.swift; sourceTree = "<group>"; };
 		F9CEEAB6A0F6F975061B40D2 /* Finance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Finance.swift; sourceTree = "<group>"; };
+		FCF86CF6F42EC4A1A4D15291 /* SettingsKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsKit.swift; sourceTree = "<group>"; };
+		FD14036EDE28FCAC59987859 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		FDA79FE47B32710C507EFC77 /* WebSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSignIn.swift; sourceTree = "<group>"; };
+		FDF399933038A0DE2E6CAE08 /* Rewards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rewards.swift; sourceTree = "<group>"; };
 		FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMLive.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -128,9 +172,15 @@
 			children = (
 				911E11FF37AB7E13CD4D68BF /* DashboardWidget.swift */,
 				21F9030100E848B1A39A4B16 /* Info.plist */,
+				31D99055D68451C2DD0901A1 /* InsightWidgets.swift */,
 				F1097A42E4D78F9B3FE75803 /* LiveWidgets.swift */,
+				F3B41418F536B2A74FBF8D7D /* Localizable.xcstrings */,
 				7462A45DA2C0BCD45AD96986 /* MoneyMakerWidgets.swift */,
+				336E7C5A2396FA2E832FA819 /* RCWidgets.swift */,
+				AAC7F69770847ED8FCED312B /* WidgetGlobeData.swift */,
+				B4D0A47CF847D152078B53C9 /* WidgetIcons.swift */,
 				E69CC078545BF8CD48C90C01 /* Widgets.entitlements */,
+				633E91254F00E8FE65CDD502 /* WidgetStyle.swift */,
 			);
 			path = Widgets;
 			sourceTree = "<group>";
@@ -174,6 +224,8 @@
 		9F995471F5DECAA4B24AC8F3 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				EEDC7A287FA4B2CDD2F6A5FD /* MMBadge.swift */,
+				451D713AE517F26284C13278 /* MMInsights.swift */,
 				FFAFE3D0A229F2840FBD4E6A /* MMLive.swift */,
 				A33B41F707AED2D8405F6A5A /* MMTheme.swift */,
 				8346FDA0BD79B0D1B72220BE /* MoneyMakerClient.swift */,
@@ -187,11 +239,16 @@
 				2B505E5DB6CC437E02CFFDC2 /* BusinessSideBar.swift */,
 				F9CEEAB6A0F6F975061B40D2 /* Finance.swift */,
 				EA6EDB0BDEE53E198B5CA131 /* Globe.swift */,
+				51041CC235D80D28C955E179 /* GlobeExplorer.swift */,
 				3363C1059D0F3A8BB7B01D0E /* Growth.swift */,
+				583537DA60712D1E76FD440A /* HomeMetrics.swift */,
+				C21C1B609F5745CA0CD1EC26 /* Leaderboard.swift */,
 				A82382FF73CC673CD177B62B /* LiveScreens.swift */,
 				7F8C9B2ECD231050E024974A /* LiveServices.swift */,
 				1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */,
+				953420FF7BA3D03EBFF399BC /* PostHog.swift */,
 				A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */,
+				FDF399933038A0DE2E6CAE08 /* Rewards.swift */,
 				FDA79FE47B32710C507EFC77 /* WebSignIn.swift */,
 			);
 			path = Live;
@@ -200,14 +257,21 @@
 		D80749C58DA4B8FAB7CE44D2 /* Design */ = {
 			isa = PBXGroup;
 			children = (
+				CEF2C55340E1A6229E1A78CE /* AutoTour.swift */,
 				98A641DEF15038E8304BEEE0 /* CachedImage.swift */,
+				6FEDDB5B290C751F9B01CBDA /* IGShell.swift */,
 				F4144027ADBE57BF8FB2AC8F /* LaunchSplash.swift */,
+				383FDA69C9F3FCE44ED59A32 /* MetricCards.swift */,
 				DF8864A5BC74A1FB07813601 /* MMEffects.swift */,
-				0F8170B75D304EE2B5A21D40 /* BuildDemo.swift */,
+				82787099D7394842FD610D33 /* MMMotion.swift */,
 				DDD82E7144DFCD2E9CEB2649 /* MMTabBar.swift */,
+				0F6E5914B597705EB1396EB8 /* PerfProbe.swift */,
+				16B16214FCB3A9318DAF972D /* RecoveryTileKit.swift */,
+				FCF86CF6F42EC4A1A4D15291 /* SettingsKit.swift */,
 				AD9FF9FB850F74B6132F8088 /* SideMenu.swift */,
 				0FEFF0FBF7420753D830CBF3 /* SyncBanner.swift */,
 				788A031366AAAAB5EC2FB323 /* SyncIslandThreshold.metal */,
+				1E60F42C528A38425F4894A2 /* ThemePicker.swift */,
 			);
 			path = Design;
 			sourceTree = "<group>";
@@ -229,6 +293,7 @@
 				F8609E850E6E511A47AC0F87 /* countries.json */,
 				A925D692B3BCE98ECBB2187E /* land.json */,
 				D388B48B0EC4821BE9AE43EB /* levelup.caf */,
+				FD14036EDE28FCAC59987859 /* Localizable.xcstrings */,
 				922606E4EBCE1695E58333B6 /* pop.caf */,
 			);
 			path = Resources;
@@ -280,6 +345,7 @@
 			buildConfigurationList = F5C653C41A00ABA9110CC1B8 /* Build configuration list for PBXNativeTarget "MoneyMakerWidgets" */;
 			buildPhases = (
 				C9E8B2FE54B42D20AE7DB481 /* Sources */,
+				FB64FB288736F537632C3BFB /* Resources */,
 			);
 			buildRules = (
 			);
@@ -317,11 +383,12 @@
 				};
 			};
 			buildConfigurationList = EEFB368CFE53B69BE15BFC4C /* Build configuration list for PBXProject "MoneyMakerApp" */;
-			developmentRegion = en;
+			developmentRegion = fr;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
 				en,
+				fr,
 			);
 			mainGroup = 34B5FFEA9A0A3878FBF644F4;
 			minimizedProjectReferenceProxies = 1;
@@ -343,6 +410,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				19BDD03E12EDAD86DDEBBDE9 /* Assets.xcassets in Resources */,
+				34C6F46F5402FE92C6EA848F /* Localizable.xcstrings in Resources */,
 				5136F7DBC24F48EC3D6CA704 /* cash.caf in Resources */,
 				0685C8C572EF2ACAF31FAB44 /* chime.caf in Resources */,
 				FD7A4899CEF8F43A0B4427DE /* coin.caf in Resources */,
@@ -353,6 +421,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FB64FB288736F537632C3BFB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7C1ED54E28C238AE636DE0C8 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -360,27 +436,41 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2CF983620AD73848582EF209 /* AutoTour.swift in Sources */,
 				AF79FEB78C3C31BD156BF1D8 /* BusinessSideBar.swift in Sources */,
 				DD055D734B50B18D7BDBA8A8 /* CachedImage.swift in Sources */,
 				0E0DF9F55F63CCCFC43BAF97 /* Finance.swift in Sources */,
 				9E22F7E452E61C7687F22A70 /* Globe.swift in Sources */,
+				0D0CC3F6E9FC91FECA924EBF /* GlobeExplorer.swift in Sources */,
 				524AAF5826767D1D2CB7D926 /* Growth.swift in Sources */,
+				2A578099AE70D450B3FA695A /* HomeMetrics.swift in Sources */,
+				CFF1C47E4F810548E456301E /* IGShell.swift in Sources */,
 				37B9651D3011145AAE87823A /* LaunchSplash.swift in Sources */,
+				F96F2ACCCAAC127BB1C54F40 /* Leaderboard.swift in Sources */,
 				7A09B8560251703819AC48BC /* LiveScreens.swift in Sources */,
 				0095B39F4DF4E19D7F6A24E0 /* LiveServices.swift in Sources */,
+				0B1388C5F98A32F0381250E8 /* MMBadge.swift in Sources */,
 				ADADB3EF429F2E44BA31DDA1 /* MMEffects.swift in Sources */,
-				253F3B86C24853A0F93FFD36 /* BuildDemo.swift in Sources */,
+				87F621A25130DF5D45503D94 /* MMInsights.swift in Sources */,
 				425C064EB8D2A265790D5C41 /* MMLive.swift in Sources */,
+				8C6F8BDC9C4CA00008AD03CD /* MMMotion.swift in Sources */,
 				4794E62556120F3F01B74FEE /* MMTabBar.swift in Sources */,
 				FF6CF15644F82D3C4793F7B6 /* MMTheme.swift in Sources */,
+				9326301A3D76873B8F70C942 /* MetricCards.swift in Sources */,
 				2F13A1B4CC19D980D0A815C3 /* MoneyMakerApp.swift in Sources */,
 				8EFD41694F6ACF6B5C362766 /* MoneyMakerClient.swift in Sources */,
 				2AFD4C6B033F517E98B4102C /* NotificationPermissionView.swift in Sources */,
+				9254E7B079A1018DEE1D6D11 /* PerfProbe.swift in Sources */,
+				761153704D711A83EFB3C6D7 /* PostHog.swift in Sources */,
 				E41FCBB3965C52B9646B6A79 /* ProjectInsights.swift in Sources */,
+				BC140CFBA30DB38D7ACB9B4C /* RecoveryTileKit.swift in Sources */,
+				0EFF26F53F425A37EC4BB766 /* Rewards.swift in Sources */,
 				C15F68906BCC0285C1E981AD /* Screens.swift in Sources */,
+				4F2756CDDF256A51460EEF0F /* SettingsKit.swift in Sources */,
 				7811B4F791C9B3EBBC5C17E9 /* SideMenu.swift in Sources */,
 				C37B661FE683FB08F8463FC6 /* SyncBanner.swift in Sources */,
 				59ECB948AB8D8B9A1D53DB82 /* SyncIslandThreshold.metal in Sources */,
+				81658569C7162E498047F957 /* ThemePicker.swift in Sources */,
 				0A6A777943ADFDD061F9E1AE /* WebSignIn.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -398,11 +488,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				ED2ECE641415901FA314EA93 /* DashboardWidget.swift in Sources */,
+				A5F141A16DD34B41D89FF132 /* InsightWidgets.swift in Sources */,
 				F8CBAA134547ECEA85DA0F72 /* LiveWidgets.swift in Sources */,
+				CEDDC69A385E8CAB9876B54A /* MMBadge.swift in Sources */,
+				13FA1D42D0AB7EBB09392963 /* MMInsights.swift in Sources */,
 				5CEDC2CFC73F062E994B9B48 /* MMLive.swift in Sources */,
 				AEBAE27FA6C291041BA9B259 /* MMTheme.swift in Sources */,
 				9FB0842E3D9190DD976971E0 /* MoneyMakerClient.swift in Sources */,
 				6C437D9CEE116445C4FB19A9 /* MoneyMakerWidgets.swift in Sources */,
+				D395D7F7DCDBB20354E1772B /* RCWidgets.swift in Sources */,
+				F30CF2AE63540FA201FF523B /* WidgetGlobeData.swift in Sources */,
+				32490C4FFF847939B5F0CA38 /* WidgetIcons.swift in Sources */,
+				FF26D9AD5986E9E2601C40D2 /* WidgetStyle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -529,6 +626,7 @@
 			buildSettings = {
 				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = MoneyMakerApp/MoneyMaker.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -537,7 +635,6 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -594,6 +691,7 @@
 			buildSettings = {
 				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = MoneyMakerApp/MoneyMaker.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -602,7 +700,6 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -650,6 +747,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
+				COMPILER_INDEX_STORE_ENABLE = NO;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 5;
 				DEBUG_INFORMATION_FORMAT = dwarf;
@@ -678,7 +776,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_COMPILATION_MODE = singlefile;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = 1;
