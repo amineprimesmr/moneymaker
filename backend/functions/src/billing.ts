@@ -64,10 +64,13 @@ export function safeReturnUrl(raw: unknown, base: string): string {
   return `${base}/#settings`;
 }
 
-export async function createCheckout(uid: string, email: string | undefined, returnUrl: string) {
+export async function createCheckout(uid: string, email: string | undefined, returnUrl: string, externalPurchaseToken?: string) {
   if (await isPro(uid)) throw new HttpError(409, "already_pro");
   const { cfg, stripe: s } = await stripe();
   const sep = returnUrl.includes("?") ? "&" : "?";
+  // Jeton StoreKit External Purchase (achat depuis l'app dans l'UE) : gardé pour la déclaration
+  // mensuelle à Apple (commission sur les ventes faites hors de l'In-App Purchase).
+  const ept = typeof externalPurchaseToken === "string" && externalPurchaseToken.length < 4096 ? externalPurchaseToken : undefined;
   const session = await s.checkout.sessions.create({
     mode: "payment",
     line_items: [{ price: cfg.priceId, quantity: 1 }],
@@ -76,11 +79,12 @@ export async function createCheckout(uid: string, email: string | undefined, ret
     customer_creation: "always",
     invoice_creation: { enabled: true },
     allow_promotion_codes: true,
-    metadata: { uid, app_user_id: uid, product_id: "io.moneymaker.pro.lifetime" },
+    metadata: { uid, app_user_id: uid, product_id: "io.moneymaker.pro.lifetime", ...(ept ? { apple_ept: "1" } : {}) },
     payment_intent_data: { metadata: { uid, app_user_id: uid, product_id: "io.moneymaker.pro.lifetime" } },
     success_url: `${returnUrl}${sep}pro=success`,
     cancel_url: `${returnUrl}${sep}pro=cancel`,
   });
+  if (ept) await db.doc(`externalPurchases/${session.id}`).set({ uid, token: ept, createdAt: Date.now(), status: "pending" });
   return { url: session.url };
 }
 
@@ -98,11 +102,19 @@ export async function handleBillingWebhook(raw: Buffer | string | undefined, sig
       await db.doc(`users/${uid}`).set({
         pro: true, proSince: Date.now(), proPaymentIntent: String(cs.payment_intent ?? ""), proCustomer: String(cs.customer ?? ""),
       }, { merge: true });
+      if (cs.metadata?.apple_ept) {
+        await db.doc(`externalPurchases/${cs.id}`).set({ status: "paid", paidAt: Date.now(), amountTotal: cs.amount_total, currency: cs.currency,
+          paymentIntent: String(cs.payment_intent ?? "") }, { merge: true });
+      }
     }
   } else if (event.type === "charge.refunded") {
     const ch = event.data.object as Stripe.Charge;
     const uid = ch.metadata?.uid;
-    if (uid && ch.refunded) await db.doc(`users/${uid}`).set({ pro: false, proRefundedAt: Date.now() }, { merge: true });
+    if (uid && ch.refunded) {
+      await db.doc(`users/${uid}`).set({ pro: false, proRefundedAt: Date.now() }, { merge: true });
+      const ep = await db.collection("externalPurchases").where("paymentIntent", "==", String(ch.payment_intent ?? "")).limit(1).get();
+      ep.docs.forEach(d => d.ref.set({ status: "refunded", refundedAt: Date.now() }, { merge: true }));
+    }
   }
   return { received: true };
 }

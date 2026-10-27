@@ -10,6 +10,7 @@ import WidgetKit
 import AVFoundation
 import AudioToolbox
 import StoreKit
+import SafariServices
 
 // MARK: - Carte « Revenu » (période au choix, 28 jours par défaut)
 
@@ -1221,25 +1222,43 @@ struct BillingStatus: Decodable { let pro: Bool; let ownedProjects: Int; let fre
 
 extension MoneyMakerClient {
     func billing() async throws -> BillingStatus { try await get("billing") }
-    func proCheckoutURL() async throws -> URL {
+    func proCheckoutURL(externalPurchaseToken: String?) async throws -> URL {
         struct R: Decodable { let url: URL }
-        let r: R = try await send("POST", "billing/checkout", body: ["returnUrl": "https://usemoneymaker.com/"])
+        var body: [String: Any] = ["returnUrl": "https://usemoneymaker.com/"]
+        if let externalPurchaseToken { body["externalPurchaseToken"] = externalPurchaseToken }
+        let r: R = try await send("POST", "billing/checkout", body: body)
         return r.url
     }
 }
 
-/// Licence Pro : statut, et achat via Stripe Checkout dans Safari. Là où Apple l'exige (UE avec le
-/// droit External Purchase), la fiche d'information d'Apple s'affiche avant de quitter l'app.
+/// Où l'achat Pro est permis dans l'app iPhone :
+///   • UE (droit StoreKit External Purchases or Offers) : feuille d'information d'Apple, jeton de
+///     déclaration, puis Stripe Checkout dans l'app (paiement alternatif dans l'app) ;
+///   • États-Unis : lien vers Stripe Checkout ;
+///   • ailleurs : rien n'est proposé (règle 3.1.1), seul le statut Pro est affiché.
+enum ProPurchaseRoute {
+    case eu, us, none
+
+    static func current() async -> ProPurchaseRoute {
+        guard AppStore.canMakePayments else { return .none }
+        if #available(iOS 18.1, *), await ExternalPurchaseCustomLink.isEligible { return .eu }
+        return await Storefront.current?.countryCode == "USA" ? .us : .none
+    }
+}
+
+/// Licence Pro dans les Réglages : statut, et achat quand la boutique le permet.
 struct ProSettingsSection: View {
     @EnvironmentObject var store: Store
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var phase
     @State private var status: BillingStatus?
+    @State private var route: ProPurchaseRoute = .none
+    @State private var checkout: IdentifiableURL?
     @State private var busy = false
     @State private var error: String?
 
     var body: some View {
-        if let status, status.available || status.pro {
+        if let status, status.pro || (status.available && route != .none) {
             SettingsSectionTitle(title: "MoneyMaker Pro")
             SettingsCard {
                 if status.pro {
@@ -1253,23 +1272,43 @@ struct ProSettingsSection: View {
             }
             SettingsFootnote(text: error ?? (status.pro
                 ? String(localized: "Merci ! Tous tes business sont débloqués, pour toujours.")
-                : String(localized: "Le plan gratuit inclut \(status.freeProjects) business. Paiement unique et sécurisé avec Stripe, sans abonnement.")))
+                : String(localized: "Le plan gratuit inclut \(status.freeProjects) business. Paiement unique avec Stripe, sans abonnement.")))
         }
         Color.clear.frame(height: 0)
             .task { await load() }
             .onChange(of: phase) { _, p in if p == .active { Task { await load() } } }
+            .sheet(item: $checkout, onDismiss: { Task { await load() } }) { SafariView(url: $0.url).ignoresSafeArea() }
     }
 
-    private func load() async { status = try? await store.client.billing() }
+    private func load() async {
+        async let s = try? store.client.billing()
+        async let r = ProPurchaseRoute.current()
+        (status, route) = await (s, r)
+    }
 
     private func buy() async {
         busy = true; error = nil; defer { busy = false }
         do {
-            let url = try await store.client.proCheckoutURL()
-            if #available(iOS 17.4, *), await ExternalPurchase.canPresent {
-                if case .cancelled = try await ExternalPurchase.presentNoticeSheet() { return }
+            switch route {
+            case .eu:
+                guard #available(iOS 18.1, *) else { return }
+                guard case .continued = try await ExternalPurchaseCustomLink.showNotice(type: .browser) else { return }
+                let token = try await ExternalPurchaseCustomLink.token(for: "ACQUISITION")?.value
+                checkout = IdentifiableURL(url: try await store.client.proCheckoutURL(externalPurchaseToken: token))
+            case .us:
+                openURL(try await store.client.proCheckoutURL(externalPurchaseToken: nil))
+            case .none:
+                return
             }
-            openURL(url)
         } catch { self.error = error.localizedDescription }
     }
+}
+
+struct IdentifiableURL: Identifiable { let url: URL; var id: String { url.absoluteString } }
+
+/// Stripe Checkout affiché dans l'app (paiement alternatif dans l'app, UE).
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
+    func updateUIViewController(_ vc: SFSafariViewController, context: Context) {}
 }

@@ -520,7 +520,7 @@ route("GET", "/v1/billing", async req => billingStatus(requireUser(await authent
 route("POST", "/v1/billing/checkout", async req => {
   const caller = await authenticate(req);
   const uid = requireUser(caller);
-  return createProCheckout(uid, caller.kind === "user" ? caller.email : undefined, safeReturnUrl(req.body?.returnUrl, PUBLIC_BASE));
+  return createProCheckout(uid, caller.kind === "user" ? caller.email : undefined, safeReturnUrl(req.body?.returnUrl, PUBLIC_BASE), req.body?.externalPurchaseToken);
 });
 
 route("POST", "/v1/webhooks/billing", async req => handleBillingWebhook(req.rawBody, req.get("stripe-signature")));
