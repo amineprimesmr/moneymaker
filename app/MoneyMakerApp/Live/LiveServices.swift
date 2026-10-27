@@ -52,6 +52,7 @@ final class Router: ObservableObject {
         case "globe": pending = .globe
         case "leaderboard": pending = .leaderboard
         case "settings": pending = .settings
+        case "pro": ProPaywall.shared.isPresented = true
         case "charts":
             // moneymaker://charts?project=ID (sans projet : le business affiché).
             pending = .charts(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "project" }?.value)

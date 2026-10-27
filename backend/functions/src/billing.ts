@@ -104,7 +104,19 @@ export async function createCheckout(uid: string, email: string | undefined, ret
     cancel_url: `${returnUrl}${sep}pro=cancel`,
   });
   if (ept) await db.doc(`externalPurchases/${session.id}`).set({ uid, token: ept, createdAt: Date.now(), status: "pending" });
-  return { url: session.url };
+  return { url: session.url, id: session.id };
+}
+
+/** Session préparée à l'ouverture du paywall : le jeton Apple (UE) y est rattaché au moment de l'achat. */
+export async function attachExternalPurchaseToken(uid: string, sessionId: unknown, token: unknown) {
+  if (typeof sessionId !== "string" || !/^cs_[A-Za-z0-9_]{10,200}$/.test(sessionId)) throw new HttpError(400, "invalid_session");
+  if (typeof token !== "string" || !token || token.length >= 4096) throw new HttpError(400, "invalid_token");
+  const { stripe: s } = await stripe();
+  const cs = await s.checkout.sessions.retrieve(sessionId);
+  if (cs.client_reference_id !== uid) throw new HttpError(404, "not_found");
+  await s.checkout.sessions.update(sessionId, { metadata: { ...cs.metadata, apple_ept: "1" } });
+  await db.doc(`externalPurchases/${sessionId}`).set({ uid, token, createdAt: Date.now(), status: "pending" });
+  return { ok: true };
 }
 
 export async function handleBillingWebhook(raw: Buffer | string | undefined, signature: string | undefined) {

@@ -17,6 +17,8 @@ struct RootView: View {
         }
         .animation(MMMotion.reveal, value: store.token == nil)
         .fullScreenCover(isPresented: $paywall.isPresented) { ProPaywallView().environmentObject(store) }
+        // Statut Pro chargé dès la connexion : le paywall et les Réglages l'affichent sans attendre.
+        .task(id: store.token) { if store.token != nil { await paywall.refresh(client: store.client) } }
         .environmentObject(store)
         .onReceive(Router.shared.$pendingToken.compactMap { $0 }) { t in
             Router.shared.pendingToken = nil
