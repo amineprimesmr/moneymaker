@@ -210,6 +210,21 @@ export const TOOLS: Tool[] = [
       if (a.config && ("offerings" in a.config || "currentOffering" in a.config)) throw new Error("Utilise update_offerings pour les offerings");
       return redactProject(await call("PATCH", P(a), { body: { name: a.name, config: a.config ?? {} } }));
     } },
+  { name: "refresh_icon", title: "Mettre à jour le logo", write: true,
+    description: "Recalcule tout de suite le logo du business (logo personnalisé, sinon App Store, Google Play, branding Stripe, site web). Le logo se met aussi à jour seul toutes les heures.",
+    props: { projectId }, required: ["projectId"], run: (a, call) => call("POST", `${P(a)}/icon/refresh`) },
+  { name: "set_icon", title: "Choisir le logo", write: true,
+    description: "Impose un logo : `url` (https, PNG/JPEG/WebP/SVG) ou `image` (base64 / data URL). `reset: true` revient à la détection automatique.",
+    props: { projectId, url: { type: "string" }, image: { type: "string" }, reset: { type: "boolean" } }, required: ["projectId"],
+    run: (a, call) => {
+      if (a.reset) return call("PUT", `${P(a)}/icon`, { body: { image: null } });
+      if (!a.url && !a.image) throw new Error("url, image ou reset requis");
+      return call("PUT", `${P(a)}/icon`, { body: a.url ? { url: a.url } : { image: a.image } });
+    } },
+  { name: "delete_project", title: "Supprimer un business", write: true, destructive: true,
+    description: "Supprime définitivement un business (propriétaire seulement) : métriques, clients, réglages, clés d'API et logo. Irréversible.",
+    props: { projectId, confirm }, required: ["projectId"],
+    run: (a, call) => call("DELETE", P(a), { body: { confirm: a.projectId } }) },
   { name: "update_offerings", title: "Modifier les offerings", write: true,
     description: "Remplace les offres (objet complet { id: { description?, packages: [{ id, productIds: { app_store?, play_store?, stripe? } }] } }) et/ou l'offre courante. Lire get_offerings d'abord.",
     props: { projectId, offerings: { type: "object" }, currentOffering: { type: "string" } }, required: ["projectId"],

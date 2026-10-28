@@ -157,8 +157,8 @@ export const weeklySummaryPush = onSchedule({ schedule: "0 8 * * 1", timeZone: "
   }
 });
 
-/** Icônes des business : une fois par jour (App Store publié, site modifié…). */
-export const iconsRefresh = onSchedule({ schedule: "15 6 * * *", timeZone: "UTC", timeoutSeconds: 300 }, async () => {
+/** Icônes des business : toutes les heures (App Store publié, branding Stripe ou site modifiés…). */
+export const iconsRefresh = onSchedule({ schedule: "15 * * * *", timeZone: "UTC", timeoutSeconds: 300 }, async () => {
   for (const d of (await db.collection("projects").select().get()).docs) {
     try { console.log("icon", d.id, await refreshIcon(await getProject(d.id))); } catch (e) { console.error("icon", d.id, e); }
   }

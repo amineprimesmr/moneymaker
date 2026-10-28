@@ -1316,8 +1316,27 @@ route("PUT", "/v1/projects/:pid/icon", async (req, _res, [pid]) => {
     await db.doc(`iconCache/${project.id}`).delete();
     return refreshIcon(project);
   }
-  if (typeof req.body?.image !== "string") throw new HttpError(400, "image_required");
-  try { return await setCustomIcon(project.id, req.body.image); } catch (e) { throw new HttpError(400, "invalid_image", (e as Error).message); }
+  let image = req.body?.image;
+  if (typeof req.body?.url === "string") {
+    const { fetchIcon } = await import("./icons");
+    const png = /^https:\/\//.test(req.body.url) ? await fetchIcon({ url: req.body.url, source: "custom" }) : null;
+    if (!png) throw new HttpError(400, "invalid_image", "Image introuvable ou illisible à cette adresse");
+    image = png.toString("base64");
+  }
+  if (typeof image !== "string") throw new HttpError(400, "image_required");
+  try { return await setCustomIcon(project.id, image); } catch (e) { throw new HttpError(400, "invalid_image", (e as Error).message); }
+});
+
+/** Suppression d'un business (propriétaire seulement) : données, clés d'API et logo. Irréversible. */
+route("DELETE", "/v1/projects/:pid", async (req, _res, [pid]) => {
+  const project = await projectFor(await authenticate(req), pid, false, "owner");
+  if (req.body?.confirm !== project.id) throw new HttpError(400, "confirmation_required", `Envoie {"confirm":"${project.id}"}`);
+  auditNote("project.delete", { name: project.name });
+  const keys = await db.collection("apiKeys").where("projectId", "==", project.id).get();
+  await Promise.all(keys.docs.map(k => k.ref.delete()));
+  await db.recursiveDelete(db.doc(`projects/${project.id}`));
+  await db.doc(`iconCache/${project.id}`).delete().catch(() => null);
+  return { deleted: project.id };
 });
 
 /** Sert le logo hébergé (public : c'est le logo affiché d'une app, rien de confidentiel). */
