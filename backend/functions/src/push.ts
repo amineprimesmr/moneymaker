@@ -11,7 +11,7 @@
 import { connect, ClientHttp2Session, constants } from "http2";
 import { createPrivateKey, sign, KeyObject } from "crypto";
 import { db, Project } from "./store";
-import { convertMicros } from "./engine";
+import { convertMicros, readableProductId } from "./engine";
 import { Lang, normLang, money, EVENT_TITLES, periodLabel, todayLine, todayLabel, liveActivityStart, RANK_TITLES, CHART_NAMES, categoryLabel, previousRank, dailySummaryText } from "./i18n";
 
 export const BUNDLE_ID = "io.moneymaker.app";
@@ -59,6 +59,8 @@ export const SALE_SOUNDS = new Set(["cash", "coin", "chime", "levelup", "pop", "
 export function saleSoundFile(prefs: Partial<PushPrefs>): string | undefined {
   const s = prefs.saleSound ?? (prefs.sound === false ? "default" : "cash");
   if (s === "none") return undefined;
+  // Pièce, Carillon et Pop ont été retirés de l'app (1.2) : on joue le cha-ching à la place.
+  if (s === "coin" || s === "chime" || s === "pop") return "cash.caf";
   return s === "default" ? "default" : `${s}.caf`;
 }
 
@@ -136,7 +138,7 @@ export function eventNotification(project: Project, e: Record<string, any>, pref
   const isRevenue = REVENUE.has(e.type) && !e.isTrial && e.priceMicros > 0;
   const amount = e.priceMicros > 0 && !e.isTrial ? formatMoney(e.type === "REFUND" ? -e.priceMicros : e.priceMicros, e.currency, lang) : "";
   const title = isRevenue ? `+${amount} · ${project.name}` : `${TITLES[e.type] ?? e.type} · ${project.name}`;
-  const bits = [isRevenue ? TITLES[e.type] : amount, periodLabel(lang, e.periodMonths), e.productId, `${flag(e.country)} ${e.country ?? ""}`.trim(), e.isSandbox ? "sandbox" : ""]
+  const bits = [isRevenue ? TITLES[e.type] : amount, periodLabel(lang, e.periodMonths), readableProductId(e.productId), `${flag(e.country)} ${e.country ?? ""}`.trim(), e.isSandbox ? "sandbox" : ""]
     .filter(Boolean);
   const subtitle = isRevenue && todayMicros !== undefined ? todayLine(lang, formatMoney(todayMicros, currency, lang)) : undefined;
   const loud = isRevenue || e.type === "BILLING_ISSUE" || e.type === "REFUND";
@@ -199,7 +201,7 @@ export function foldToday(
       if (x.kind === "refund") t.refundsMicros += -v; else {
         t.revenueMicros += v;
         if (x.kind === "renewal") t.renewals++; else t.sales++;
-        if (!t.last || x.at > t.last.at) t.last = { projectName: r.projectName, amountMicros: x.amountMicros, currency: x.currency, productId: x.productId, country: x.country, at: x.at };
+        if (!t.last || x.at > t.last.at) t.last = { projectName: r.projectName, amountMicros: x.amountMicros, currency: x.currency, productId: readableProductId(x.productId) ?? undefined, country: x.country, at: x.at };
       }
     }
     for (const e of r.events) {

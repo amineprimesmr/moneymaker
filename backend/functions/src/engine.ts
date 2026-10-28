@@ -180,3 +180,10 @@ export function cleanId(raw: unknown, max = 128): string {
 export class HttpError extends Error {
   constructor(public status: number, public code: string, message?: string) { super(message ?? code); }
 }
+
+/** Product label worth showing: null for placeholders and raw Stripe ids (the business name is shown instead). Pure — unit-tested. */
+export function readableProductId(id: unknown): string | null {
+  const s = typeof id === "string" ? id.trim() : "";
+  if (!s || /^stripe_(payment|one_time)$/i.test(s) || /^(prod|price|plink|cs|pi|ch|py|in)_[A-Za-z0-9]+$/.test(s)) return null;
+  return s;
+}

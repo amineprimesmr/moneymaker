@@ -3,7 +3,7 @@ import { SETUP_EN } from "./i18n";
 import type { Response } from "express";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
-import { HttpError, cleanId, Purchase, convertMicros } from "./engine";
+import { HttpError, cleanId, Purchase, convertMicros, readableProductId } from "./engine";
 import type { Credentials } from "./store";
 import {
   db, getProject, createProject, customerInfo, mergeCustomers, touchCustomer, resolveKey, issueKey, revokeProjectKeys,
@@ -1161,7 +1161,7 @@ route("GET", "/v1/alerts", async req => {
   const uid = requireUser(await authenticate(req));
   const projects = await db.collection("projects").where("members", "array-contains", uid).get();
   const all = (await Promise.all(projects.docs.map(async p =>
-    (await db.collection(`projects/${p.id}/alerts`).orderBy("at", "desc").limit(50).get()).docs.map(d => ({ id: d.id, projectId: p.id, projectName: p.get("name"), ...d.data() })),
+    (await db.collection(`projects/${p.id}/alerts`).orderBy("at", "desc").limit(50).get()).docs.map(d => { const e = d.data(); return { id: d.id, projectId: p.id, projectName: p.get("name"), ...e, productId: readableProductId(e.productId) }; }),
   ))).flat().sort((a: any, b: any) => b.at - a.at).slice(0, 100);
   return { alerts: all };
 });
