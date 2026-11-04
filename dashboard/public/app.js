@@ -117,14 +117,17 @@ function go(patch) {
 function back() { if (history.state?.depth > 0) history.back(); else go({ view: { metric: "home", planet: "home", project: "home", tx: "feed", customer: "feed", app: "apps" }[state.view] ?? "home", projectId: null }); }
 matchMedia("(min-width: 1024px)").addEventListener("change", () => { if (auth.currentUser) route(); });
 addEventListener("popstate", () => { if (auth.currentUser) { readHash(); route(); } });
+let routeSeq = 0;
 function route() {
+  const seq = ++routeSeq;
   leave(); closeMenu(); renderTabbar();
   $("#sideSettings").classList.toggle("on", state.view === "settings");
   const main = $("#main");
   main.scrollTop = 0; document.body.dataset.view = state.view;
   $("#tabbar").classList.remove("shrink");
   const render = { home: renderHome, metric: renderMetric, feed: renderFeed, tx: renderTx, customer: renderCustomer, apps: renderApps, app: renderAppDetail, board: renderBoard, planet: renderPlanet, settings: renderSettings, project: renderProject }[state.view] ?? renderHome;
-  render(main).catch(e => { console.error(e); main.innerHTML = `<div class="page"><div class="empty error">${esc(e.message)}</div></div>`; });
+  // Un rendu dépassé par une navigation plus récente n'écrase jamais l'écran affiché.
+  render(main).catch(e => { if (seq !== routeSeq) return; console.error(e); main.innerHTML = `<div class="page"><div class="empty error">${esc(e.message)}</div></div>`; });
 }
 
 // ── Charts (dependency-free SVG) ────────────────────────────────────────
@@ -156,7 +159,9 @@ const TABS = { start: "Démarrage", metrics: "Métriques", map: "Carte", cohorts
 async function renderProject(main) {
   const p = state.projects.find(x => x.id === state.projectId);
   if (!TABS[state.tab]) state.tab = "metrics";
+  const seq = routeSeq;
   await ensureStore().catch(() => {});
+  if (seq !== routeSeq) return;
   const o = allProjects().find(x => x.projectId === state.projectId) ?? { projectId: state.projectId, name: p?.name, stores: [] };
   const admin = ["settings", "connect", "start"].includes(state.tab);
   main.innerHTML = `<div class="page wide"><div class="dt-top"><button class="back glass" id="bzBack" aria-label="Retour">${ic("left", 19)}</button>${["metrics", "map"].includes(state.tab) ? daysPicker() : ""}</div>
@@ -164,7 +169,7 @@ async function renderProject(main) {
     <div class="chips">${Object.entries(TABS).map(([k, v]) => `<button class="${state.tab === k ? "on" : ""}" data-tab="${k}">${v}</button>`).join("")}</div><div id="tab" style="display:flex;flex-direction:column;gap:12px"></div></div>`;
   $("#bzBack").onclick = back;
   document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => go({ tab: b.dataset.tab }));
-  main.querySelector(".chips .on")?.scrollIntoView({ block: "nearest", inline: "center" });
+  if (!desktop()) main.querySelector(".chips .on")?.scrollIntoView({ block: "nearest", inline: "center" });
   bindDays();
   await ({ start: tabStart, metrics: tabMetrics, map: tabMap, cohorts: tabCohorts, charts: tabCharts, appstore: tabAppStore, reviews: tabReviews, alerts: tabAlerts, customers: tabCustomers, events: tabEvents, products: tabProducts, growth: el => tabGrowth(el, { api, esc, toast, money, pct, date, projectId: state.projectId, reload: loadProjects }), connect: tabConnect, settings: tabSettings }[state.tab] ?? tabMetrics)($("#tab"));
 }
@@ -449,7 +454,7 @@ Clé publique SDK: <colle ta clé mm_pub_ ici>
 Accès à vérifier: ${Object.keys(p.config.entitlements)[0] ?? "premium"}
 Remplace toute logique RevenueCat/StoreKit existante, appelle MoneyMaker.configure au lancement, logIn avec l'id utilisateur, purchase() depuis le paywall, et verrouille les écrans premium avec isEntitled.`;
   el.innerHTML = `<div class="card section"><h2>⚡ Brancher le SDK : demande à ton agent</h2><p class="muted">Colle ce prompt dans Claude, à la racine de ton app.</p><pre>${esc(agentPrompt)}</pre>
-    <div class="row" style="margin-top:10px"><button class="primary" style="flex:0" onclick='mmCopy(${esc(JSON.stringify(agentPrompt))})'>Copier le prompt</button><a href="/guide" style="flex:0;white-space:nowrap">Guide pas à pas →</a></div></div>
+    <div class="row" style="margin-top:10px"><button class="primary" style="flex:0;white-space:nowrap" onclick='mmCopy(${esc(JSON.stringify(agentPrompt))})'>Copier le prompt</button><a href="/guide" style="flex:0;white-space:nowrap">Guide pas à pas →</a></div></div>
   <div class="grid2">
     <div class="card"><h2>Stripe ${ok(p.credentials.stripeKey && p.credentials.stripeWebhook)}</h2><p class="muted">Colle une clé secrète (ou restreinte avec accès webhooks, abonnements, factures, clients, Checkout). MoneyMaker crée le webhook tout seul et importe tes abonnements + 12 mois de factures.</p>
       <div class="row"><input id="stripeKey" placeholder="sk_live_… ou rk_live_…" autocomplete="off"><button class="primary" style="flex:0;white-space:nowrap" id="cStripe">Connecter</button></div><div id="stripeOut"></div></div>
@@ -658,17 +663,17 @@ async function audiencesSection(box) {
   box.innerHTML = `<h2>Audiences</h2>
     ${audiences.length ? `<table><tbody>${audiences.map(a => `<tr><td><b>${esc(a.name)}</b> <span class="muted mono">${esc(a.id)}</span></td><td>${a.count ?? "—"} clients</td>
       <td style="text-align:right"><button class="small" data-audload="${esc(a.id)}">Modifier</button> <button class="small" data-audcsv="${esc(a.id)}">⬇︎ CSV</button> <button class="small danger" data-auddel="${esc(a.id)}">Supprimer</button></td></tr>`).join("")}</tbody></table>` : `<p class="muted">Aucune audience. Compose des filtres, prévisualise, puis enregistre.</p>`}
-    <div class="row" style="flex-wrap:wrap;gap:8px;align-items:end;margin-top:12px">
+    <div class="aud-form">
       <div class="field"><label>Statut</label><select data-af="status">${Object.entries(AUD_STATUS).map(([v, l]) => opt(v, l, f.status)).join("")}</select></div>
       <div class="field"><label>Store</label><select data-af="store">${[["", "Tous"], ["app_store", "App Store"], ["play_store", "Google Play"], ["stripe", "Stripe"], ["paddle", "Paddle"], ["amazon", "Amazon"], ["galaxy", "Galaxy Store"], ["roku", "Roku"], ["promotional", "Promo"]].map(([v, l]) => opt(v, l, f.store)).join("")}</select></div>
-      <div class="field"><label>Pays</label><input data-af="country" maxlength="2" placeholder="FR" value="${esc(f.country ?? "")}" style="width:70px"></div>
+      <div class="field"><label>Pays</label><input data-af="country" maxlength="2" placeholder="FR" value="${esc(f.country ?? "")}"></div>
       <div class="field"><label>Produit</label><input data-af="productId" value="${esc(f.productId ?? "")}"></div>
       <div class="field"><label>Accès actif</label><input data-af="entitlement" value="${esc(f.entitlement ?? "")}"></div>
       <div class="field"><label>Vu après</label><input type="date" data-af="firstSeenAfter" value="${d(f.firstSeenAfter)}"></div>
       <div class="field"><label>Vu avant</label><input type="date" data-af="firstSeenBefore" value="${d(f.firstSeenBefore)}"></div>
-      <div class="field"><label>Dépensé min.</label><input type="number" min="0" data-af="spentMin" value="${f.spentMinMicros != null ? f.spentMinMicros / 1e6 : ""}" style="width:90px"></div>
+      <div class="field"><label>Dépensé min.</label><input type="number" min="0" data-af="spentMin" value="${f.spentMinMicros != null ? f.spentMinMicros / 1e6 : ""}"></div>
       <div class="field"><label>Attribut (clé=valeur)</label><input data-af="attr" placeholder="plan=pro" value="${esc(Object.entries(f.attributes ?? {}).map(([k, v]) => `${k}=${v}`).join(","))}"></div>
-      <div class="field"><label>Campagne Apple Ads</label><input data-af="appleAdsCampaign" value="${esc(f.appleAdsCampaign ?? "")}" style="width:110px"></div>
+      <div class="field"><label>Campagne Apple Ads</label><input data-af="appleAdsCampaign" value="${esc(f.appleAdsCampaign ?? "")}"></div>
       <button class="small" id="audPrev">Prévisualiser</button></div>
     <div class="row" style="margin-top:8px"><input id="audName" placeholder="Nom de l'audience" value="${esc(state.audEditing?.name ?? "")}"><button class="primary" id="audSave" style="flex:0;white-space:nowrap">${state.audEditing ? "Mettre à jour" : "Enregistrer l'audience"}</button></div>
     <div id="audOut"></div>`;
@@ -855,7 +860,7 @@ async function renderSettings(main) {
       <div class="row"><input id="label" placeholder="Nom du jeton (ex. iPhone)"><button class="primary" style="flex:0;white-space:nowrap" id="mk">Créer un jeton</button></div><div id="tok" style="margin-top:12px"></div></div></div>
     <div><p class="set-title">API</p><div class="set-card"><div class="set-pane" style="padding-bottom:6px"><p class="muted" style="margin:0 0 8px;font-size:14px">Base URL</p>${copyRow(location.origin + "/v1")}</div>
       ${linkRow("doc", "Guide pas à pas", "/guide")}${linkRow("key", "Référence API", "/docs")}${linkRow("sparkles", "llms.txt (pour agents)", "/llms.txt")}</div></div>
-    <div><p class="set-title">Assistance</p><div class="set-card">${linkRow("life", "Aide et contact", "/support")}${linkRow("doc", "Conditions d'utilisation", "/terms")}${linkRow("shield", "Confidentialité", "/privacy")}</div></div></div>
+    <div><p class="set-title">Assistance</p><div class="set-card">${linkRow("life", "Aide et contact", "/support")}${linkRow("chat", "Envoyer un avis", "mailto:amine.ennasri.pro@gmail.com?subject=MoneyMaker%20-%20avis")}${linkRow("doc", "Conditions d'utilisation", "/terms")}${linkRow("shield", "Confidentialité", "/privacy")}</div></div></div>
     <button class="set-danger" id="logout">${ic("logout", 18)} Se déconnecter</button>
     <button class="set-link" id="delAccount">Supprimer mon compte</button>
   </div>`;
@@ -1028,8 +1033,8 @@ async function ltvSection(box) {
 async function tabCharts(el) {
   const c = (state.chart ??= { name: "mrr", days: 90, resolution: "day", store: "", country: "", product: "" }), cur = state.projects.find(p => p.id === state.projectId)?.config?.currency ?? "EUR";
   const opt = (v, l, sel) => `<option value="${esc(v)}" ${v === sel ? "selected" : ""}>${esc(l)}</option>`;
-  el.innerHTML = `<div class="chips">${Object.entries(CHARTS).map(([k, [l]]) => `<button class="${k === c.name ? "on" : ""}" data-ch="${k}">${esc(l)}</button>`).join("")}</div>
-    <div class="range glass" style="max-width:none;width:100%">${[[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "1 an"], [730, "2 ans"]].map(([v, l]) => `<button style="flex:1;padding:0 4px" class="${v === c.days ? "on" : ""}" data-chd="${v}">${l}</button>`).join("")}</div>
+  el.innerHTML = `<div class="ch-grid"><div class="chips ch-list">${Object.entries(CHARTS).map(([k, [l]]) => `<button class="${k === c.name ? "on" : ""}" data-ch="${k}">${esc(l)}</button>`).join("")}</div>
+    <div class="ch-main"><div class="range glass" style="max-width:none;width:100%">${[[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "1 an"], [730, "2 ans"]].map(([v, l]) => `<button style="flex:1;padding:0 4px" class="${v === c.days ? "on" : ""}" data-chd="${v}">${l}</button>`).join("")}</div>
     <div id="chOut"><div class="skeleton" style="height:320px"></div></div>
     <details class="card"><summary class="muted" style="cursor:pointer">Filtres et export</summary><div class="grid2" style="grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
       <div class="field" style="margin:0"><label>Résolution</label><select id="chRes">${[["day", "Jour"], ["week", "Semaine"], ["month", "Mois"]].map(([v, l]) => opt(v, l, c.resolution)).join("")}</select></div>
@@ -1037,8 +1042,8 @@ async function tabCharts(el) {
       <div class="field" style="margin:0"><label>Pays</label><input id="chCountry" maxlength="2" placeholder="FR" value="${esc(c.country)}"></div>
       <div class="field" style="margin:0"><label>Produit</label><input id="chProduct" placeholder="tous" value="${esc(c.product)}"></div></div>
       <button id="chCsv" class="small" style="margin-top:12px">Télécharger le CSV</button></details>
-    <div id="benchOut" class="card"></div><div id="ltvOut" class="card"></div>`;
-  el.querySelector(".chips .on")?.scrollIntoView({ block: "nearest", inline: "center" });
+    <div id="benchOut" class="card"></div><div id="ltvOut" class="card"></div></div></div>`;
+  if (!desktop()) el.querySelector(".chips .on")?.scrollIntoView({ block: "nearest", inline: "center" });
   el.querySelectorAll("[data-ch]").forEach(b => b.onclick = () => { c.name = b.dataset.ch; tabCharts(el); });
   el.querySelectorAll("[data-chd]").forEach(b => b.onclick = () => { c.days = Number(b.dataset.chd); tabCharts(el); });
   benchmarksSection($("#benchOut")).catch(e => $("#benchOut").innerHTML = `<div class="empty error">${esc(e.message)}</div>`);

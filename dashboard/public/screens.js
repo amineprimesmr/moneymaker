@@ -8,7 +8,8 @@ export const initScreens = helpers => { h = helpers; };
 // ── Store : même rôle que Store.swift (cache, périmètre multi-business, focus) ───────────
 const store = { overview: null, today: null, feed: [], long: null, longAt: 0, at: 0, loading: null };
 let cleanups = [];
-export const leave = () => { cleanups.forEach(f => { try { f(); } catch {} }); cleanups = []; };
+let nav = 0;
+export const leave = () => { nav++; cleanups.forEach(f => { try { f(); } catch {} }); cleanups = []; };
 const load = key => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } };
 const save = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} };
 const pref = key => { try { return localStorage.getItem(key); } catch { return null; } };
@@ -338,7 +339,9 @@ const isToday = t => new Date(t).toDateString() === new Date().toDateString();
 export async function renderMetric(main) {
   const k = METRICS[h.state.metric] ? h.state.metric : "mrr", m = METRICS[k];
   main.innerHTML = `<div class="page"><div class="skeleton" style="height:44px;width:44px;border-radius:50%"></div>${skeleton(1, 320)}</div>`;
+  const n = nav;
   await ensureStore();
+  if (n !== nav) return;
   let range = h.state.metricRange ?? 30, selected = null;
   const paint = () => {
     const o = scopeOverview(store.overview), t = store.today, cur = o.currency;
@@ -487,7 +490,9 @@ const txRow = (i, k, v) => `<div class="tx-row"><span class="i">${ic(i, 18)}</sp
 const txStack = (i, k, v, mono) => `<div class="tx-row stack"><span class="i">${ic(i, 18)}</span><div class="b"><div class="k">${esc(k)}</div><div class="k2" ${mono ? 'style="font-family:var(--mono)"' : ""}>${esc(v)}</div></div></div>`;
 const masked = id => id.length > 10 ? `${id.slice(0, 4)}••••${id.slice(-4)}` : id;
 export async function renderTx(main) {
+  const n = nav;
   await ensureStore().catch(() => {});
+  if (n !== nav) return;
   const ref = h.state.eventRef;
   const e = ref && h.state.event?.id !== ref.id ? store.feed.find(x => x.id === ref.id && x.projectId === ref.projectId) ?? (await h.api(withQ("/v1/feed?limit=300", curQ())).catch(() => ({ events: [] }))).events.find(x => x.id === ref.id && x.projectId === ref.projectId) : h.state.event;
   if (!e) return h.go({ view: "feed" });
@@ -518,8 +523,10 @@ export async function renderCustomer(main) {
   if (!r) return h.go({ view: "feed" });
   main.innerHTML = `<div class="page"><div class="dt-top"><button class="back glass" id="cBack" aria-label="Retour">${ic("left", 19)}</button></div>${skeleton(3, 120)}</div>`;
   document.getElementById("cBack").onclick = () => h.back();
+  const n = nav;
   await ensureStore().catch(() => {});
   const body = await customerBody(r);
+  if (n !== nav) return;
   main.innerHTML = `<div class="page"><div class="dt-top"><button class="back glass" id="cBack" aria-label="Retour">${ic("left", 19)}</button></div><div class="cu-grid">${body}</div></div>`;
   document.getElementById("cBack").onclick = () => h.back();
   bindCustomer(main, r);
@@ -758,7 +765,7 @@ export async function renderPlanet(main) {
   };
   const select = cc => { selected = cc; g?.setHighlight(cc); if (cc) g?.focus(cc); paint(); };
   paint();
-  g = await mountGlobe(document.getElementById("pGlobe"), { spots, wheelZoom: true, onTap: cc => select(cc), initial: { scale: .92, tScale: .92 } });
+  g = await mountGlobe(document.getElementById("pGlobe"), { spots, wheelZoom: true, onTap: cc => select(cc), initial: desktop() ? { scale: .8, tScale: .8 } : { scale: .92, tScale: .92 } });
   if (!document.getElementById("pGlobe")) return g.destroy();
   cleanups.push(() => g.destroy());
   document.getElementById("zIn").onclick = () => g.zoomBy(1.35);
