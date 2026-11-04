@@ -1,0 +1,1 @@
+node $S/export.cjs && rm -rf export/ios && unzip -qo export/iphone.zip -d export/ios_tmp; mkdir -p export/ios/iphone/1320x2868/fr; find export/ios_tmp -path '*1320x2868*' -name '*.png' -exec cp {} export/ios/iphone/1320x2868/fr/ \; ; rm -rf export/ios_tmp; python3 $S/apercu.py
