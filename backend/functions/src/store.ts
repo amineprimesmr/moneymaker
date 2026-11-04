@@ -185,6 +185,7 @@ export async function upsertPurchase(
         type, appUserId, productId: purchase.productId, store: purchase.store, purchaseId: purchase.id,
         priceMicros: purchase.priceMicros, currency: purchase.currency, isSandbox: purchase.isSandbox,
         isTrial: purchase.isTrial, expiresAt: purchase.expiresAt, country: purchase.country ?? null, periodMonths: purchase.periodMonths, at: now, delivered: false,
+        purchasedAt: purchase.latestPurchaseAt, // date réelle de l'achat : un événement rattrapé (webhook en retard, resync) n'est pas une vente du jour
       });
       const isRevenue = REVENUE_EVENTS.includes(type) && !purchase.isTrial && purchase.priceMicros > 0;
       if (isRevenue || type === "REFUND") {

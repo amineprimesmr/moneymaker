@@ -12,7 +12,7 @@ import { connect, ClientHttp2Session, constants } from "http2";
 import { createPrivateKey, sign, KeyObject } from "crypto";
 import { db, Project } from "./store";
 import { convertMicros, readableProductId } from "./engine";
-import { Lang, normLang, money, EVENT_TITLES, periodLabel, todayLine, todayLabel, liveActivityStart, RANK_TITLES, CHART_NAMES, categoryLabel, previousRank, dailySummaryText } from "./i18n";
+import { Lang, normLang, money, EVENT_TITLES, periodLabel, todayLine, lateSaleLine, todayLabel, liveActivityStart, RANK_TITLES, CHART_NAMES, categoryLabel, previousRank, dailySummaryText } from "./i18n";
 
 export const BUNDLE_ID = "io.moneymaker.app";
 
@@ -132,22 +132,28 @@ export function wants(prefs: PushPrefs, projectId: string, e: Record<string, any
   return Boolean(key && prefs[key]);
 }
 
+/** Achat enregistré plus de 2 h après avoir eu lieu (webhook en retard, resync) : pas une vente « en direct ». */
+export const isLateEvent = (e: Record<string, any>) =>
+  typeof e.purchasedAt === "number" && e.type !== "REFUND" && Number(e.at ?? Date.now()) - e.purchasedAt > 2 * 3600000;
+
 /** APNs alert payload for a subscription event. Pure — unit-tested. */
-export function eventNotification(project: Project, e: Record<string, any>, prefs: PushPrefs, todayMicros?: number, currency = "EUR", lang: Lang = "fr") {
+export function eventNotification(project: Project, e: Record<string, any>, prefs: PushPrefs, todayMicros?: number, currency = "EUR", lang: Lang = "fr", tz = "Europe/Paris") {
   const TITLES = EVENT_TITLES[lang];
   const isRevenue = REVENUE.has(e.type) && !e.isTrial && e.priceMicros > 0;
+  const late = isRevenue && isLateEvent(e);
   const amount = e.priceMicros > 0 && !e.isTrial ? formatMoney(e.type === "REFUND" ? -e.priceMicros : e.priceMicros, e.currency, lang) : "";
   const title = isRevenue ? `+${amount} · ${project.name}` : `${TITLES[e.type] ?? e.type} · ${project.name}`;
   const bits = [isRevenue ? TITLES[e.type] : amount, periodLabel(lang, e.periodMonths), readableProductId(e.productId), `${flag(e.country)} ${e.country ?? ""}`.trim(), e.isSandbox ? "sandbox" : ""]
     .filter(Boolean);
-  const subtitle = isRevenue && todayMicros !== undefined ? todayLine(lang, formatMoney(todayMicros, currency, lang)) : undefined;
-  const loud = isRevenue || e.type === "BILLING_ISSUE" || e.type === "REFUND";
+  const subtitle = late ? lateSaleLine(lang, new Date(e.purchasedAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", { timeZone: tz, day: "numeric", month: "short" }))
+    : isRevenue && todayMicros !== undefined ? todayLine(lang, formatMoney(todayMicros, currency, lang)) : undefined;
+  const loud = !late && (isRevenue || e.type === "BILLING_ISSUE" || e.type === "REFUND");
   return {
     aps: {
       alert: { title, ...(subtitle ? { subtitle } : {}), body: bits.join(" · ") },
       sound: loud && prefs.sound !== false ? (isRevenue ? saleSoundFile(prefs) : prefs.saleSound === "none" ? undefined : "default") : undefined,
       "thread-id": `project-${project.id}`,
-      "interruption-level": isRevenue ? "time-sensitive" : "active",
+      "interruption-level": late ? "passive" : isRevenue ? "time-sensitive" : "active",
       "relevance-score": isRevenue ? Math.min(1, 0.5 + (e.priceMicros ?? 0) / 200e6) : 0.3,
       "mutable-content": 1,
       category: isRevenue ? "SALE" : "EVENT",
@@ -179,10 +185,15 @@ export interface Today {
 
 /** Start of the current day in `tz`, as a UTC timestamp. */
 export function startOfDay(tz: string, now = Date.now()): number {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
-    .formatToParts(new Date(now)).reduce((o, p) => ({ ...o, [p.type]: p.value }), {} as Record<string, string>);
-  const elapsed = ((Number(parts.hour) * 60 + Number(parts.minute)) * 60 + Number(parts.second)) * 1000 + (now % 1000);
-  return now - elapsed;
+  const fmt = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const parts = (t: number) => fmt.formatToParts(new Date(t)).reduce((o, p) => ({ ...o, [p.type]: p.value }), {} as Record<string, string>);
+  const p = parts(now);
+  const elapsed = ((Number(p.hour) * 60 + Number(p.minute)) * 60 + Number(p.second)) * 1000 + (now % 1000);
+  const start = now - elapsed;
+  // Changement d'heure dans la journée : l'heure murale ne mesure plus le temps écoulé, on recale sur minuit.
+  const q = parts(start), wall = (Number(q.hour) * 60 + Number(q.minute)) * 60000;
+  if (!wall) return start;
+  return q.day === p.day ? start - wall : start + 24 * 3600000 - wall;
 }
 
 /** Pure fold over the day's transactions and events — unit-tested. */
@@ -348,14 +359,14 @@ export async function pushEvent(project: Project, e: Record<string, any>): Promi
     const prefs = { ...DEFAULT_PREFS, ...d.prefs };
     const t = isRevenue && !e.isSandbox ? await today(d).catch(() => undefined) : undefined;
     const jobs: Promise<void>[] = [];
-    if (d.apnsToken && wants(prefs, project.id, e)) jobs.push(apnsSend(d.env, d.apnsToken, "alert", eventNotification(project, e, prefs, t ? t.revenueMicros - t.refundsMicros : undefined, d.currency, normLang(d.lang)))
+    if (d.apnsToken && wants(prefs, project.id, e)) jobs.push(apnsSend(d.env, d.apnsToken, "alert", eventNotification(project, e, prefs, t ? t.revenueMicros - t.refundsMicros : undefined, d.currency, normLang(d.lang), d.tz || "Europe/Paris"))
       .then(async r => { r.status === 200 ? stats.alerts++ : stats.failed++; await prune(d, "apnsToken", r); }));
     if (isRevenue && !e.isSandbox) {
       if (d.widgetPushToken) jobs.push(apnsSend(d.env, d.widgetPushToken, "widgets", { aps: { "content-changed": true } })
         .then(async r => { if (r.status === 200) stats.widgets++; await prune(d, "widgetPushToken", r); }));
       else if (d.apnsToken) jobs.push(apnsSend(d.env, d.apnsToken, "background", { aps: { "content-available": 1 }, refresh: "widgets" }, { priority: 5, collapseId: "refresh" })
         .then(() => undefined));
-      if (t) jobs.push(updateLiveActivity(d, t, prefs, e).then(n => { stats.live += n; }));
+      if (t && !isLateEvent(e)) jobs.push(updateLiveActivity(d, t, prefs, e).then(n => { stats.live += n; }));
     }
     await Promise.all(jobs);
   }));

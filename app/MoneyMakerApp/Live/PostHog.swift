@@ -54,7 +54,18 @@ struct PosthogSummary: Codable, Hashable {
     let mau: Int
     let retentionD1: Double?
     let retentionD7: Double?
+    var retentionD30: Double? = nil
+    var newUsers: Int? = nil
+    var onboardingSteps: [OnboardingStep]? = nil
     let updatedAt: Double
+
+    struct OnboardingStep: Codable, Hashable { let name: String; let users: Int }
+
+    /// Part des personnes d'une étape qui atteignent la suivante ; rien si une étape manque ou est vide.
+    func rate(_ from: PosthogStep, _ to: PosthogStep) -> Double? {
+        guard let a = funnel.first(where: { $0.step == from })?.users, let b = funnel.first(where: { $0.step == to })?.users, a > 0 else { return nil }
+        return Double(b) / Double(a)
+    }
 }
 
 struct PosthogEventCount: Codable, Hashable { let event: String; let count: Int }
@@ -131,6 +142,7 @@ final class PosthogStore: ObservableObject {
             installToPaid: ratio(at(.open) ?? steps.first?.users, at(.purchase)),
             dau: list.reduce(0) { $0 + $1.dau }, wau: list.reduce(0) { $0 + $1.wau }, mau: list.reduce(0) { $0 + $1.mau },
             retentionD1: avg(list.compactMap(\.retentionD1)), retentionD7: avg(list.compactMap(\.retentionD7)),
+            retentionD30: avg(list.compactMap(\.retentionD30)), newUsers: list.reduce(0) { $0 + ($1.newUsers ?? 0) },
             updatedAt: list.map(\.updatedAt).min() ?? first.updatedAt
         )
     }
@@ -264,7 +276,8 @@ struct PosthogFunnelDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: RecoveryTileTheme.gridSpacing) {
                 if let s = ph.combined(ids) {
-                    funnel(s)
+                    Self.funnel(s)
+                    PosthogOnboardingDrops(summary: s)
                     PosthogTiles(summary: s, includeHeadline: true)
                     Text("Données PostHog des \(s.days) derniers jours · mises à jour \(Date(timeIntervalSince1970: s.updatedAt / 1000).formatted(.relative(presentation: .named)))")
                         .font(MMFont.system(11)).foregroundStyle(MMColor.ink3).frame(maxWidth: .infinity).padding(.top, 6)
@@ -285,7 +298,7 @@ struct PosthogFunnelDetail: View {
         .mmPage()
     }
 
-    private func funnel(_ s: PosthogSummary) -> some View {
+    static func funnel(_ s: PosthogSummary) -> some View {
         let top = Double(max(s.funnel.first?.users ?? 1, 1))
         return RecoveryTileSurface(dotsAnchor: .topTrailing, dotsReach: 0.6) {
             VStack(alignment: .leading, spacing: 14) {
@@ -362,27 +375,99 @@ struct PosthogTiles: View {
             }
             ForEach(PosthogTiles.extras(s), id: \.title) { $0.tile }
         }
+        .proLocked("Onboarding et conversion du paywall")
     }
 
     static func headline(_ s: PosthogSummary) -> [ExtraStat] {
-        [
+        var out = [
             ExtraStat(symbol: "rectangle.stack.badge.person.crop", title: String(localized: "Conversion paywall"), value: percentText(s.paywallConversion), ratio: s.paywallConversion ?? 0),
             ExtraStat(symbol: "arrow.down.app.fill", title: String(localized: "Installation → payant"), value: percentText(s.installToPaid), ratio: s.installToPaid ?? 0),
         ]
+        if let r = s.rate(.open, .onboarding) { out.append(ExtraStat(symbol: "list.bullet.clipboard", title: String(localized: "Onboarding terminé"), value: percentText(r), ratio: r)) }
+        return out
     }
 
     static func extras(_ s: PosthogSummary) -> [ExtraStat] {
-        var out = [
+        var out: [ExtraStat] = []
+        if let r = s.rate(.onboarding, .paywall) { out.append(ExtraStat(symbol: "rectangle.portrait.and.arrow.right", title: String(localized: "Onboarding → paywall"), value: percentText(r), ratio: r)) }
+        if let r = s.rate(.paywall, .trial) { out.append(ExtraStat(symbol: "hourglass", title: String(localized: "Paywall → essai"), value: percentText(r), ratio: r)) }
+        if let r = s.rate(.trial, .purchase) { out.append(ExtraStat(symbol: "creditcard.fill", title: String(localized: "Essai → achat"), value: percentText(r), ratio: r)) }
+        if let n = s.newUsers { out.append(ExtraStat(symbol: "person.badge.plus", title: String(localized: "Nouveaux utilisateurs · \(s.days) j"), value: n.formatted(), ratio: s.mau > 0 ? Double(n) / Double(s.mau) : 0)) }
+        out += [
             ExtraStat(symbol: "person.fill", title: String(localized: "Utilisateurs actifs · jour"), value: s.dau.formatted(), ratio: s.mau > 0 ? Double(s.dau) / Double(s.mau) : 0),
             ExtraStat(symbol: "person.2.fill", title: String(localized: "Utilisateurs actifs · semaine"), value: s.wau.formatted(), ratio: s.mau > 0 ? Double(s.wau) / Double(s.mau) : 0),
             ExtraStat(symbol: "person.3.fill", title: String(localized: "Utilisateurs actifs · mois"), value: s.mau.formatted(), ratio: 1),
         ]
         if let r = s.retentionD1 { out.append(ExtraStat(symbol: "arrow.uturn.left.circle", title: String(localized: "Rétention J1"), value: percentText(r), ratio: r)) }
         if let r = s.retentionD7 { out.append(ExtraStat(symbol: "arrow.uturn.left.circle.fill", title: String(localized: "Rétention J7"), value: percentText(r), ratio: r)) }
+        if let r = s.retentionD30 { out.append(ExtraStat(symbol: "calendar", title: String(localized: "Rétention J30"), value: percentText(r), ratio: r)) }
         if let p = s.funnel.first(where: { $0.step == .purchase }), let secs = p.medianSeconds, secs > 0 {
             let h = secs / 3600
             out.append(ExtraStat(symbol: "timer", title: String(localized: "Délai médian avant achat"), value: h < 48 ? String(localized: "\(Int(h.rounded())) h") : String(localized: "\(Int((h / 24).rounded())) j"), ratio: min(h / 168, 1)))
         }
         return out
+    }
+}
+
+// MARK: - Abandons de l'onboarding
+
+/// Écran par écran : combien de personnes l'atteignent et combien sont perdues depuis le précédent.
+struct PosthogOnboardingDrops: View {
+    let summary: PosthogSummary
+
+    var body: some View {
+        if let steps = summary.onboardingSteps, steps.count > 1 {
+            RecoveryTileSurface(dotsAnchor: .topTrailing, dotsReach: 0.6) {
+                VStack(alignment: .leading, spacing: 12) {
+                    RecoveryTileHeader(symbol: "chart.bar.doc.horizontal", title: String(localized: "Abandons de l'onboarding"))
+                    ForEach(Array(steps.enumerated()), id: \.element.name) { i, step in
+                        HStack {
+                            Text(Int(step.name).map { String(localized: "Écran \($0)") } ?? step.name)
+                                .font(V2Font.system(size: 14, weight: .medium)).lineLimit(1)
+                            Spacer()
+                            if i > 0, steps[i - 1].users > 0 {
+                                Text("−\(percentText(1 - Double(step.users) / Double(steps[i - 1].users)))")
+                                    .font(V2Font.system(size: 12)).foregroundStyle(RecoveryTileTheme.deltaDown.opacity(0.85))
+                            }
+                            Text(step.users.formatted()).font(V2Font.system(size: 15, weight: .medium)).frame(minWidth: 44, alignment: .trailing)
+                        }
+                        .foregroundStyle(RecoveryTileTheme.value)
+                    }
+                }
+                .padding(18)
+            }
+        }
+    }
+}
+
+// MARK: - Fiche d'une app
+
+/// Conversion et onboarding de l'app, sur sa fiche : données PostHog de son business.
+struct PosthogAppSection: View {
+    @EnvironmentObject var store: Store
+    @ObservedObject private var ph = PosthogStore.shared
+    let project: ProjectSummary
+    @State private var connecting = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: RecoveryTileTheme.gridSpacing) {
+            MMLabel(text: String(localized: "Conversion et onboarding")).padding(.horizontal, 4).padding(.top, 8)
+            if let s = ph.summaries[project.projectId] {
+                PosthogFunnelDetail.funnel(s)
+                PosthogOnboardingDrops(summary: s)
+                PosthogTiles(summary: s, includeHeadline: true)
+                Text("Données PostHog des \(s.days) derniers jours").font(MMFont.system(11)).foregroundStyle(MMColor.ink3).frame(maxWidth: .infinity)
+            } else {
+                Button { connecting = true } label: {
+                    Label("Connecter PostHog pour voir le paywall, l'onboarding et la rétention", systemImage: "chart.bar.xaxis")
+                        .font(MMFont.system(14, .medium)).foregroundStyle(MMColor.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                        .mmGlass(in: RoundedRectangle(cornerRadius: 16, style: .continuous), interactive: true)
+                }
+                .buttonStyle(MMPressStyle(scale: 0.98))
+            }
+        }
+        .task { await ph.load([project.projectId], client: store.client) }
+        .sheet(isPresented: $connecting) { PosthogConnectSheet(project: project) }
     }
 }

@@ -149,7 +149,7 @@ export async function scanRankings(onlyAppIds?: string[], countries: string[] = 
   refusals.clear();
   coolDownUntil.clear();
   const appsSnap = await db.collection("apps").get();
-  const apps = appsSnap.docs.map(d => d.data()).filter(a => (a.trackers ?? []).length && (!onlyAppIds || onlyAppIds.includes(a.appId)));
+  const apps = appsSnap.docs.map(d => d.data()).filter(a => onlyAppIds ? onlyAppIds.includes(a.appId) : (a.trackers ?? []).length);
   if (!apps.length) return { apps: 0, feeds: 0 };
   const genres = [...new Set(apps.map(a => a.genreId).filter(Boolean))] as string[];
   const scopes = ["all", ...genres];
@@ -233,17 +233,26 @@ async function fanOutAlerts(app: any, alerts: Alert[]) {
 
 /** Ratings per storefront (daily). */
 export async function scanRatings(appId: string) {
-  let totalCount = 0, weighted = 0;
+  // Le disjoncteur est par scan : sans cette remise à zéro, les refus du scan précédent vident celui-ci.
+  refusals.clear();
+  coolDownUntil.clear();
+  let totalCount = 0, weighted = 0, failed = 0;
+  let meta: Record<string, unknown> | null = null;
   const batch = db.batch();
-  await pool(ALL_COUNTRIES, 4, async cc => {
-    const r = (await getJSON(`https://itunes.apple.com/lookup?id=${appId}&country=${cc.toLowerCase()}`))?.results?.[0];
+  await pool(ALL_COUNTRIES, 2, async cc => {
+    const json = await getJSON(`https://itunes.apple.com/lookup?id=${appId}&country=${cc.toLowerCase()}`);
+    if (!json) { failed++; return; }
+    const r = json.results?.[0];
     if (!r) return;
     const count = r.userRatingCount ?? 0, avg = r.averageUserRating ?? null;
     totalCount += count; if (avg) weighted += avg * count;
+    meta ??= { name: r.trackName, icon: r.artworkUrl512 ?? r.artworkUrl100, developer: r.artistName, version: r.version, url: r.trackViewUrl };
     batch.set(db.doc(`apps/${appId}/ratings/${cc}`), { cc, average: avg, count, version: r.version ?? null, at: Date.now() });
   });
   await batch.commit();
-  await db.doc(`apps/${appId}`).set({ ratingCount: totalCount, rating: totalCount ? weighted / totalCount : null, ratingsAt: Date.now() }, { merge: true });
+  // Un scan refusé par Apple ne doit jamais effacer la note connue.
+  const summary = totalCount > 0 || failed === 0 ? { ratingCount: totalCount, rating: totalCount ? weighted / totalCount : null, ratingsAt: Date.now() } : {};
+  await db.doc(`apps/${appId}`).set({ ...(meta ?? {}), ...summary }, { merge: true });
 }
 
 /** Most recent reviews in every storefront that has ratings. Returns newly seen reviews. */

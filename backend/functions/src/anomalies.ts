@@ -5,8 +5,45 @@
 
 import { db, Project } from "./store";
 import { anomalyText, weeklyText, money as fmtMoney } from "./i18n";
+import { startOfDay } from "./push";
 
 const DAY = 86400000;
+
+// ── Jours civils ─────────────────────────────────────────────────────────────
+// Les alertes comptent en jours du fuseau du business (Paris par défaut), pas en jours UTC : une vente à 0 h 30
+// à Paris appartient à ce jour-là. Un jour civil est un entier (jours depuis 1970), insensible aux changements d'heure.
+
+export const DEFAULT_TZ = "Europe/Paris";
+export const projectTz = (config: any) => typeof config?.timezone === "string" && config.timezone ? config.timezone : DEFAULT_TZ;
+const dayFormats = new Map<string, Intl.DateTimeFormat>();
+
+/** Jour civil d'un instant dans `tz`. */
+export function civilDay(at: number, tz = "UTC"): number {
+  if (tz === "UTC") return Math.floor(at / DAY);
+  let f = dayFormats.get(tz);
+  if (!f) dayFormats.set(tz, f = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }));
+  const [y, m, d] = f.format(new Date(at)).split("-").map(Number);
+  return Date.UTC(y, m - 1, d) / DAY;
+}
+
+/** Instant où commence le jour civil `day` dans `tz`. */
+export function civilDayStart(day: number, tz = "UTC"): number {
+  if (tz === "UTC") return day * DAY;
+  let t = day * DAY + 12 * 3600000;
+  t += (day - civilDay(t, tz)) * DAY; // midi UTC peut tomber la veille ou le lendemain loin de Greenwich
+  return startOfDay(tz, t);
+}
+
+/** Date AAAA-MM-JJ d'un jour civil. */
+export const civilDate = (day: number) => new Date(day * DAY).toISOString().slice(0, 10);
+
+/** Première vente réelle du business : les jours d'avant ne comptent pas dans les moyennes (sinon elles sont diluées). */
+export async function firstSaleAt(pid: string): Promise<number | null> {
+  const snap = await db.collection(`projects/${pid}/transactions`).orderBy("at").limit(50).select("at", "isSandbox").get();
+  const real = snap.docs.find(d => !d.get("isSandbox"));
+  // Que des achats de test parmi les 50 premiers : l'historique réel commence au plus tôt après eux.
+  return real ? Number(real.get("at")) : snap.size === 50 ? Number(snap.docs[49].get("at")) : null;
+}
 
 export const ANOMALY_METRICS = ["revenue", "newSubscriptions", "trials", "refunds", "billingIssues", "churn"] as const;
 export type AnomalyMetric = typeof ANOMALY_METRICS[number];
@@ -62,10 +99,10 @@ export function detectAnomalies(project: { id: string; name: string }, history: 
 export interface TxLite { at: number; amountMicrosProject?: number; isSandbox?: boolean; country?: string | null }
 export interface EvLite { at: number; type: string; isTrial?: boolean; isSandbox?: boolean }
 
-/** Pure : agrège transactions et événements en lignes quotidiennes [start, start + days·DAY). */
-export function dailyRows(txs: TxLite[], events: EvLite[], start: number, days: number): DayRow[] {
+/** Pure : agrège transactions et événements en `days` lignes quotidiennes, à partir du jour civil de `start` dans `tz`. */
+export function dailyRows(txs: TxLite[], events: EvLite[], start: number, days: number, tz = "UTC"): DayRow[] {
   const rows: DayRow[] = Array.from({ length: days }, () => ({ revenue: 0, newSubscriptions: 0, trials: 0, refunds: 0, billingIssues: 0, churn: 0 }));
-  const idx = (t: number) => Math.floor((t - start) / DAY);
+  const first = civilDay(start, tz), idx = (t: number) => civilDay(t, tz) - first;
   for (const t of txs) {
     const i = idx(t.at); if (t.isSandbox || i < 0 || i >= days) continue;
     const v = Number(t.amountMicrosProject ?? 0); if (v > 0) rows[i].revenue += v;
@@ -84,10 +121,11 @@ export function dailyRows(txs: TxLite[], events: EvLite[], start: number, days: 
 export interface WeeklySummary { projectId: string; projectName: string; currency: string; weekStart: string; revenueMicros: number; previousRevenueMicros: number;
   revenueChange: number | null; mrrMicros: number; newSubscriptions: number; topCountry: string | null; title: string; body: string; titleEn: string; bodyEn: string }
 
-/** Pure : semaine écoulée (7 j) vs semaine d'avant. */
-export function weeklySummary(project: { id: string; name: string }, txs: TxLite[], events: EvLite[], mrrMicros: number, currency: string, now = Date.now()): WeeklySummary {
-  const end = Math.floor(now / DAY) * DAY, start = end - 7 * DAY, prevStart = start - 7 * DAY;
-  const cur = dailyRows(txs, events, start, 7), prev = dailyRows(txs, events, prevStart, 7);
+/** Pure : semaine écoulée (7 jours civils dans `tz`) vs semaine d'avant. */
+export function weeklySummary(project: { id: string; name: string }, txs: TxLite[], events: EvLite[], mrrMicros: number, currency: string, now = Date.now(), tz = "UTC"): WeeklySummary {
+  const today = civilDay(now, tz);
+  const end = civilDayStart(today, tz), start = civilDayStart(today - 7, tz), prevStart = civilDayStart(today - 14, tz);
+  const cur = dailyRows(txs, events, start, 7, tz), prev = dailyRows(txs, events, prevStart, 7, tz);
   const revenue = cur.reduce((a, d) => a + d.revenue, 0), previous = prev.reduce((a, d) => a + d.revenue, 0);
   const newSubs = cur.reduce((a, d) => a + d.newSubscriptions, 0);
   const byCountry = new Map<string, number>();
@@ -98,7 +136,7 @@ export function weeklySummary(project: { id: string; name: string }, txs: TxLite
   const fr = weeklyText("fr", project.name, fmtMoney("fr", revenue, currency, 0), fmtMoney("fr", mrrMicros, currency, 0), change, newSubs, top);
   const en = weeklyText("en", project.name, fmtMoney("en", revenue, currency, 0), fmtMoney("en", mrrMicros, currency, 0), change, newSubs, top);
   return {
-    projectId: project.id, projectName: project.name, currency, weekStart: new Date(start).toISOString().slice(0, 10),
+    projectId: project.id, projectName: project.name, currency, weekStart: civilDate(today - 7),
     revenueMicros: Math.round(revenue), previousRevenueMicros: Math.round(previous), revenueChange: change === null ? null : Math.round(change * 1000) / 1000,
     mrrMicros: Math.round(mrrMicros), newSubscriptions: newSubs, topCountry: top,
     title: fr.title, body: fr.body, titleEn: en.title, bodyEn: en.body,
@@ -116,19 +154,21 @@ async function loadWindow(pid: string, from: number, to: number) {
 }
 
 export async function anomaliesForProject(project: Project, now = Date.now()): Promise<Anomaly[]> {
-  const dayStart = Math.floor(now / DAY) * DAY, bStart = dayStart - 29 * DAY;
-  const { txs, events } = await loadWindow(project.id, bStart, dayStart);
-  const rows = dailyRows(txs, events, bStart, 29);
-  const y = rows.pop()!;
   const cfg = (project.config as any).anomalies ?? {};
   if (cfg.enabled === false) return [];
-  return detectAnomalies(project, rows, y, new Date(dayStart - DAY).toISOString().slice(0, 10), project.config.currency,
+  const tz = projectTz(project.config), today = civilDay(now, tz), from = today - 29;
+  const [{ txs, events }, first] = await Promise.all([loadWindow(project.id, civilDayStart(from, tz), civilDayStart(today, tz)), firstSaleAt(project.id)]);
+  const rows = dailyRows(txs, events, civilDayStart(from, tz), 29, tz);
+  const y = rows.pop()!;
+  // Jours d'avant la première vente : pas des zéros, de l'absence d'historique (detectAnomalies exige 14 jours).
+  const history = first === null ? [] : rows.slice(Math.max(0, civilDay(first, tz) - from));
+  return detectAnomalies(project, history, y, civilDate(today - 1), project.config.currency,
     { threshold: Number(cfg.threshold) >= 2 && Number(cfg.threshold) <= 6 ? Number(cfg.threshold) : 3, now });
 }
 
 export async function weeklySummaryForProject(project: Project, now = Date.now()): Promise<WeeklySummary> {
-  const end = Math.floor(now / DAY) * DAY;
-  const { txs, events } = await loadWindow(project.id, end - 14 * DAY, end);
+  const tz = projectTz(project.config), today = civilDay(now, tz);
+  const { txs, events } = await loadWindow(project.id, civilDayStart(today - 14, tz), civilDayStart(today, tz));
   const last = await db.collection(`projects/${project.id}/daily`).orderBy("date", "desc").limit(1).get();
-  return weeklySummary(project, txs, events, Number(last.docs[0]?.get("mrrMicros") ?? 0), project.config.currency, now);
+  return weeklySummary(project, txs, events, Number(last.docs[0]?.get("mrrMicros") ?? 0), project.config.currency, now, tz);
 }

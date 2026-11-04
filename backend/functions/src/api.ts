@@ -36,12 +36,13 @@ import { searchApps, syncTrackers, translateReview, lookupApp, TrackedApp } from
 import { sanitizeAudiences, sanitizeFilters, audienceCsv, customerStatus } from "./audiences";
 import { sanitizeAdmobConfig, sanitizeAdEvent, recordAdEvent, handleSsv } from "./ads";
 import { projectBenchmarks } from "./benchmarks";
+import { widgetCached } from "./widgetCache";
 import { sanitizeVirtualCurrencies, readWallet, moveWallet, parseAmount, parseIdempotencyKey } from "./wallet";
 import { projectLtv, audienceById, audienceCustomers, loadCustomerRows } from "./segmentsLoader";
 import { isMcpPath, handleMcp } from "./mcp/server";
 import { resolveAccessToken } from "./mcp/oauth";
 import { ACCESS_PREFIX } from "./mcp/policy";
-import { assertCanCreateProject, billingStatus, createCheckout as createProCheckout, handleBillingWebhook, safeReturnUrl, setTesterPro, attachExternalPurchaseToken, payWithApplePay } from "./billing";
+import { assertCanCreateProject, billingStatus, createCheckout as createProCheckout, handleBillingWebhook, safeReturnUrl, setTesterPro, redeemAppStorePurchase } from "./billing";
 import { verifyStripeAppSignature, stripeAppPayload, parseGrantDays, isStripeCustomerId, STRIPE_APP_GRANT_DAYS } from "./stripeApp";
 
 /** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
@@ -514,20 +515,16 @@ route("POST", "/v1/projects", async req => {
   return { ...created, note: "Store the secret key now: it is never shown again." };
 });
 
-// ── MoneyMaker Pro (licence à vie, Stripe Checkout) ───────────────────────
+// ── MoneyMaker Pro (licence à vie : achat intégré sur iPhone, Stripe Checkout sur le web) ──
 route("GET", "/v1/billing", async req => billingStatus(requireUser(await authenticate(req))));
 
 route("POST", "/v1/billing/tester-pro", async req => setTesterPro(requireUser(await authenticate(req)), req.body?.pro));
-route("POST", "/v1/billing/applepay", async req => {
-  const caller = await authenticate(req);
-  return payWithApplePay(requireUser(caller), caller.kind === "user" ? caller.email : undefined, req.body);
-});
-route("POST", "/v1/billing/checkout/token", async req =>
-  attachExternalPurchaseToken(requireUser(await authenticate(req)), req.body?.sessionId, req.body?.externalPurchaseToken));
+route("POST", "/v1/billing/appstore", async req =>
+  redeemAppStorePurchase(requireUser(await authenticate(req)), req.body?.signedTransaction));
 route("POST", "/v1/billing/checkout", async req => {
   const caller = await authenticate(req);
   const uid = requireUser(caller);
-  return createProCheckout(uid, caller.kind === "user" ? caller.email : undefined, safeReturnUrl(req.body?.returnUrl, PUBLIC_BASE), req.body?.externalPurchaseToken);
+  return createProCheckout(uid, caller.kind === "user" ? caller.email : undefined, safeReturnUrl(req.body?.returnUrl, PUBLIC_BASE));
 });
 
 route("POST", "/v1/webhooks/billing", async req => handleBillingWebhook(req.rawBody, req.get("stripe-signature")));
@@ -559,6 +556,9 @@ route("DELETE", "/v1/account", async req => {
   }
   const pats = await db.collection("apiKeys").where("uid", "==", uid).get();
   await Promise.all(pats.docs.map(k => k.ref.delete()));
+  // L'achat Pro redevient restaurable sur un nouveau compte.
+  const purchases = await db.collection("appStorePurchases").where("uid", "==", uid).get();
+  await Promise.all(purchases.docs.map(p => p.ref.delete()));
   await db.recursiveDelete(db.doc(`users/${uid}`));
   await getAuth().deleteUser(uid).catch(() => null);
   return { ok: true, deletedProjects: deleted, leftProjects: left };
@@ -566,6 +566,7 @@ route("DELETE", "/v1/account", async req => {
 
 route("GET", "/v1/overview", async req => {
   const uid = requireUser(await authenticate(req));
+  return widgetCached(req.headers["user-agent"], `overview|${uid}|${req.originalUrl}`, async () => {
   const days = Math.min(365, Math.max(1, Number(req.query.days ?? 30)));
   const snap = await db.collection("projects").where("members", "array-contains", uid).get();
   const projects = await Promise.all(snap.docs.map(async d => {
@@ -600,6 +601,7 @@ route("GET", "/v1/overview", async req => {
     }; }),
     generatedAt: Date.now(),
   };
+  });
 });
 
 // ── Project management (secret key or member) ──────────────────────────────
@@ -1121,6 +1123,32 @@ route("GET", "/v1/projects/:pid/appstore", async (req, _res, [pid]) => {
   return { apps };
 });
 
+// Fiche de n'importe quelle app de l'App Store : première visite ou fiche de plus de 24 h = scan à la demande.
+route("GET", "/v1/appstore/:appId/sheet", async (req, _res, [appId]) => {
+  await authenticate(req);
+  if (!/^\d{5,12}$/.test(appId)) throw new HttpError(400, "invalid_app_id");
+  const ref = db.doc(`apps/${appId}`);
+  const app = await ref.get();
+  const last = Math.max(app.get("rankedAt") ?? 0, app.get("scanRequestedAt") ?? 0);
+  const scanning = Date.now() - last > 86400000;
+  if (scanning) {
+    const meta = app.get("genreId") ? {} : (await lookupApp(appId, "fr").catch(() => null) ?? await lookupApp(appId, "us").catch(() => null) ?? {});
+    await ref.set({ appId, ...meta, scanRequestedAt: Date.now() }, { merge: true });
+    await db.collection("scanRequests").add({ appIds: [appId], at: Date.now() });
+  }
+  const [ranks, ratings, reviews] = await Promise.all([
+    db.collection(`apps/${appId}/ranks`).get(),
+    db.collection(`apps/${appId}/ratings`).where("count", ">", 0).get(),
+    db.collection(`apps/${appId}/reviews`).orderBy("at", "desc").limit(50).get(),
+  ]);
+  return {
+    scanning,
+    ranks: ranks.docs.map(d => d.data()),
+    ratings: ratings.docs.map(d => d.data()).sort((a, b) => b.count - a.count),
+    reviews: reviews.docs.map(d => d.data()),
+  };
+});
+
 route("GET", "/v1/projects/:pid/appstore/:appId/ranks", async (req, _res, [pid, appId]) => {
   const project = await projectFor(await authenticate(req), pid);
   if (!(project.config.appStore?.apps ?? []).some(a => a.appId === appId)) throw new HttpError(404, "app_not_tracked");
@@ -1190,9 +1218,18 @@ route("GET", "/v1/leaderboard/:pid", async (req, res, [pid]) => {
   return { currency: LEADERBOARD_CURRENCY, updatedAt, total: ranked.length, entry: publicEntry(ranked[i], i + 1) };
 });
 
+/** Signalement d'un business du classement (App Store 1.2) : un seul par compte et par business, traité à la main. */
+route("POST", "/v1/leaderboard/:pid/report", async (req, _res, [pid]) => {
+  const uid = requireUser(await authenticate(req));
+  const id = cleanId(pid);
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim().slice(0, 500) : "";
+  await db.doc(`leaderboardReports/${id}_${uid}`).set({ projectId: id, uid, reason, createdAt: Date.now() });
+  return { ok: true };
+});
+
 route("GET", "/v1/projects/:pid/public", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid);
-  return (await db.doc(`projects/${project.id}`).get()).get("publicListing") ?? { listed: true };
+  return (await db.doc(`projects/${project.id}`).get()).get("publicListing") ?? { listed: false };
 });
 
 route("PUT", "/v1/projects/:pid/public", async (req, _res, [pid]) => {
@@ -1430,8 +1467,11 @@ route("GET", "/v1/today", async req => {
   let tz = String(req.query.tz ?? "UTC");
   try { new Intl.DateTimeFormat("en", { timeZone: tz }); } catch { tz = "UTC"; }
   const cur = typeof req.query.currency === "string" && /^[A-Z]{3}$/.test(req.query.currency) ? req.query.currency : undefined;
-  const t = await todayFor(uid, tz, cur, projectIdsParam(req));
-  return { ...t, liveActivity: liveActivityState(t), generatedAt: Date.now() };
+  // Une minute seulement : une vente doit vite apparaître sur le widget « Aujourd'hui ».
+  return widgetCached(req.headers["user-agent"], `today|${uid}|${req.originalUrl}`, async () => {
+    const t = await todayFor(uid, tz, cur, projectIdsParam(req));
+    return { ...t, liveActivity: liveActivityState(t), generatedAt: Date.now() };
+  }, 60 * 1000);
 });
 
 route("GET", "/v1/feed", async req => {
@@ -1662,8 +1702,8 @@ route("GET", "/v1/charts", async () => ({ charts: CHART_NAMES }));
 route("GET", "/v1/projects/:pid/charts/:name", async (req, res, [pid, name]) => {
   const project = await projectFor(await authenticate(req), pid);
   const csvOut = /\.csv$/.test(name) || req.query.format === "csv";
+  if (!csvOut) return widgetCached(req.headers["user-agent"], `chart|${project.id}|${req.originalUrl}`, () => projectChart(project, name, req.query as Record<string, unknown>));
   const chart = await projectChart(project, name.replace(/\.csv$/, ""), req.query as Record<string, unknown>);
-  if (!csvOut) return chart;
   res.set("Content-Type", "text/csv; charset=utf-8");
   res.set("Content-Disposition", `attachment; filename="${project.name}-${chart.name}.csv"`);
   res.status(200).send(chartToCsv(chart));
@@ -1918,7 +1958,8 @@ export async function handle(req: Request, res: Response) {
   if (!path.startsWith("/v1/webhooks/") && overRateLimit(req.ip ?? "unknown")) { res.status(429).json({ error: "rate_limited", message: "Trop de requêtes, réessaie dans une minute" }); return; }
   try {
     // Mode démo : lecture seule.
-    if (req.method !== "GET" && /^Bearer\s+mm_demo\s*$/i.test(req.get("authorization") ?? "")) throw new HttpError(403, "demo_read_only", "Mode démo : lecture seule");
+    // Seule exception : l'achat Pro, pour qu'App Review puisse le tester depuis la démo (rien n'est enregistré).
+    if (req.method !== "GET" && path !== "/v1/billing/appstore" && /^Bearer\s+mm_demo\s*$/i.test(req.get("authorization") ?? "")) throw new HttpError(403, "demo_read_only", "Mode démo : lecture seule");
     for (const [method, re, handler, pattern] of routes) {
       const m = re.exec(path);
       if (!m || method !== req.method) continue;

@@ -12,6 +12,7 @@ import { db } from "./store";
 import { convertMicros } from "./engine";
 import { insightText, money as fmtMoney, payoutLabel, DEADLINE_LABEL } from "./i18n";
 import { computeWaterfall, financeSettings, FinanceSettings, Tx, VAT } from "./finance";
+import { civilDay, civilDayStart, firstSaleAt, projectTz } from "./anomalies";
 
 const DAY = 86400000;
 
@@ -200,9 +201,10 @@ export async function accountingCsv(uid: string, month: string, projectIds?: str
 
 export interface Insight { type: "SALES_DROP" | "SALES_SPIKE" | "REFUND_SPIKE" | "BILLING_FAILURES" | "FIRST_SALE_COUNTRY"; projectId: string; projectName: string; title: string; body: string; titleEn: string; bodyEn: string; at: number }
 
-/** Pure : compare la veille aux 28 jours précédents — unit-tested. */
+/** Pure : compare la veille à la moyenne quotidienne des `baseline.days` jours précédents (28 au plus) — unit-tested. */
 export function detectInsights(project: { id: string; name: string }, yesterday: { revenue: number; refunds: number; billing: number; countries: string[] },
-  baseline: { revenuePerDay: number; refundsPerDay: number; billingPerDay: number; knownCountries: Set<string> }, currency: string, now = Date.now()): Insight[] {
+  baseline: { revenuePerDay: number; refundsPerDay: number; billingPerDay: number; knownCountries: Set<string>; days?: number }, currency: string, now = Date.now()): Insight[] {
+  const days = baseline.days ?? 28;
   const out: Insight[] = [];
   const fr = (v: number) => fmtMoney("fr", v, currency, 0), en = (v: number) => fmtMoney("en", v, currency, 0);
   const base = { projectId: project.id, projectName: project.name, at: now };
@@ -211,9 +213,10 @@ export function detectInsights(project: { id: string; name: string }, yesterday:
     out.push({ ...base, type, title: a.title, body: a.body, titleEn: b.title, bodyEn: b.body });
   };
   const m = (lang: "fr" | "en") => lang === "fr" ? fr : en;
-  if (baseline.revenuePerDay >= 20e6 && yesterday.revenue < baseline.revenuePerDay * 0.4)
-    both("SALES_DROP", l => insightText.SALES_DROP(l, project.name, m(l)(yesterday.revenue), m(l)(baseline.revenuePerDay)));
-  if (baseline.revenuePerDay > 0 && yesterday.revenue >= Math.max(baseline.revenuePerDay * 2.5, 50e6))
+  // Moins de 7 jours d'historique : une moyenne n'a pas de sens, pas d'alerte de ventes.
+  if (days >= 7 && baseline.revenuePerDay >= 20e6 && yesterday.revenue < baseline.revenuePerDay * 0.4)
+    both("SALES_DROP", l => insightText.SALES_DROP(l, project.name, m(l)(yesterday.revenue), m(l)(baseline.revenuePerDay), days));
+  if (days >= 7 && baseline.revenuePerDay > 0 && yesterday.revenue >= Math.max(baseline.revenuePerDay * 2.5, 50e6))
     both("SALES_SPIKE", l => insightText.SALES_SPIKE(l, project.name, m(l)(yesterday.revenue), yesterday.revenue / baseline.revenuePerDay));
   if (yesterday.refunds >= 3 && yesterday.refunds > baseline.refundsPerDay * 3)
     both("REFUND_SPIKE", l => insightText.REFUND_SPIKE(l, project.name, yesterday.refunds, baseline.refundsPerDay));
@@ -224,10 +227,14 @@ export function detectInsights(project: { id: string; name: string }, yesterday:
   return out;
 }
 
+/** La veille (jour civil du business, Paris par défaut) contre les jours précédents depuis la première vente, 28 au plus. */
 export async function insightsForProject(projectId: string, now = Date.now()) {
   const p = await db.doc(`projects/${projectId}`).get();
   const cur = p.get("config.currency") ?? "EUR";
-  const dayStart = Math.floor(now / DAY) * DAY, yStart = dayStart - DAY, bStart = yStart - 28 * DAY;
+  const tz = projectTz(p.get("config")), today = civilDay(now, tz);
+  const dayStart = civilDayStart(today, tz), yStart = civilDayStart(today - 1, tz), bStart = civilDayStart(today - 29, tz);
+  const first = await firstSaleAt(projectId);
+  const days = first === null ? 0 : Math.max(0, today - 1 - Math.max(civilDay(first, tz), today - 29));
   const [tx, ev, allCountries] = await Promise.all([
     db.collection(`projects/${projectId}/transactions`).where("at", ">=", bStart).where("at", "<", dayStart).select("amountMicrosProject", "isSandbox", "at", "country", "kind").get(),
     db.collection(`projects/${projectId}/events`).where("at", ">=", bStart).where("at", "<", dayStart).select("type", "isSandbox", "at").get(),
@@ -248,6 +255,7 @@ export async function insightsForProject(projectId: string, now = Date.now()) {
   }
   y.countries = [...yCountries];
   const known = new Set(allCountries.docs.map(d => d.get("country") ?? "??"));
+  const per = (v: number) => v / Math.max(days, 1);
   return detectInsights({ id: projectId, name: String(p.get("name") ?? "") }, y,
-    { revenuePerDay: b.revenue / 28, refundsPerDay: b.refunds / 28, billingPerDay: b.billing / 28, knownCountries: known }, cur, now);
+    { revenuePerDay: per(b.revenue), refundsPerDay: per(b.refunds), billingPerDay: per(b.billing), knownCountries: known, days }, cur, now);
 }

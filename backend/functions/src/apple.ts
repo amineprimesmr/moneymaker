@@ -6,6 +6,7 @@ import { APPLE_ROOT_CERTIFICATES } from "./appleRootCertificates";
 import { handleConsumptionRequest, recordRefundOutcome } from "./refund";
 import { toAlpha2 } from "./countries";
 import { dropImportedDuplicates } from "./revenuecat";
+import { PRO_PRODUCT_ID, revokeAppStorePro } from "./billing";
 import { Purchase, PurchaseStatus, PurchaseType, HttpError } from "./engine";
 import { Project, getCredentials, lookupIndex, upsertPurchase, mergeCustomers } from "./store";
 
@@ -136,6 +137,10 @@ export async function ingestAppleNotification(project: Project, signedPayload: s
   let purchase = applePurchase(tx, renewal, data.status ? Number(data.status) : undefined);
   if (String(n.notificationType) === "REFUND" || String(n.notificationType) === "REVOKE") {
     purchase = { ...purchase, status: String(n.notificationType) === "REFUND" ? "refunded" : "revoked" };
+    // MoneyMaker Pro acheté dans l'app MoneyMaker elle-même : la licence est retirée au compte.
+    if (tx.bundleId === "io.moneymaker.app" && tx.productId === PRO_PRODUCT_ID) {
+      await revokeAppStorePro(String(tx.originalTransactionId ?? tx.transactionId ?? "")).catch(() => null);
+    }
   }
   purchase.updatedAt = n.signedDate ?? Date.now();
   const appUserId = await lookupIndex(project.id, `apple:${purchase.id}`, tx.appAccountToken ? `acct:${tx.appAccountToken.toLowerCase()}` : null)

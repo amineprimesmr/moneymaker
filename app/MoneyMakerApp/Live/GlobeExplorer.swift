@@ -54,15 +54,17 @@ struct GlobeZoomDestination: ViewModifier {
 
 /// Caméra de la page Planète : rotation libre avec inertie, ressorts vers une cible, zoom amorti.
 final class GlobeExplorerCamera {
-    var spin = -0.35, tilt = 0.32, scale = 1.0
+    var spin = -0.35, tilt = 0.32, scale = GlobeExplorerCamera.home
     var vSpin = 0.0, vTilt = 0.0, vScale = 0.0
     var targetSpin: Double?, targetTilt: Double?
-    var targetScale = 1.0
+    var targetScale = GlobeExplorerCamera.home
     var dragging = false, pinching = false
     var cruise = true
     var lastTick = Date()
 
-    static let minScale = 0.85, maxScale = 4.0
+    /// Zoom d'arrivée : la planète entière, avec de l'air autour (1 la collait aux bords).
+    static let home = 0.8
+    static let minScale = 0.65, maxScale = 4.0
     static let tiltLimit = 1.3
 
     var camera: GlobeCamera { GlobeCamera(spin: spin, tilt: tilt, scale: scale) }
@@ -153,25 +155,34 @@ struct GlobeExplorer: View {
         let total = max(spots.reduce(0) { $0 + $1.value }, 0.0001)
 
         GeometryReader { geo in
-            ZStack {
-                globe(spots: spots)
-                    .offset(y: selected == nil ? 0 : -geo.size.height * (expanded ? 0.26 : 0.12))
-                    .animation(.spring(response: 0.55, dampingFraction: 0.86), value: selected)
-                    .animation(.spring(response: 0.55, dampingFraction: 0.86), value: expanded)
-
-                VStack(spacing: 12) {
-                    topBar(count: ranked.count, total: total)
-                    chips(ranked)
-                    Spacer(minLength: 0)
-                    HStack { Spacer(); zoomControls }
-                        .opacity(expanded ? 0 : 1)
-                    bottom(spots: spots, total: total, maxHeight: geo.size.height * 0.62)
-                }
-                .padding(.bottom, 8)
+            globe(spots: spots)
+                .offset(y: selected == nil ? 0 : -geo.size.height * (expanded ? 0.24 : 0.1))
+                .animation(.spring(response: 0.55, dampingFraction: 0.86), value: selected)
+                .animation(.spring(response: 0.55, dampingFraction: 0.86), value: expanded)
+        }
+        // Les commandes vivent dans les marges sûres : elles ne se chevauchent plus entre elles,
+        // ni avec l'île dynamique, et la planète reste centrée dans l'espace libre entre les deux.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 10) {
+                topBar(count: ranked.count, total: total)
+                if !ranked.isEmpty { chips(ranked).transition(.opacity) }
             }
+            .padding(.bottom, 6)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(alignment: .trailing, spacing: 12) {
+                zoomControls
+                    .opacity(selected == nil ? 1 : 0)
+                    .allowsHitTesting(selected == nil)
+                bottom(spots: spots, total: total, maxHeight: UIScreen.main.bounds.height * 0.6)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.bottom, 8)
+            .animation(.spring(response: 0.5, dampingFraction: 0.86), value: selected)
         }
         .mmPage(stars: true)
         .toolbar(.hidden, for: .navigationBar)
+        .igHidesTabBar()
         .sensoryFeedback(.selection, trigger: selected)
         .onAppear {
             visible = true
@@ -291,7 +302,7 @@ struct GlobeExplorer: View {
     }
 
     private func doubleTap(at p: CGPoint) {
-        zoom(to: cam.targetScale < 1.8 ? 2.4 : 1)
+        zoom(to: cam.targetScale < 1.8 ? 2.4 : GlobeExplorerCamera.home)
     }
 
     private func zoom(to s: Double) {
@@ -422,7 +433,7 @@ struct GlobeExplorer: View {
             Button {
                 deselect()
                 cam.targetSpin = cam.spin + remainder(-0.35 - cam.spin, 2 * .pi); cam.targetTilt = 0.32
-                zoom(to: 1)
+                zoom(to: GlobeExplorerCamera.home)
             } label: { Image(systemName: "scope").frame(width: 44, height: 44) }
                 .accessibilityLabel(Text("Recentrer"))
         }

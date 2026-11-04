@@ -53,7 +53,8 @@ struct InsightProvider: TimelineProvider {
 // MARK: - Projection du mois
 
 struct MonthWidgetView: View {
-    @Environment(\.widgetFamily) var family
+    @Environment(\.widgetFamily) private var envFamily
+    private var family: WidgetFamily { WShotFamily.override ?? envFamily }
     let entry: InsightEntry
 
     var body: some View {
@@ -222,7 +223,8 @@ struct WGlobeView: View {
 }
 
 struct GlobeWidgetView: View {
-    @Environment(\.widgetFamily) var family
+    @Environment(\.widgetFamily) private var envFamily
+    private var family: WidgetFamily { WShotFamily.override ?? envFamily }
     let entry: InsightEntry
 
     var body: some View {
@@ -306,7 +308,8 @@ struct MoneyMakerGlobeWidgetPush: Widget {
 // MARK: - Série
 
 struct StreakWidgetView: View {
-    @Environment(\.widgetFamily) var family
+    @Environment(\.widgetFamily) private var envFamily
+    private var family: WidgetFamily { WShotFamily.override ?? envFamily }
     let entry: InsightEntry
 
     var body: some View {

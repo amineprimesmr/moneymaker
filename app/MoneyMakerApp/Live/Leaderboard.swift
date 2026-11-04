@@ -92,6 +92,9 @@ extension MoneyMakerClient {
         }
         throw last
     }
+    func reportBusiness(projectId: String, reason: String) async throws {
+        let _: Ack = try await send("POST", "leaderboard/\(projectId)/report", body: ["reason": reason])
+    }
     func listing(projectId: String) async throws -> PublicListing { try await get("projects/\(projectId)/public") }
     func setListing(projectId: String, _ l: PublicListing) async throws -> PublicListing {
         var body: [String: Any] = ["listed": l.listed, "hideAmounts": l.hideAmounts ?? false]
@@ -105,6 +108,8 @@ extension MoneyMakerClient {
 
 @MainActor
 final class LeaderboardStore: ObservableObject {
+    /// Partagé : revenir sur la page réaffiche la dernière liste au lieu du squelette.
+    static let shared = LeaderboardStore()
     enum Phase { case loading, ready, failed }
     @Published var phase: Phase = .loading
     @Published var entries: [LeaderboardEntry] = []
@@ -113,17 +118,36 @@ final class LeaderboardStore: ObservableObject {
     @Published var updatedAt: Date?
     @Published var errorMessage: String?
     private var loaded: LeaderboardSort?
+    private static let hiddenKey = "leaderboard.hidden"
 
+    /// Masqué sur cet appareil seulement, tout de suite et aux prochains chargements.
+    func hide(_ projectId: String) {
+        UserDefaults.standard.set((UserDefaults.standard.stringArray(forKey: Self.hiddenKey) ?? []) + [projectId], forKey: Self.hiddenKey)
+        entries.removeAll { $0.projectId == projectId }
+    }
+
+    private static func cacheURL(_ sort: LeaderboardSort) -> URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("leaderboard-\(sort.rawValue).json")
+    }
+
+    private func apply(_ r: LeaderboardResponse) {
+        let hidden = Set(UserDefaults.standard.stringArray(forKey: Self.hiddenKey) ?? [])
+        entries = r.entries.filter { !hidden.contains($0.projectId) }; currency = r.currency; total = r.total
+        updatedAt = Date(timeIntervalSince1970: r.updatedAt / 1000); phase = .ready
+    }
+
+    /// `force` (tirer pour rafraîchir, inscription) contourne le cache du CDN ; sinon le CDN répond en ~50 ms.
     func load(_ sort: LeaderboardSort, force: Bool = false) async {
-        if !force, loaded == sort, phase == .ready { return }
+        if loaded != sort, let data = try? Data(contentsOf: Self.cacheURL(sort)),
+           let cached = try? JSONDecoder().decode(LeaderboardResponse.self, from: data) {
+            apply(cached); loaded = sort
+        }
         if entries.isEmpty || phase == .failed { phase = .loading }
         do {
             let r = try await MoneyMakerClient.leaderboard(sort: sort, fresh: force)
-            withAnimation(LBTheme.reorder) {
-                entries = r.entries; currency = r.currency; total = r.total
-                updatedAt = Date(timeIntervalSince1970: r.updatedAt / 1000); phase = .ready
-            }
+            withAnimation(LBTheme.reorder) { apply(r) }
             loaded = sort; errorMessage = nil
+            if let data = try? JSONEncoder().encode(r) { try? data.write(to: Self.cacheURL(sort), options: .atomic) }
         } catch {
             // Une requête annulée (changement d'onglet) n'est pas une erreur à afficher.
             if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
@@ -162,7 +186,7 @@ enum LBTheme {
 
 struct LeaderboardScreen: View {
     @EnvironmentObject private var store: Store
-    @StateObject private var board = LeaderboardStore()
+    @ObservedObject private var board = LeaderboardStore.shared
     @State private var sort: LeaderboardSort = .mrr
     @State private var selected: LeaderboardEntry?
     @State private var showJoin = false
@@ -191,7 +215,7 @@ struct LeaderboardScreen: View {
                     }
                 case .ready: rankingContent.transition(.opacity)
                 }
-                if !store.isDemo && !store.allProjects.isEmpty { joinCard.mmAppear(3) }
+                if !store.allProjects.isEmpty { joinCard.mmAppear(3) }
                 footer
             }
             .padding(.horizontal, 20)
@@ -202,7 +226,7 @@ struct LeaderboardScreen: View {
         .overlay(alignment: .top) { IslandRefreshBanner(state: refresh).ignoresSafeArea() }
         .mmPage()
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-        .task(id: sort) { await board.load(sort, force: board.phase != .ready) }
+        .task(id: sort) { await board.load(sort) }
         .sheet(item: $selected) { BusinessPublicSheet(entry: $0, currency: board.currency).presentationDetents([.medium, .large]) }
         .sheet(isPresented: $showJoin) { JoinLeaderboardSheet(board: board) { Task { await board.load(sort, force: true) } } }
     }
@@ -246,7 +270,7 @@ struct LeaderboardScreen: View {
                 } else if ranked.count < 3 {
                     LeaderboardNoticeCard(systemImage: "trophy", title: String(localized: "Le classement démarre"),
                                           message: String(localized: "Inscris ton business pour prendre ta place sur le podium. Seuls des revenus vérifiés comptent.")) {
-                        if !store.isDemo && !store.allProjects.isEmpty {
+                        if !store.allProjects.isEmpty {
                             Button { showJoin = true } label: {
                                 Text("Inscrire mon business").font(MMFont.system(15, .semibold)).foregroundStyle(MMColor.ink)
                                     .padding(.horizontal, 18).padding(.vertical, 11)
@@ -975,6 +999,14 @@ private struct LeaderboardSkeleton: View {
 private struct BusinessPublicSheet: View {
     let entry: LeaderboardEntry
     let currency: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmsReport = false
+    @State private var reported = false
+
+    private func report(_ reason: String) {
+        reported = true
+        Task { try? await MoneyMakerClient.stored.reportBusiness(projectId: entry.projectId, reason: reason) }
+    }
 
     var body: some View {
         ScrollView {
@@ -1002,8 +1034,19 @@ private struct BusinessPublicSheet: View {
                             .mmGlass(in: Capsule(), interactive: true)
                     }
                 }
+                Button(reported ? String(localized: "Signalement envoyé") : String(localized: "Signaler ce business")) { confirmsReport = true }
+                    .font(MMFont.system(14, .medium)).foregroundStyle(MMColor.ink2).disabled(reported)
+                Button(String(localized: "Masquer ce business")) {
+                    LeaderboardStore.shared.hide(entry.projectId)
+                    dismiss()
+                }
+                .font(MMFont.system(14, .medium)).foregroundStyle(MMColor.ink2)
             }
             .padding(.horizontal, 20).padding(.bottom, 24)
+            .confirmationDialog(String(localized: "Signaler ce business ?"), isPresented: $confirmsReport, titleVisibility: .visible) {
+                Button(String(localized: "Contenu inapproprié"), role: .destructive) { report("inappropriate") }
+                Button(String(localized: "Chiffres ou identité trompeurs"), role: .destructive) { report("misleading") }
+            }
         }
         .background(MMColor.bg.ignoresSafeArea())
         .presentationBackground(MMColor.bg)

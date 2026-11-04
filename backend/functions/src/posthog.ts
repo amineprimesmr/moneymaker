@@ -27,6 +27,11 @@ export interface PosthogSummary {
   mau: number;
   retentionD1: number | null;
   retentionD7: number | null;
+  retentionD30: number | null;
+  /** Personnes vues pour la première fois sur la période. */
+  newUsers: number;
+  /** Écrans de l'onboarding, du plus vu au moins vu ; vide si l'app ne les envoie pas. */
+  onboardingSteps: { name: string; users: number }[];
   updatedAt: number;
 }
 
@@ -66,6 +71,20 @@ async function query(cfg: PosthogConfig, apiKey: string, q: Record<string, unkno
 
 const hogql = (cfg: PosthogConfig, key: string, sql: string) => query(cfg, key, { kind: "HogQLQuery", query: sql }).then(r => (r.results ?? []) as any[][]);
 
+// Les builds de test portent env=debug : ils ne comptent jamais dans les chiffres.
+const NOT_DEBUG = "ifNull(properties.env, '') != 'debug'";
+
+/** Événement d'écran d'onboarding, reconnu à son nom, et utilisateurs par écran. */
+async function onboardingSteps(cfg: PosthogConfig, apiKey: string, days: number) {
+  const events = await listEvents(cfg, apiKey);
+  const event = events.find(e => /onboarding.*(step|page|screen)/i.test(e.event) && /^[\w $.-]+$/.test(e.event))?.event;
+  if (!event) return [];
+  const rows = await hogql(cfg, apiKey, `SELECT toString(coalesce(properties.step, properties.step_name, properties.page, properties.screen)) AS name, uniq(person_id) AS users
+    FROM events WHERE event = '${event}' AND timestamp > now() - INTERVAL ${days} DAY AND ${NOT_DEBUG} AND name != ''
+    GROUP BY name ORDER BY users DESC LIMIT 20`);
+  return rows.map(([name, users]) => ({ name: String(name), users: Number(users) }));
+}
+
 /** Événements des 30 derniers jours, du plus fréquent au moins fréquent. */
 export async function listEvents(cfg: PosthogConfig, apiKey: string): Promise<{ event: string; count: number }[]> {
   const rows = await hogql(cfg, apiKey,
@@ -101,6 +120,7 @@ async function compute(cfg: PosthogConfig, apiKey: string, days: number): Promis
         kind: "FunnelsQuery",
         series: steps.map(s => ({ kind: "EventsNode", event: cfg.events[s], name: cfg.events[s] })),
         dateRange: { date_from: `-${days}d` },
+        properties: [{ key: "env", value: ["debug"], operator: "is_not", type: "event" }],
         funnelsFilter: { funnelWindowInterval: 14, funnelWindowIntervalUnit: "day", funnelVizType: "steps" },
       }).then(r => (Array.isArray(r.results?.[0]) ? r.results[0] : r.results) as any[])
     : Promise.resolve([] as any[]);
@@ -108,16 +128,24 @@ async function compute(cfg: PosthogConfig, apiKey: string, days: number): Promis
       uniqIf(person_id, timestamp > now() - INTERVAL 1 DAY),
       uniqIf(person_id, timestamp > now() - INTERVAL 7 DAY),
       uniq(person_id)
-    FROM events WHERE timestamp > now() - INTERVAL 30 DAY`);
+    FROM events WHERE timestamp > now() - INTERVAL 30 DAY AND ${NOT_DEBUG}`);
   // Rétention : parmi les personnes vues pour la première fois il y a 8 à 37 jours,
   // part de celles revenues au moins 1 jour (J1) / 7 jours (J7) après leur premier événement.
   const retentionP = hogql(cfg, apiKey, `SELECT
       countIf(last >= first + INTERVAL 1 DAY) / count(),
       countIf(last >= first + INTERVAL 7 DAY) / count()
     FROM (SELECT person_id, min(timestamp) AS first, max(timestamp) AS last
-          FROM events WHERE timestamp > now() - INTERVAL 60 DAY GROUP BY person_id)
+          FROM events WHERE timestamp > now() - INTERVAL 60 DAY AND ${NOT_DEBUG} GROUP BY person_id)
     WHERE first BETWEEN now() - INTERVAL 37 DAY AND now() - INTERVAL 8 DAY`);
-  const [funnelRows, active, retention] = await Promise.all([funnelP, activeP, retentionP.catch(() => [[null, null]])]);
+  const longP = hogql(cfg, apiKey, `SELECT
+      countIf(first BETWEEN now() - INTERVAL 67 DAY AND now() - INTERVAL 31 DAY AND last >= first + INTERVAL 30 DAY)
+        / nullIf(countIf(first BETWEEN now() - INTERVAL 67 DAY AND now() - INTERVAL 31 DAY), 0),
+      countIf(first > now() - INTERVAL ${days} DAY)
+    FROM (SELECT person_id, min(timestamp) AS first, max(timestamp) AS last
+          FROM events WHERE timestamp > now() - INTERVAL 120 DAY AND ${NOT_DEBUG} GROUP BY person_id)`);
+  const [funnelRows, active, retention, long, steps2] = await Promise.all([
+    funnelP, activeP, retentionP.catch(() => [[null, null]]), longP.catch(() => [[null, 0]]), onboardingSteps(cfg, apiKey, days).catch(() => []),
+  ]);
 
   const funnel = steps.map((step, i) => {
     const r = funnelRows[i] ?? {};
@@ -133,6 +161,7 @@ async function compute(cfg: PosthogConfig, apiKey: string, days: number): Promis
     installToPaid: ratio(at("open") ?? funnel[0]?.users, at("purchase")),
     dau: Number(active[0]?.[0] ?? 0), wau: Number(active[0]?.[1] ?? 0), mau: Number(active[0]?.[2] ?? 0),
     retentionD1: num(retention[0]?.[0]), retentionD7: num(retention[0]?.[1]),
+    retentionD30: num(long[0]?.[0]), newUsers: Number(long[0]?.[1] ?? 0), onboardingSteps: steps2,
     updatedAt: Date.now(),
   };
 }

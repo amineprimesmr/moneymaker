@@ -13,6 +13,7 @@ import { fanOut } from "./integrations";
 import { pushEvent, pushRanking, sendDailySummaries, pushInsight } from "./push";
 import { insightsForProject } from "./plan";
 import { anomaliesForProject, weeklySummaryForProject } from "./anomalies";
+import { resyncProject } from "./resync";
 import { syncDownloads } from "./downloads";
 import { refreshIcon } from "./icons";
 import { demoTick } from "./demo";
@@ -114,9 +115,15 @@ export const downloadsSync = onSchedule({ schedule: "30 17 * * *", timeZone: "UT
   }
 });
 
-/** Alertes intelligentes : chaque matin, la veille comparée aux 28 jours précédents. */
+/** Baisses de ventes : gardées dans le fil du dashboard, jamais notifiées (une notification chaque matin pour une
+ *  journée creuse, c'est du bruit). Les hausses, records et alertes de remboursement restent notifiés. */
+const quietInsight = (i: { type: string; metric?: string; direction?: string }) =>
+  i.type === "SALES_DROP" || (i.metric === "revenue" && i.direction === "down");
+
+/** Alertes intelligentes : chaque matin, la veille (jour de Paris) comparée aux jours précédents. */
 export const insightsDaily = onSchedule({ schedule: "0 7 * * *", timeZone: "Europe/Paris", timeoutSeconds: 300 }, async () => {
-  for (const d of (await db.collection("projects").select().get()).docs) {
+  for (const d of (await db.collection("projects").select("testData", "demo").get()).docs) {
+    if (d.get("testData") || d.get("demo")) continue; // données fictives : aucune alerte
     try {
       const project = await getProject(d.id);
       const insights = await insightsForProject(d.id);
@@ -124,7 +131,7 @@ export const insightsDaily = onSchedule({ schedule: "0 7 * * *", timeZone: "Euro
         const ref = db.doc(`projects/${d.id}/insights/${new Date(i.at).toISOString().slice(0, 10)}-${i.type}`);
         if ((await ref.get()).exists) continue;
         await ref.set(i);
-        await pushInsight(project, i).catch(e => console.error("insight push", e));
+        if (!quietInsight(i)) await pushInsight(project, i).catch(e => console.error("insight push", e));
       }
       // Anomalies (z-score sur 28 jours, anomalies.ts). Pas de doublon de push avec SALES_DROP / SALES_SPIKE du même jour.
       const fired = new Set(insights.map(i => i.type));
@@ -132,7 +139,7 @@ export const insightsDaily = onSchedule({ schedule: "0 7 * * *", timeZone: "Euro
         const ref = db.doc(`projects/${d.id}/anomalies/${a.date}-${a.metric}`);
         if ((await ref.get()).exists) continue;
         const dup = a.metric === "revenue" && (fired.has("SALES_DROP") || fired.has("SALES_SPIKE"));
-        const pushed = dup ? 0 : await pushInsight(project, a).catch(e => { console.error("anomaly push", e); return 0; });
+        const pushed = dup || quietInsight(a) ? 0 : await pushInsight(project, a).catch(e => { console.error("anomaly push", e); return 0; });
         const integrations = await fanOut(project, await getCredentials(d.id), a, "alert").catch(() => ({}));
         await ref.set({ ...a, pushed, integrations });
       }
@@ -140,9 +147,21 @@ export const insightsDaily = onSchedule({ schedule: "0 7 * * *", timeZone: "Euro
   }
 });
 
+/** Synchro en direct, filet de sécurité : toutes les 15 min, Stripe et Apple relus sur 3 jours, ventes manquées rejouées (resync.ts). */
+export const storeResync = onSchedule({ schedule: "every 15 minutes", timeoutSeconds: 540, memory: "512MiB" }, async () => {
+  for (const d of (await db.collection("projects").select("testData", "demo").get()).docs) {
+    if (d.get("testData") || d.get("demo")) continue;
+    try {
+      const r = await resyncProject(await getProject(d.id));
+      if (r.fixed.length || r.errors.length) console.log("resync", d.id, JSON.stringify(r));
+    } catch (e) { console.error("resync", d.id, e); }
+  }
+});
+
 /** Résumé hebdomadaire : lundi 8 h (Paris) — revenu vs semaine précédente, MRR, nouveaux abonnés, top pays. */
 export const weeklySummaryPush = onSchedule({ schedule: "0 8 * * 1", timeZone: "Europe/Paris", timeoutSeconds: 300 }, async () => {
-  for (const d of (await db.collection("projects").select().get()).docs) {
+  for (const d of (await db.collection("projects").select("testData", "demo").get()).docs) {
+    if (d.get("testData") || d.get("demo")) continue;
     try {
       const project = await getProject(d.id);
       if ((project.config as any).anomalies?.weeklySummary === false) continue;
@@ -238,4 +257,11 @@ export const benchmarksNightly = onSchedule({ schedule: "40 2 * * *", timeZone: 
 export const cleanupMcpOAuth = onSchedule({ schedule: "every 24 hours", timeoutSeconds: 300 }, async () => {
   const { cleanupOAuth } = await import("./mcp/oauth");
   await cleanupOAuth();
+});
+
+// Garde le classement calculé d'avance : la page ne doit jamais attendre le calcul.
+export const leaderboardRefresh = onSchedule({ schedule: "every 60 minutes", timeoutSeconds: 300, memory: "512MiB" }, async () => {
+  const { refreshLeaderboard } = await import("./leaderboard");
+  const { PUBLIC_BASE } = await import("./api");
+  await refreshLeaderboard(PUBLIC_BASE);
 });

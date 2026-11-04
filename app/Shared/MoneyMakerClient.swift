@@ -111,6 +111,9 @@ struct TrackedAppSummary: Codable, Identifiable, Hashable {
     let appId: String
     let name: String?
     let icon: String?
+    var developer: String? = nil
+    var url: String? = nil
+    var rankedAt: Double? = nil
     let own: Bool?
     let rating: Double?
     let ratingCount: Int?
@@ -118,6 +121,42 @@ struct TrackedAppSummary: Codable, Identifiable, Hashable {
     let bestRank: Int?
     let topRankings: [Top]?
     var id: String { appId }
+}
+
+struct AppSheet: Decodable {
+    let scanning: Bool
+    let ranks: [AppRank]
+    let ratings: [AppRating]
+    let reviews: [AppReview]
+}
+
+struct AppRank: Codable, Hashable {
+    struct Point: Codable, Hashable { let t: Double; let r: Int? }
+    let cc: String
+    let chart: String
+    let scope: String
+    let rank: Int?
+    let prevRank: Int?
+    let bestRank: Int?
+    let bestAt: Double?
+    let firstRankedAt: Double?
+    let history: [Point]?
+}
+
+struct AppRating: Codable, Hashable {
+    let cc: String
+    let average: Double
+    let count: Int
+}
+
+struct AppReview: Codable, Identifiable, Hashable {
+    let id: String
+    let country: String
+    let rating: Int
+    let title: String
+    let content: String
+    let author: String
+    let at: Double
 }
 
 /// Emoji flag from an ISO alpha-2 code.
@@ -203,7 +242,8 @@ struct MoneyMakerClient {
         let o: Overview = try await get("overview?days=\(days)\(cur)")
         if days == 28, let data = try? JSONEncoder().encode(o) {
             MM.write("overview", data)
-            WidgetCenter.shared.reloadAllTimelines()
+            // Un widget charge aussi cet aperçu : s'il relançait les widgets, ils se relanceraient sans fin.
+            if !Bundle.main.bundlePath.hasSuffix(".appex") { WidgetCenter.shared.reloadAllTimelines() }
         }
         return o
     }
@@ -225,6 +265,10 @@ struct MoneyMakerClient {
         struct R: Decodable { let apps: [TrackedAppSummary] }
         let r: R = try await get("projects/\(projectId)/appstore")
         return r.apps
+    }
+
+    func appSheet(appId: String) async throws -> AppSheet {
+        try await get("appstore/\(appId)/sheet")
     }
 
     static var cachedAlerts: [RankingAlert] {

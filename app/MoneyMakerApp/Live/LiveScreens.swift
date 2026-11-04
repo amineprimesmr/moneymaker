@@ -316,10 +316,7 @@ struct SaleSound: Identifiable, Hashable {
     let id: String, title: String, icon: String
     static let all: [SaleSound] = [
         .init(id: "cash", title: String(localized: "Cha-ching"), icon: "dollarsign.circle.fill"),
-        .init(id: "coin", title: String(localized: "Pièce"), icon: "circle.circle.fill"),
-        .init(id: "chime", title: String(localized: "Carillon"), icon: "bell.fill"),
         .init(id: "levelup", title: String(localized: "Level up"), icon: "arrow.up.forward.circle.fill"),
-        .init(id: "pop", title: String(localized: "Pop"), icon: "bubble.fill"),
         .init(id: "none", title: String(localized: "Silencieux"), icon: "speaker.slash.fill"),
     ]
 }
@@ -1087,18 +1084,16 @@ struct LiveSettingsView: View {
                 }
                 SettingsFootnote(text: String(localized: "Le détail par business s'affiche sous chaque graphique quand plusieurs business sont suivis."))
 
-                if !store.isDemo {
-                    SettingsSectionTitle(title: String(localized: "Finances"))
-                    SettingsCard {
-                        NavigationLink {
-                            ScrollView { FinanceSettingsSection().padding(16) }
-                                .background(MMColor.bg.ignoresSafeArea())
-                                .navigationTitle("Finances").navigationBarTitleDisplayMode(.inline)
-                                .toolbar(.visible, for: .navigationBar)
-                        } label: {
-                            SettingsRow(icon: "building.columns.fill", title: String(localized: "Banque, dépenses et impôts"))
-                        }.settingsRowButton()
-                    }
+                SettingsSectionTitle(title: String(localized: "Finances"))
+                SettingsCard {
+                    NavigationLink {
+                        ScrollView { FinanceSettingsSection().padding(16) }
+                            .background(MMColor.bg.ignoresSafeArea())
+                            .navigationTitle("Finances").navigationBarTitleDisplayMode(.inline)
+                            .toolbar(.visible, for: .navigationBar)
+                    } label: {
+                        SettingsRow(icon: "building.columns.fill", title: String(localized: "Banque, dépenses et impôts"))
+                    }.settingsRowButton()
                 }
 
                 SettingsSectionTitle(title: String(localized: "Assistance"))
@@ -1119,19 +1114,17 @@ struct LiveSettingsView: View {
                 }
 
                 VStack(spacing: 14) {
-                    SettingsDestructiveButton(title: store.isDemo ? String(localized: "Quitter la démo") : String(localized: "Se déconnecter"), icon: "rectangle.portrait.and.arrow.right") {
+                    SettingsDestructiveButton(title: String(localized: "Se déconnecter"), icon: "rectangle.portrait.and.arrow.right") {
                         dismiss(); store.signOut()
                     }
-                    if !store.isDemo {
-                        Button { confirmDelete = true } label: {
-                            Text((deleting ? "Suppression…" : "Supprimer mon compte") as LocalizedStringKey).font(V2Font.system(size: 14)).foregroundStyle(SettingsTheme.valueTint)
-                        }
-                        .disabled(deleting)
+                    Button { confirmDelete = true } label: {
+                        Text((deleting ? "Suppression…" : "Supprimer mon compte") as LocalizedStringKey).font(V2Font.system(size: 14)).foregroundStyle(SettingsTheme.valueTint)
                     }
+                    .disabled(deleting)
                 }
                 .padding(.top, 28)
 
-                SettingsVersionFooter(suffix: store.isDemo ? String(localized: " · démo") : "")
+                SettingsVersionFooter(suffix: "")
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -1216,38 +1209,24 @@ struct LiveSettingsView: View {
 }
 
 
-// MARK: - MoneyMaker Pro (29 €, une fois, payé avec Stripe)
+// MARK: - MoneyMaker Pro (29 €, une fois, achat intégré)
 
-struct BillingStatus: Codable, Equatable { let pro: Bool; let ownedProjects: Int; let freeProjects: Int; let available: Bool; var tester: Bool? }
+struct BillingStatus: Codable, Equatable {
+    var pro: Bool
+    let ownedProjects: Int
+    let freeProjects: Int
+    let available: Bool
+    var tester: Bool?
+    /// Où Pro a été acheté (« stripe » pour le web, « app_store » pour l'iPhone) : le même compte est Pro partout.
+    var sources: [String]?
+    /// Identifiant passé à StoreKit : relie l'achat Apple à ce compte MoneyMaker.
+    var appAccountToken: String?
+}
 
 extension MoneyMakerClient {
     func billing() async throws -> BillingStatus { try await get("billing") }
     /// Testeurs seulement : bascule son propre compte en Pro ou en gratuit.
     func setTesterPro(_ pro: Bool) async throws -> BillingStatus { try await send("POST", "billing/tester-pro", body: ["pro": pro]) }
-    struct ProCheckout: Decodable { let url: URL; let id: String }
-    func proCheckout() async throws -> ProCheckout {
-        try await send("POST", "billing/checkout", body: ["returnUrl": "https://usemoneymaker.com/"])
-    }
-    /// UE : rattache le jeton de déclaration Apple à la session préparée.
-    func attachExternalPurchaseToken(_ token: String, session: String) async throws {
-        struct R: Decodable { let ok: Bool }
-        let _: R = try await send("POST", "billing/checkout/token", body: ["sessionId": session, "externalPurchaseToken": token])
-    }
-}
-
-/// Où l'achat Pro est permis dans l'app iPhone :
-///   • UE (droit StoreKit External Purchases or Offers) : feuille d'information d'Apple, jeton de
-///     déclaration, puis Stripe Checkout dans l'app (paiement alternatif dans l'app) ;
-///   • États-Unis : lien vers Stripe Checkout ;
-///   • ailleurs : rien n'est proposé (règle 3.1.1), seul le statut Pro est affiché.
-enum ProPurchaseRoute {
-    case eu, us, none
-
-    static func current() async -> ProPurchaseRoute {
-        guard AppStore.canMakePayments else { return .none }
-        if #available(iOS 18.1, *), await ExternalPurchaseCustomLink.isEligible { return .eu }
-        return await Storefront.current?.countryCode == "USA" ? .us : .none
-    }
 }
 
 /// Licence Pro dans les Réglages : statut (en cache, affiché tout de suite) et paywall.
@@ -1281,13 +1260,13 @@ struct ProSettingsSection: View {
                 } else {
                     Button { showPaywall = true } label: {
                         SettingsRow(icon: "crown.fill", title: String(localized: "Business illimités"),
-                                    trailing: .badge(String(localized: "29 € À VIE"), ProPaywallTheme.violetBright))
+                                    trailing: .badge(String(localized: "\(paywall.product?.displayPrice ?? "29 €") À VIE"), ProPaywallTheme.violetBright))
                     }.settingsRowButton()
                 }
             }
             SettingsFootnote(text: status.pro
-                ? String(localized: "Merci ! Tous tes business sont débloqués, pour toujours.")
-                : String(localized: "Le plan gratuit inclut \(status.freeProjects) business. Paiement unique avec Stripe, sans abonnement."))
+                ? String(localized: "Pro est lié à ton compte MoneyMaker : tous tes business sont débloqués, pour toujours, sur iPhone comme sur le web.")
+                : String(localized: "Le plan gratuit inclut \(status.freeProjects) business. Paiement unique, sans abonnement."))
         }
         Color.clear.frame(height: 0)
             .fullScreenCover(isPresented: $showPaywall) { ProPaywallView().environmentObject(store) }
@@ -1300,7 +1279,7 @@ struct ProSettingsSection: View {
 
 struct IdentifiableURL: Identifiable { let url: URL; var id: String { url.absoluteString } }
 
-/// Stripe Checkout affiché dans l'app (paiement alternatif dans l'app, UE).
+/// Page web (conditions, confidentialité) affichée dans l'app.
 struct SafariView: UIViewControllerRepresentable {
     let url: URL
     func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }

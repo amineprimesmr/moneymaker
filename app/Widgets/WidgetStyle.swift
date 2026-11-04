@@ -453,3 +453,8 @@ struct WAgo: View {
         return rh == 0 ? "\(j)\(day)" : "\(j)\(day) \(rh)h"
     }
 }
+
+/// Taille forcée par l'outil de captures App Store (WidgetShots), qui rend les widgets hors WidgetKit.
+enum WShotFamily {
+    nonisolated(unsafe) static var override: WidgetFamily?
+}

@@ -44,6 +44,8 @@ export function periodLabel(lang: Lang, m?: number) {
 
 export const todayLabel = (lang: Lang) => lang === "fr" ? "Aujourd'hui" : "Today";
 export const todayLine = (lang: Lang, amount: string) => lang === "fr" ? `Aujourd'hui : ${amount}` : `Today: ${amount}`;
+/** Vente arrivée en retard (webhook rattrapé) : on dit de quand elle date au lieu du total du jour. */
+export const lateSaleLine = (lang: Lang, date: string) => lang === "fr" ? `Vente du ${date} rattrapée` : `Sale from ${date}, caught up`;
 export const liveActivityStart = (lang: Lang) => lang === "fr" ? "Revenus du jour en direct" : "Today's revenue, live";
 
 // ── Classements ─────────────────────────────────────────────────────────────
@@ -90,9 +92,9 @@ export function testPush(lang: Lang) {
 // ── Alertes intelligentes (plan.ts) ─────────────────────────────────────────
 
 export const insightText = {
-  SALES_DROP: (lang: Lang, name: string, y: string, avg: string) => lang === "fr"
-    ? { title: `Ventes en baisse · ${name}`, body: `Hier ${y} contre ${avg} en moyenne. À vérifier : paywall, prix, classement.` }
-    : { title: `Sales down · ${name}`, body: `Yesterday ${y} vs. ${avg} on average. Worth checking: paywall, pricing, rankings.` },
+  SALES_DROP: (lang: Lang, name: string, y: string, avg: string, days = 28) => lang === "fr"
+    ? { title: `Ventes en baisse · ${name}`, body: `Hier ${y} contre ${avg} par jour en moyenne sur les ${days} jours d'avant. À vérifier : paywall, prix, classement.` }
+    : { title: `Sales down · ${name}`, body: `Yesterday ${y} vs. ${avg} a day on average over the previous ${days} days. Worth checking: paywall, pricing, rankings.` },
   SALES_SPIKE: (lang: Lang, name: string, y: string, ratio: number) => lang === "fr"
     ? { title: `Journée record · ${name}`, body: `Hier ${y}, soit ${ratio.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}× ta moyenne.` }
     : { title: `Record day · ${name}`, body: `Yesterday ${y}, ${ratio.toFixed(1)}× your average.` },

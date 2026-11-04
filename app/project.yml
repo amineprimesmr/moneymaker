@@ -15,7 +15,7 @@ settings:
     CODE_SIGN_IDENTITY: Apple Development
     SWIFT_VERSION: "5.9"
     MARKETING_VERSION: "1.1"
-    CURRENT_PROJECT_VERSION: "7"
+    CURRENT_PROJECT_VERSION: "10"
   configs:
     # Debug (installs sur l'iPhone) : compilation incrémentale, seuls les fichiers modifiés
     # sont recompilés (wholemodule recompilait toute l'app à chaque changement). Pas de dSYM.
@@ -26,6 +26,10 @@ settings:
       COMPILER_INDEX_STORE_ENABLE: NO
     Release:
       SWIFT_COMPILATION_MODE: wholemodule
+packages:
+  PostHog:
+    url: https://github.com/PostHog/posthog-ios.git
+    from: 3.0.0
 targets:
   MoneyMaker:
     type: application
@@ -46,10 +50,10 @@ targets:
         CODE_SIGN_ENTITLEMENTS: MoneyMakerApp/MoneyMaker.entitlements
       configs:
         Debug:
-          PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Dev 20261009
+          PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Dev 20261102b
           APS_ENVIRONMENT: development
         Release:
-          PROVISIONING_PROFILE_SPECIFIER: MoneyMaker AppStore 20261009
+          PROVISIONING_PROFILE_SPECIFIER: MoneyMaker AppStore 20261102
           CODE_SIGN_IDENTITY: Apple Distribution
           APS_ENVIRONMENT: production
     info:
@@ -63,6 +67,7 @@ targets:
         NSSupportsLiveActivitiesFrequentUpdates: true
         UIBackgroundModes: [remote-notification]
     dependencies:
+      - package: PostHog
       - target: MoneyMakerWidgets
   MoneyMakerWidgets:
     type: app-extension
@@ -78,7 +83,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Widgets/Widgets.entitlements
       configs:
         Debug:
-          PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Widgets Dev 20261009
+          PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Widgets Dev 20261102
           APS_ENVIRONMENT: development
         Release:
           PROVISIONING_PROFILE_SPECIFIER: MoneyMaker Widgets AppStore 20261009
@@ -89,6 +94,22 @@ targets:
       properties:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
+  # Outil de captures App Store : rend les vrais widgets en PNG (simulateur uniquement).
+  WidgetShots:
+    type: application
+    platform: iOS
+    sources:
+      - WidgetShots
+      - Shared
+      - path: Widgets
+        excludes: ["Localizable.xcstrings", "Info.plist", "*.entitlements"]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.moneymaker.widgetshots
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) WIDGET_SHOTS"
+        CODE_SIGNING_ALLOWED: NO
   MoneyMakerUITests:
     type: bundle.ui-testing
     platform: iOS

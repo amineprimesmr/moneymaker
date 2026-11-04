@@ -91,7 +91,8 @@ struct WLiveToggle: View {
 }
 
 struct TodayWidgetView: View {
-    @Environment(\.widgetFamily) var family
+    @Environment(\.widgetFamily) private var envFamily
+    private var family: WidgetFamily { WShotFamily.override ?? envFamily }
     let entry: TodayEntry
 
     private var isRecord: Bool { entry.record?.isRecord == true }
@@ -260,7 +261,8 @@ struct FeedProvider: TimelineProvider {
 }
 
 struct FeedWidgetView: View {
-    @Environment(\.widgetFamily) var family
+    @Environment(\.widgetFamily) private var envFamily
+    private var family: WidgetFamily { WShotFamily.override ?? envFamily }
     let entry: FeedEntry
 
     var body: some View {

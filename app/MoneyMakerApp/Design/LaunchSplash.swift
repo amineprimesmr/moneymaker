@@ -8,6 +8,8 @@
 //  3. Une fois posé, les sections de la page apparaissent l'une après l'autre (`mmAppear`).
 //
 //  Sans destination (écran de connexion), le logo s'efface simplement sur place.
+//  À la première ouverture, il reste au centre pendant la pluie de ventes (`IntroModel`), puis l'écran
+//  de l'iPhone de l'onboarding, identique, prend le relais pour le dézoom.
 //
 
 import SwiftUI
@@ -35,6 +37,7 @@ struct LaunchSplashView: View {
     var onFinished: () -> Void
 
     @ObservedObject private var coord = LaunchCoordinator.shared
+    @ObservedObject private var intro = IntroModel.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var sprayed: CGFloat = 0
     @State private var drips: CGFloat = 0
@@ -57,10 +60,12 @@ struct LaunchSplashView: View {
                     .shadow(color: .white.opacity(landed ? 0.18 : 0.28 * Double(sprayed)), radius: landed ? 10 : 16)
                     .opacity(landed && target == nil ? 0 : 1)
                     .position(position)
+                IntroLaunchBanners()
             }
         }
         .ignoresSafeArea()
-        .allowsHitTesting(!landed)
+        // Pendant l'intro, un toucher passe à l'onboarding, qui la saute.
+        .allowsHitTesting(!landed && !intro.holdsSplash)
         .task { await run() }
     }
 
@@ -86,8 +91,15 @@ struct LaunchSplashView: View {
             withAnimation(.easeIn(duration: 0.4)) { drips = 1 }
             try? await Task.sleep(for: .seconds(0.55))
         }
+        if intro.holdsSplash {
+            while intro.holdsSplash { try? await Task.sleep(for: .milliseconds(20)) }
+            coord.reveal()
+            coord.logoLanded = true
+            onFinished()
+            return
+        }
         // Attend que l'Accueil ait mesuré son en-tête (au plus 1,5 s : sinon, on s'efface sur place).
-        for _ in 0..<30 where coord.headerLogoFrame == nil { try? await Task.sleep(for: .milliseconds(50)) }
+        for _ in 0..<30 where coord.headerLogoFrame == nil && MoneyMakerClient.stored.token != nil { try? await Task.sleep(for: .milliseconds(50)) }
         target = coord.headerLogoFrame
         let move: Animation = reduceMotion ? .easeOut(duration: 0.25) : .spring(response: 0.75, dampingFraction: 0.88)
         withAnimation(move, completionCriteria: .logicallyComplete) {

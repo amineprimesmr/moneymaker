@@ -5,6 +5,7 @@ import Charts
 struct MoneyMakerApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var showsSplash = true
+    init() { Analytics.start() }
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -49,7 +50,7 @@ extension Color {
 
 @MainActor
 final class Store: ObservableObject {
-    @Published var token: String? = MoneyMakerClient.stored.token
+    @Published var token: String? = MoneyMakerClient.stored.token == "mm_demo" ? nil : MoneyMakerClient.stored.token
     @Published var overview: Overview? { didSet { memoValid = false } }
     @Published var alerts: [RankingAlert] = [] { didSet { memoValid = false } }
     @Published var days = max(7, UserDefaults.standard.object(forKey: "mm.period") as? Int ?? 28)
@@ -265,18 +266,18 @@ final class Store: ObservableObject {
         await refresh()
         // Seul un refus du serveur (jeton invalide) annule la connexion : hors ligne, on garde le jeton
         // et l'app réessaiera au prochain rafraîchissement au lieu de renvoyer vers la connexion web.
-        if authRejected { token = nil } else { MoneyMakerClient.save(token: t) }
+        if authRejected { token = nil } else { MoneyMakerClient.save(token: t); Analytics.capture("signed_in") }
     }
 
     /// Le dernier rafraîchissement a été refusé par le serveur (jeton révoqué ou invalide).
     private var authRejected = false
 
-    var isDemo: Bool { token == "mm_demo" }
-
     func signOut() {
         let old = token
         Task { await LiveActivityManager.shared.stop(); await PushManager.shared.forgetDevice(token: old) }
         MoneyMakerClient.save(token: nil); token = nil; overview = nil; today = nil; feed = []
+        ProPaywall.shared.reset()
+        Analytics.reset()
     }
 
     func refresh() async {

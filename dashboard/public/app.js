@@ -12,6 +12,13 @@ const config = await fetch("/__/firebase/init.json").then(r => r.json()).catch((
 const auth = getAuth(initializeApp(config));
 if (local) connectAuthEmulator(auth, "http://127.0.0.1:9199", { disableWarnings: true });
 
+// Mesure d'audience du site : sans cookie ni stockage, désactivée en local.
+if (!local) import("https://cdn.jsdelivr.net/npm/posthog-js@1.438.12/+esm").then(({ default: posthog }) =>
+  posthog.init("phc_kjnwF7TNPN9QtCYGQjUAbGH7KsGGgQvLgK6o4WXZ563H", {
+    api_host: "https://eu.i.posthog.com", persistence: "memory", autocapture: false,
+    disable_session_recording: true, person_profiles: "identified_only",
+  })).catch(() => {});
+
 const state = { projects: [], view: "overview", projectId: null, tab: "metrics", days: 30 };
 
 // ── API ─────────────────────────────────────────────────────────────────
@@ -52,7 +59,7 @@ onAuthStateChanged(auth, async user => {
 function proReturn() {
   const v = new URLSearchParams(location.search).get("pro");
   if (!v) return;
-  toast(v === "success" ? "Merci ! MoneyMaker Pro est activé : business illimités." : "Paiement annulé.");
+  toast(v === "success" ? "Merci ! MoneyMaker Pro est activé : business illimités, ici et dans l'app iPhone." : "Paiement annulé.");
   history.replaceState(null, "", location.pathname + location.hash);
 }
 
@@ -818,6 +825,7 @@ async function assistantCard(el, { banner = false } = {}) {
 // ── Account / tokens ────────────────────────────────────────────────────
 async function renderAccount(main) {
   main.innerHTML = `<div class="head"><div><h1>Compte & accès</h1><p class="muted">${esc(auth.currentUser.email ?? auth.currentUser.uid)}</p></div></div>
+  <div class="card section" id="proCard"></div>
   <div class="card section" id="assistants"></div>
   <div class="card section"><h2>Jeton personnel (app iPhone, widgets, agents, scripts)</h2>
     <p class="muted">Un jeton <code>mm_pat_</code> lit tous tes business. Colle-le dans l'app MoneyMaker sur iPhone pour les widgets, ou donne-le à ton agent pour qu'il crée et configure des projets.</p>
@@ -833,7 +841,21 @@ async function renderAccount(main) {
     Object.assign(document.createElement("a"), { href: URL.createObjectURL(await res.blob()), download: `moneymaker-${month}.csv` }).click();
   };
   assistantCard($("#assistants"));
+  proCard($("#proCard"));
   $("#mk").onclick = async () => { const r = await api("/v1/tokens", { method: "POST", body: { label: $("#label").value || "token" } }); $("#tok").innerHTML = `<p class="muted">Affiché une seule fois :</p>${copyRow(r.token)}`; };
+}
+
+/** Pro est attaché au compte : acheté sur le web ou dans l'app iPhone, il est actif aux deux endroits. */
+async function proCard(el) {
+  const b = await api("/v1/billing").catch(() => null);
+  if (!b || (!b.pro && !b.available)) return el.remove();
+  const where = { stripe: "sur le web", app_store: "dans l'app iPhone", granted: "offert" };
+  const origin = (b.sources ?? []).map(s => where[s] ?? s).join(" et ");
+  el.innerHTML = b.pro
+    ? `<h2>MoneyMaker Pro · actif</h2><p class="muted">Business illimités, à vie, ici et dans l'app iPhone.${origin ? ` Acheté ${esc(origin)}.` : ""}</p>`
+    : `<h2>MoneyMaker Pro</h2><p class="muted">Le plan gratuit inclut ${b.freeProjects} business. Pro (29 €, une fois) les débloque tous, ici et dans l'app iPhone.</p>
+      <div class="row"><button class="primary" style="flex:0;white-space:nowrap" id="proBuy">Passer à Pro</button></div>`;
+  if (!b.pro) $("#proBuy").onclick = () => proDialog(b);
 }
 
 // ── Modals ──────────────────────────────────────────────────────────────
@@ -844,7 +866,8 @@ function proDialog(b) {
     <p class="muted">Le plan gratuit inclut ${b.freeProjects} business. Pro les débloque tous, pour toujours.</p>
     <div class="card" style="margin:14px 0"><h2 style="margin:0">29 €<span class="muted" style="font-size:15px;font-weight:500"> · une fois, à vie</span></h2>
       <p class="muted" style="margin:8px 0 0">Business illimités · toutes les fonctions · mises à jour incluses</p></div>
-    <div class="row"><button value="cancel">Plus tard</button><button type="button" class="primary" id="goPro">Payer 29 € avec Stripe</button></div>`);
+    <p class="muted">Lié à ton compte : actif aussi dans l'app iPhone. Déjà acheté dans l'app ? Il est déjà actif ici.</p>
+    <div class="row"><button value="cancel">Plus tard</button><button type="button" class="primary" id="goPro">Payer 29 €</button></div>`);
   $("#goPro").onclick = async () => {
     $("#goPro").disabled = true;
     try { const { url } = await api("/v1/billing/checkout", { method: "POST", body: { returnUrl: location.origin + "/" } }); location.href = url; }

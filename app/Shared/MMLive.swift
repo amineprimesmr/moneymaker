@@ -107,7 +107,7 @@ struct PushPrefs: Codable, Hashable {
     var sales = true, renewals = true, trials = true, churn = false, billing = true, refunds = true, rankings = true
     var insights = true
     var dailySummary = true, sandbox = false, sound = true, liveActivityAuto = true
-    /// Son des ventes : cash | coin | chime | levelup | pop | default | none.
+    /// Son des ventes : cash | levelup | none (default : ancien réglage « son système »).
     var saleSound = "cash" { didSet { sound = saleSound != "none" } }
     var mutedProjects: [String] = []
 
@@ -129,7 +129,9 @@ struct PushPrefs: Codable, Hashable {
         sandbox = try c.decodeIfPresent(Bool.self, forKey: .sandbox) ?? d.sandbox
         sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? d.sound
         liveActivityAuto = try c.decodeIfPresent(Bool.self, forKey: .liveActivityAuto) ?? d.liveActivityAuto
-        saleSound = try c.decodeIfPresent(String.self, forKey: .saleSound) ?? (sound ? d.saleSound : "default")
+        let stored = try c.decodeIfPresent(String.self, forKey: .saleSound) ?? (sound ? d.saleSound : "default")
+        // Pièce, Carillon et Pop ont été retirés : ceux qui les avaient choisis passent au cha-ching.
+        saleSound = ["coin", "chime", "pop"].contains(stored) ? "cash" : stored
         mutedProjects = try c.decodeIfPresent([String].self, forKey: .mutedProjects) ?? d.mutedProjects
     }
 

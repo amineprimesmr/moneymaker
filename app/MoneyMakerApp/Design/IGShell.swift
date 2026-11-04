@@ -41,6 +41,8 @@ final class IGTabChrome: ObservableObject {
     static let shared = IGTabChrome()
     /// 0 = tab bar pleine taille, 1 = réduite.
     @Published var tabProgress: CGFloat = 0
+    /// Pages plein écran (Planète) : la tab bar descend hors de l'écran tant qu'elles sont ouvertes.
+    @Published var hidden = false
 }
 
 // MARK: - Menu en page entière
@@ -239,6 +241,9 @@ struct IGTabBar: View {
         .glassEffect(.regular.interactive(), in: .capsule)
         .scaleEffect(1 - chrome.tabProgress * 0.15, anchor: .bottom)
         .padding(.horizontal, 20)
+        .offset(y: chrome.hidden ? 140 : 0)
+        .opacity(chrome.hidden ? 0 : 1)
+        .allowsHitTesting(!chrome.hidden)
         .sensoryFeedback(.selection, trigger: selection)
     }
 }
@@ -309,6 +314,14 @@ final class IGSegmentControl: UISegmentedControl {
 // MARK: - Tab bar qui rétrécit au défilement
 
 extension View {
+    /// Page plein écran : la tab bar glisse hors de l'écran à l'arrivée et revient au départ.
+    func igHidesTabBar() -> some View {
+        onAppear { withAnimation(.spring(response: 0.45, dampingFraction: 0.9)) { IGTabChrome.shared.hidden = true } }
+            .onDisappear { withAnimation(.spring(response: 0.45, dampingFraction: 0.9)) { IGTabChrome.shared.hidden = false } }
+    }
+}
+
+extension View {
     /// À poser sur le ScrollView principal d'un onglet : la tab bar rétrécit quand on descend.
     @ViewBuilder
     func igShrinksTabBar() -> some View {
@@ -377,6 +390,9 @@ struct ShrinkingTabBar<Bar: View>: View {
     var body: some View {
         bar()
             .scaleEffect(1 - chrome.tabProgress * 0.15, anchor: .bottom)
+            .offset(y: chrome.hidden ? 140 : 0)
+            .opacity(chrome.hidden ? 0 : 1)
+            .allowsHitTesting(!chrome.hidden)
             .simultaneousGesture(TapGesture().onEnded {
                 if chrome.tabProgress != 0 {
                     withAnimation(.interpolatingSpring(duration: 0.25, bounce: 0, initialVelocity: 0)) { chrome.tabProgress = 0 }

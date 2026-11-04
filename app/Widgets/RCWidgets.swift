@@ -223,7 +223,8 @@ extension Overview {
 }
 
 struct RCOverviewView: View {
-    @Environment(\.widgetFamily) var family
+    @Environment(\.widgetFamily) private var envFamily
+    private var family: WidgetFamily { WShotFamily.override ?? envFamily }
     let entry: RCOverviewEntry
 
     var body: some View {

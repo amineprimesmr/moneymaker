@@ -26,6 +26,9 @@ struct RootView: View {
         }
         .task {
             #if DEBUG
+            if ProcessInfo.processInfo.environment["MM_UI_TEST_ONBOARDING"] != nil {
+                UserDefaults.standard.removeObject(forKey: "onboardingSeen")
+            }
             // Tests UI (captures App Store) : jeton fourni par l'environnement de lancement.
             // Jeton gardé en mémoire seulement : la session enregistrée sur l'iPhone n'est pas touchée.
             if let t = ProcessInfo.processInfo.environment["MM_UI_TEST_TOKEN"], t.hasPrefix("mm_pat_") || t == "mm_demo" {
@@ -39,56 +42,70 @@ struct RootView: View {
 // MARK: - Connexion
 
 struct SignInView: View {
+    private enum Step { case agentSetup, signIn }
+    @State private var step = Step.agentSetup
+    @AppStorage("onboardingSeen") private var onboardingSeen = false
+    @State private var onboardingPage = 0
+
+    var body: some View {
+        ZStack {
+            OnboardingPanorama(page: onboardingSeen ? OnboardingPanorama.pageCount - 1 : onboardingPage)
+            if !onboardingSeen {
+                OnboardingView(onComplete: {
+                    Analytics.capture("onboarding_completed")
+                    withAnimation(.interpolatingSpring(duration: 0.65, bounce: 0, initialVelocity: 0)) { onboardingSeen = true }
+                }, currentIndex: $onboardingPage)
+                .onChange(of: onboardingPage, initial: true) { _, page in Analytics.capture("onboarding_step_viewed", ["step": "\(page + 1)"]) }
+            } else {
+                switch step {
+                case .agentSetup:
+                    AgentSetupView { step = .signIn }
+                case .signIn:
+                    AuthView { step = .agentSetup }
+                }
+            }
+        }
+        #if DEBUG
+        .overlay(alignment: .topTrailing) {
+            if onboardingSeen {
+                Menu {
+                    Button("Rejouer depuis le début", systemImage: "arrow.counterclockwise") { step = .agentSetup; onboardingPage = 0; onboardingSeen = false }
+                    Button("Message pour l'agent", systemImage: "doc.on.doc") { step = .agentSetup }
+                    Button("Connexion", systemImage: "person") { step = .signIn }
+                } label: {
+                    Image(systemName: "ladybug.fill").font(.system(size: 15, weight: .semibold)).foregroundStyle(MMColor.ink)
+                        .frame(width: 42, height: 42).mmGlass(in: Circle())
+                }
+                .padding(.trailing, 24).padding(.top, 5)
+            }
+        }
+        #endif
+        .environment(\.colorScheme, .dark)
+        .transition(.opacity)
+        .animation(MMMotion.reveal, value: step)
+        .animation(MMMotion.reveal, value: onboardingSeen)
+    }
+}
+
+private struct AuthView: View {
+    let onBack: () -> Void
     @EnvironmentObject var store: Store
-    @State private var token = ""
-    @State private var showToken = false
     @State private var authError: String?
-    @FocusState private var focused: Bool
+    @State private var emailMode = false
 
     var body: some View {
         VStack(spacing: 0) {
+            MMGlassIconButton(systemImage: "chevron.left") { if emailMode { emailMode = false } else { onBack() } }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 5)
+            // Le formulaire libère le haut de l'écran pour tenir au-dessus du clavier.
+            Color.clear.frame(height: emailMode ? 0 : 215)
             Spacer()
-            Image("Logo").resizable().scaledToFit().frame(width: 250)
-                .mmAppear(0)
-            Text("Tous les revenus de tes apps et de Stripe, en direct.")
-                .font(MMFont.system(15)).foregroundStyle(MMColor.ink2).multilineTextAlignment(.center)
-                .padding(.top, 22).padding(.horizontal, 12).mmAppear(1)
+            Text("Connecte-toi à ton compte")
+                .font(MMFont.system(26, .semibold)).foregroundStyle(MMColor.ink)
             Spacer()
 
             VStack(spacing: 14) {
-                MMPrimaryButton(title: String(localized: "Se connecter ou créer un compte"), loading: store.loading) { WebSignIn.shared.start { result in
-                    switch result {
-                    case .success(let t): Task { await store.signIn(t) }
-                    case .failure(let e): authError = e.localizedDescription
-                    case .none: break
-                    }
-                } }
-                .disabled(store.loading)
-
-                Button { Task { await store.signIn("mm_demo") } } label: {
-                    Label("Découvrir avec un exemple", systemImage: "sparkles")
-                        .font(MMFont.system(15, .semibold)).foregroundStyle(MMColor.ink)
-                        .frame(maxWidth: .infinity).padding(.vertical, 15)
-                        .mmGlass(in: Capsule())
-                }
-                .buttonStyle(MMPressStyle()).disabled(store.loading)
-
-                if showToken {
-                    HStack(spacing: 12) {
-                        Image(systemName: "key.horizontal").foregroundStyle(focused ? MMColor.accent : MMColor.ink3)
-                        SecureField("", text: $token, prompt: Text("Jeton mm_pat_…").foregroundStyle(MMColor.ink3))
-                            .font(MMFont.system(16)).focused($focused)
-                            .textInputAutocapitalization(.never).autocorrectionDisabled()
-                            .submitLabel(.go)
-                            .onSubmit { Task { await store.signIn(token) } }
-                    }
-                    .padding(.horizontal, 20).padding(.vertical, 15)
-                    .mmGlass(in: Capsule())
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                } else {
-                    Button("J'ai un jeton personnel") { withAnimation(.smooth) { showToken = true } }
-                        .font(MMFont.system(13, .medium)).foregroundStyle(MMColor.ink3)
-                }
+                NativeSignInButtons(error: $authError, emailMode: $emailMode)
 
                 if let e = store.error ?? authError {
                     Text(e).font(MMFont.system(13)).foregroundStyle(MMColor.red).multilineTextAlignment(.center).transition(.opacity)
@@ -101,10 +118,11 @@ struct SignInView: View {
                 .font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
                 .padding(.top, 4)
             }
-            .mmAppear(2)
         }
         .padding(.horizontal, 24).padding(.bottom, 20)
-        .mmPage()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(PanoramaScrim())
+        .animation(.smooth(duration: 0.4), value: emailMode)
         .sensoryFeedback(.error, trigger: store.error ?? authError)
     }
 }
@@ -123,6 +141,7 @@ struct RootTabView: View {
     private let items: [MMTabBar.Item] = [
         .init(tag: 0, title: String(localized: "Accueil"), icon: "square.grid.2x2.fill"),
         .init(tag: 1, title: String(localized: "Ventes"), icon: "bolt.fill"),
+        .init(tag: 2, title: String(localized: "Apps"), icon: "star.fill"),
         .init(tag: 3, title: String(localized: "Classement"), icon: "trophy.fill"),
     ]
     @State private var showSettings = false
@@ -188,6 +207,8 @@ struct RootTabView: View {
         ShrinkingTabBar { MMTabBar(selection: $tab, items: items, onReselect: reselect) }
     }
 
+    @State private var appsSearching = false
+
     private var tabs: some View {
         ZStack(alignment: .bottom) {
             MMColor.bg.ignoresSafeArea()
@@ -196,10 +217,17 @@ struct RootTabView: View {
             OverviewView(path: $homePath, menuOpen: $menuOpen).tabLayer(tab == 0)
             // Onglets secondaires : rendus seulement quand ils sont visibles (rien ne tourne en arrière-plan).
             if tab == 1 { NavigationStack { FeedScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
+            if tab == 2 { NavigationStack { AppsScreen(searchActive: $appsSearching).toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
             if tab == 3 { NavigationStack { LeaderboardScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
-            tabBar
-                .padding(.bottom, 4)
-                .ignoresSafeArea(.keyboard)
+            // Pendant une recherche d'app, la barre laisse toute la place au clavier.
+            if !(tab == 2 && appsSearching) {
+                tabBar
+                    .padding(.bottom, 4)
+                    // Cadre pleine hauteur : sans lui, ignorer le clavier ne suffit pas et la barre monte avec.
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .ignoresSafeArea(.keyboard)
+                    .transition(.opacity)
+            }
         }
     }
 
@@ -522,7 +550,6 @@ struct ProjectView: View {
     @EnvironmentObject var store: Store
     let p: ProjectSummary
     @State private var events: [EventItem] = []
-    @State private var apps: [TrackedAppSummary] = []
     @State private var selected: Date?
 
     var body: some View {
@@ -537,7 +564,7 @@ struct ProjectView: View {
                 }
                 .mmAppear(0)
                 hero.mmAppear(1)
-                rates.mmAppear(2)
+                ProHealthCard(p: p).mmAppear(2)
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
                     StatTile(icon: "eurosign", title: String(localized: "Revenu"), value: p.netRevenueMicros.money(p.currency, compact: true))
                     StatTile(icon: "person.2", title: String(localized: "Abonnés"), value: "\(p.activeSubscriptions)")
@@ -545,16 +572,12 @@ struct ProjectView: View {
                     StatTile(icon: "sparkle", title: String(localized: "Nouveaux"), value: "\(p.newCustomers)")
                 }
                 .mmAppear(3)
-                GrowthSections(p: p).mmAppear(4)
+                GrowthSections(p: p).proLocked("Graphiques, prévision LTV et anomalies").mmAppear(4)
                 if p.billingIssues > 0 {
                     MMCard(padding: 16, radius: 22, glow: MMColor.orange) {
                         Label("\(p.billingIssues) problèmes de paiement en cours", systemImage: "exclamationmark.triangle.fill")
                             .font(MMFont.system(14, .medium)).foregroundStyle(MMColor.orange)
                     }
-                }
-                if !apps.isEmpty {
-                    MMLabel(text: "App Store").padding(.horizontal, 4).padding(.top, 8)
-                    ForEach(apps) { TrackedAppCard(app: $0).mmScrollReveal() }
                 }
                 countries
                 MMLabel(text: String(localized: "Activité"), trailing: events.isEmpty ? nil : "\(events.count)").padding(.horizontal, 4).padding(.top, 8)
@@ -622,21 +645,9 @@ struct ProjectView: View {
         }
     }
 
-    private var rates: some View {
-        HStack(spacing: 12) {
-            RateTile(title: String(localized: "Conversion essai"), value: p.trialConversionRate, color: MMColor.accent)
-            RateTile(title: String(localized: "Churn"), value: p.churnRate, color: MMColor.red)
-        }
-    }
-
     func load() async {
-        async let e = try? store.client.events(projectId: p.projectId)
-        async let a = try? store.client.trackedApps(projectId: p.projectId)
-        let (ne, na) = await (e, a)
-        withAnimation(.easeOut(duration: 0.35)) {
-            events = ne ?? events
-            apps = na ?? apps
-        }
+        let ne = try? await store.client.events(projectId: p.projectId)
+        withAnimation(.easeOut(duration: 0.35)) { events = ne ?? events }
     }
 }
 

@@ -73,7 +73,8 @@ struct Provider: AppIntentTimelineProvider {
 }
 
 struct WidgetBody: View {
-    @Environment(\.widgetFamily) var family
+    @Environment(\.widgetFamily) private var envFamily
+    private var family: WidgetFamily { WShotFamily.override ?? envFamily }
     let entry: Entry
 
     var body: some View {
@@ -222,7 +223,8 @@ struct RankProvider: TimelineProvider {
 }
 
 struct RankWidgetBody: View {
-    @Environment(\.widgetFamily) var family
+    @Environment(\.widgetFamily) private var envFamily
+    private var family: WidgetFamily { WShotFamily.override ?? envFamily }
     let entry: RankEntry
     var body: some View {
         let alerts = entry.alerts.filter { $0.type != "LEFT_CHART" }
@@ -291,6 +293,7 @@ struct MoneyMakerRankingsWidget: Widget {
     }
 }
 
+#if !WIDGET_SHOTS
 @main
 struct MoneyMakerWidgetBundle: WidgetBundle {
     var body: some Widget {
@@ -316,3 +319,4 @@ struct MoneyMakerWidgetBundle: WidgetBundle {
         if #available(iOS 18.0, *) { MoneyMakerTodayControl() }
     }
 }
+#endif

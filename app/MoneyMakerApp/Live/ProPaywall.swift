@@ -1,5 +1,3 @@
-import PassKit
-import SafariServices
 import StoreKit
 import SwiftUI
 import UIKit
@@ -8,21 +6,21 @@ import UIKit
 //
 // Même construction que V2 (PaywallView + PaywallBevelDesign) : fond noir à lueur respirante,
 // barre ⋯ / ✕, héros, titre « … Pro » en dégradé, liste de fonctions, carte de prix en verre,
-// bouton plein, mentions et liens légaux toujours visibles. Différence : un seul achat (29 €,
-// une fois, Stripe), donc une seule carte de prix au lieu du sélecteur annuel / mensuel.
+// bouton plein, mentions et liens légaux toujours visibles. Différence : un seul achat intégré
+// (non consommable, payé une fois), donc une seule carte de prix au lieu du sélecteur annuel / mensuel.
 
-/// État Pro partagé : statut gardé en cache (affiché tout de suite, rafraîchi en arrière-plan),
-/// route d'achat et session Stripe préparée d'avance pour que « Débloquer Pro » ouvre le paiement
-/// sans attente.
+/// État Pro partagé : statut gardé en cache (affiché tout de suite, rafraîchi en arrière-plan) et
+/// produit de l'App Store chargé d'avance pour que « Débloquer Pro » ouvre la feuille d'achat sans attente.
+/// Chaque transaction est vérifiée par le serveur, qui active Pro sur le compte MoneyMaker, puis terminée.
 @MainActor
 final class ProPaywall: ObservableObject {
     static let shared = ProPaywall()
+    static let productId = "io.moneymaker.pro.lifetime"
     @Published var isPresented = false
     @Published private(set) var status: BillingStatus?
-    @Published private(set) var route: ProPurchaseRoute?
-    private var prepared: (checkout: MoneyMakerClient.ProCheckout, at: Date)?
-    private var preparing: Task<MoneyMakerClient.ProCheckout, Error>?
-    private var prewarm: SFSafariViewController.PrewarmingToken?
+    /// Produit de l'App Store : son prix local s'affiche sur le paywall.
+    @Published private(set) var product: Product?
+    private var updates: Task<Void, Never>?
     private static let cacheKey = "mm.billingStatus"
 
     private init() {
@@ -30,16 +28,71 @@ final class ProPaywall: ObservableObject {
     }
 
     func refresh(client: MoneyMakerClient) async {
+        listen()
         async let s = try? client.billing()
-        async let r = ProPurchaseRoute.current()
-        let (fresh, rt) = await (s, r)
-        route = rt
+        async let p: Void = loadProduct()
+        let (fresh, _) = await (s, p)
         if let fresh { store(fresh) }
+    }
+
+    private func loadProduct() async {
+        guard product == nil else { return }
+        product = try? await Product.products(for: [Self.productId]).first
     }
 
     private func store(_ s: BillingStatus) {
         status = s
+        if let id = s.appAccountToken { Analytics.identify(id) }
         if let d = try? JSONEncoder().encode(s) { UserDefaults.standard.set(d, forKey: Self.cacheKey) }
+    }
+
+    /// Achats terminés hors du paywall (validation parentale, achat interrompu, remboursement) :
+    /// écoutés pendant toute la vie de l'app, plus ceux restés en attente d'un lancement précédent.
+    /// Toujours rattachés au compte connecté à ce moment-là.
+    private func listen() {
+        guard updates == nil else { return }
+        updates = Task { [weak self] in
+            for await r in StoreKit.Transaction.unfinished { try? await self?.redeem(r, client: .stored) }
+            for await r in StoreKit.Transaction.updates { try? await self?.redeem(r, client: .stored) }
+        }
+    }
+
+    /// Déconnexion : le statut Pro appartient au compte, il ne doit pas rester affiché pour le suivant.
+    func reset() {
+        status = nil
+        UserDefaults.standard.removeObject(forKey: Self.cacheKey)
+    }
+
+    /// Transaction vérifiée par le serveur (Pro activé ou retiré), puis terminée. En cas d'échec réseau
+    /// elle reste en attente et StoreKit la redonne au prochain lancement.
+    private func redeem(_ result: VerificationResult<StoreKit.Transaction>, client: MoneyMakerClient) async throws {
+        guard case .verified(let t) = result, t.productID == Self.productId else { return }
+        store(try await client.redeemAppStorePurchase(result.jwsRepresentation))
+        await t.finish()
+    }
+
+    /// Feuille d'achat de l'App Store. Renvoie vrai si Pro est actif à la fin.
+    func purchase(client: MoneyMakerClient) async throws -> Bool {
+        if product == nil { await loadProduct() }
+        guard let product else { throw APIError(message: String(localized: "L'achat n'est pas disponible pour le moment. Réessaie dans un instant.")) }
+        var options: Set<Product.PurchaseOption> = []
+        if let token = status?.appAccountToken.flatMap(UUID.init(uuidString:)) { options.insert(.appAccountToken(token)) }
+        switch try await product.purchase(options: options) {
+        case .success(let result):
+            try await redeem(result, client: client)
+            return status?.pro == true
+        case .pending, .userCancelled:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
+    /// « Restaurer » : resynchronise les achats de l'identifiant Apple et les rattache à ce compte.
+    func restore(client: MoneyMakerClient) async throws {
+        try? await AppStore.sync()
+        for await r in StoreKit.Transaction.currentEntitlements { try await redeem(r, client: client) }
+        await refresh(client: client)
     }
 
     /// « Nouveau business » : au-delà du quota gratuit, le paywall (tout de suite, depuis le cache) ;
@@ -58,36 +111,13 @@ final class ProPaywall: ObservableObject {
     func setTesterPro(_ pro: Bool, client: MoneyMakerClient) {
         guard let s = status else { return }
         let previous = s
-        store(BillingStatus(pro: pro, ownedProjects: s.ownedProjects, freeProjects: s.freeProjects, available: s.available, tester: s.tester))
+        var next = s
+        next.pro = pro
+        store(next)
         Task {
             if let fresh = try? await client.setTesterPro(pro) { store(fresh) } else { store(previous) }
         }
     }
-
-    /// Prépare la session Stripe dès l'ouverture du paywall (valable 24 h, gardée 20 min ici).
-    func prepareCheckout(client: MoneyMakerClient) {
-        if let p = prepared, Date().timeIntervalSince(p.at) < 1200 { return }
-        guard preparing == nil, status?.pro != true else { return }
-        preparing = Task { try await client.proCheckout() }
-        Task {
-            defer { preparing = nil }
-            if let c = try? await preparing?.value {
-                prepared = (c, Date())
-                // Connexions TLS et DNS ouvertes d'avance : la page Stripe s'affiche aussitôt.
-                prewarm = SFSafariViewController.prewarmConnections(to: [c.url])
-            }
-        }
-    }
-
-    /// La session préparée (ou une nouvelle si elle n'est pas prête), consommée par l'achat.
-    func takeCheckout(client: MoneyMakerClient) async throws -> MoneyMakerClient.ProCheckout {
-        if let p = prepared, Date().timeIntervalSince(p.at) < 1200 { prepared = nil; return p.checkout }
-        if let t = preparing { prepared = nil; return try await t.value }
-        return try await client.proCheckout()
-    }
-
-    /// Après le paiement : Pro passe à vrai (le webhook peut prendre une ou deux secondes).
-    func didPay(_ s: BillingStatus) { store(s); prepared = nil }
 }
 
 struct ProPaywallView: View {
@@ -97,7 +127,6 @@ struct ProPaywallView: View {
     @Environment(\.scenePhase) private var phase
 
     @ObservedObject private var paywall = ProPaywall.shared
-    @State private var checkout: IdentifiableURL?
     @State private var legalURL: IdentifiableURL?
     @State private var isPurchasing = false
     @State private var isRestoring = false
@@ -133,17 +162,10 @@ struct ProPaywallView: View {
         .alert("Achat", isPresented: Binding(get: { purchaseError != nil }, set: { if !$0 { purchaseError = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { if let purchaseError { Text(purchaseError) } }
-        .sheet(item: $checkout, onDismiss: { Task { await refreshAfterCheckout() } }) { c in
-            SafariView(url: c.url).ignoresSafeArea()
-                // Pendant le paiement : dès que le webhook a activé Pro, la feuille se ferme toute seule.
-                .task { await waitForPro() }
-        }
         .sheet(item: $legalURL) { SafariView(url: $0.url).ignoresSafeArea() }
-        .task {
-            paywall.prepareCheckout(client: store.client)
-            await paywall.refresh(client: store.client)
-        }
-        .onChange(of: phase) { _, p in if p == .active { Task { await refreshAfterCheckout() } } }
+        .task { await paywall.refresh(client: store.client) }
+        .onAppear { Analytics.capture("paywall_viewed") }
+        .onChange(of: phase) { _, p in if p == .active { Task { await paywall.refresh(client: store.client) } } }
     }
 
     // MARK: Haut
@@ -213,11 +235,12 @@ struct ProPaywallView: View {
     }
 
     private var status: BillingStatus? { paywall.status }
-    private var route: ProPurchaseRoute { paywall.route ?? .none }
+    /// Prix local de l'App Store (29 € en France), affiché avant même le chargement du produit.
+    private var price: String { paywall.product?.displayPrice ?? "29 €" }
 
     private var subtitle: String {
         let free = status?.freeProjects ?? 1
-        return String(localized: "Le plan gratuit suit \(free) business. Pro les débloque tous, pour toujours.")
+        return String(localized: "Le plan gratuit suit \(free) business. Pro les débloque tous, avec les notes, les avis et la santé de tes apps.")
     }
 
     // MARK: Bas
@@ -228,11 +251,11 @@ struct ProPaywallView: View {
                 ProPaywallPriceCard(title: "Pro à vie", price: "Actif", detail: "Tous tes business sont débloqués.")
                 ProPaywallContinueButton(title: "Continuer", isLoading: false, isEnabled: true) { dismiss() }
             } else {
-                ProPaywallPriceCard(title: "À vie", price: "29 €", detail: "Paiement unique · sans abonnement")
-                ProPaywallContinueButton(title: ProApplePay.isAvailable ? "Débloquer avec Apple Pay" : "Débloquer Pro", isLoading: isPurchasing, isEnabled: canPurchase) {
+                ProPaywallPriceCard(title: "À vie", price: "\(price)", detail: "Paiement unique · sans abonnement")
+                ProPaywallContinueButton(title: "Débloquer Pro", isLoading: isPurchasing, isEnabled: canPurchase) {
                     Task { await purchase() }
                 }
-                Text("Paiement sécurisé par Stripe. Un seul paiement de 29 € TTC, aucun renouvellement. Les business en plus s'ajoutent depuis le dashboard web.")
+                Text("Un seul paiement de \(price) sur ton compte Apple, aucun renouvellement.")
                     .font(MMFont.system(11, .medium))
                     .foregroundStyle(Color(.secondaryLabel))
                     .multilineTextAlignment(.center)
@@ -248,8 +271,8 @@ struct ProPaywallView: View {
             .foregroundStyle(Color(.secondaryLabel))
             .buttonStyle(.plain)
 
-            if status != nil, status?.pro != true, !canPurchase, !isPurchasing {
-                Text("L'achat de Pro n'est pas disponible dans l'app dans ton pays.")
+            if status != nil, status?.pro != true, !AppStore.canMakePayments {
+                Text("Les achats intégrés sont désactivés sur cet iPhone.")
                     .font(MMFont.system(12, .medium))
                     .foregroundStyle(MMColor.red.opacity(0.85))
                     .multilineTextAlignment(.center)
@@ -260,7 +283,7 @@ struct ProPaywallView: View {
 
     private var canPurchase: Bool {
         guard let status else { return false }
-        return status.available && !status.pro && route != .none && !isRestoring && checkout == nil
+        return status.available && !status.pro && !isRestoring && AppStore.canMakePayments
     }
 
     private var legalMenu: some View {
@@ -291,68 +314,32 @@ struct ProPaywallView: View {
 
     // MARK: Achat
 
-    private func refreshAfterCheckout() async {
-        let wasPro = status?.pro == true
-        await paywall.refresh(client: store.client)
-        if !wasPro, status?.pro == true {
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            checkout = nil
-        }
-    }
-
-    private func waitForPro() async {
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(2))
-            if let s = try? await store.client.billing(), s.pro {
-                paywall.didPay(s)
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                checkout = nil
-                return
-            }
-        }
-    }
-
     private func purchase() async {
         guard !isPurchasing, !isRestoring else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         isPurchasing = true; purchaseError = nil
         defer { isPurchasing = false }
+        Analytics.capture("purchase_started")
         do {
-            var token: String?
-            switch route {
-            case .eu:
-                guard #available(iOS 18.1, *) else { return }
-                // Feuille d'information d'Apple, exigée avant chaque paiement hors In-App Purchase dans l'UE.
-                guard case .continued = try await ExternalPurchaseCustomLink.showNotice(type: .browser) else { return }
-                token = try await ExternalPurchaseCustomLink.token(for: "ACQUISITION")?.value
-            case .us:
-                break
-            case .none:
-                return
+            if try await paywall.purchase(client: store.client) {
+                Analytics.capture("purchase_completed", ["product_id": ProPaywall.productId])
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
             }
-            // Apple Pay natif : la feuille s'ouvre sur le paywall, sans changer de page.
-            if ProApplePay.isAvailable {
-                if let s = try await ProApplePay.pay(client: store.client, externalPurchaseToken: token) {
-                    paywall.didPay(s)
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                }
-                return
-            }
-            // Sans Apple Pay (aucune carte dans Wallet) : la page Stripe préparée.
-            let c = try await paywall.takeCheckout(client: store.client)
-            checkout = IdentifiableURL(url: c.url)
-            let client = store.client
-            if let token { Task.detached { try? await client.attachExternalPurchaseToken(token, session: c.id) } }
         } catch {
+            Analytics.capture("purchase_failed")
             purchaseError = error.localizedDescription
         }
     }
 
-    /// Pro est attaché au compte MoneyMaker : « Restaurer » relit simplement le statut.
+    /// Pro est attaché au compte MoneyMaker : « Restaurer » rattache les achats de l'identifiant Apple.
     private func restore() async {
         isRestoring = true; defer { isRestoring = false }
-        await paywall.refresh(client: store.client)
-        if status?.pro != true { purchaseError = String(localized: "Aucun achat Pro trouvé sur ce compte MoneyMaker.") }
+        do {
+            try await paywall.restore(client: store.client)
+            if status?.pro != true { purchaseError = String(localized: "Aucun achat Pro trouvé sur ce compte.") }
+        } catch {
+            purchaseError = error.localizedDescription
+        }
     }
 }
 
@@ -506,9 +493,9 @@ struct ProPaywallFeatureItem: Identifiable {
 enum ProPaywallFeatureCatalog {
     static let primary: [ProPaywallFeatureItem] = [
         .init(id: "unlimited", title: "Business illimités · Toutes tes apps", symbol: "square.stack.3d.up"),
-        .init(id: "revenue", title: "Revenus en direct · App Store, Stripe", symbol: "chart.line.uptrend.xyaxis"),
-        .init(id: "alerts", title: "Alertes · Chaque vente sur ton iPhone", symbol: "bell.badge"),
-        .init(id: "widgets", title: "Widgets · Ton MRR d'un coup d'œil", symbol: "square.grid.2x2"),
+        .init(id: "apps", title: "Fiches apps · Notes, avis et tous les pays", symbol: "star.fill"),
+        .init(id: "health", title: "Santé · Revenu par abonné, churn, LTV", symbol: "waveform.path.ecg"),
+        .init(id: "funnel", title: "Entonnoirs · Onboarding et paywall", symbol: "chart.line.uptrend.xyaxis"),
         .init(id: "lifetime", title: "À vie · Payé une fois, à toi pour toujours", symbol: "infinity"),
     ]
 }
@@ -623,89 +610,11 @@ private struct ProPaywallPressStyle: ButtonStyle {
     }
 }
 
-// MARK: - Apple Pay natif (Stripe en coulisse)
+// MARK: - Serveur
 
 extension MoneyMakerClient {
-    /// Débite le jeton Apple Pay via Stripe et renvoie le statut, Pro déjà actif.
-    func payProWithApplePay(_ payment: PKPayment, externalPurchaseToken: String?) async throws -> BillingStatus {
-        var body: [String: Any] = [
-            "paymentData": payment.token.paymentData.base64EncodedString(),
-            "transactionId": payment.token.transactionIdentifier,
-            "network": payment.token.paymentMethod.network?.rawValue ?? "",
-            "displayName": payment.token.paymentMethod.displayName ?? "",
-        ]
-        if let externalPurchaseToken { body["externalPurchaseToken"] = externalPurchaseToken }
-        return try await send("POST", "billing/applepay", body: body)
-    }
-}
-
-/// Feuille Apple Pay de MoneyMaker Pro : 29 €, payé une fois. Renvoie le statut si le paiement passe,
-/// nil si la personne annule.
-@MainActor
-final class ProApplePay: NSObject, PKPaymentAuthorizationControllerDelegate {
-    static let merchantId = "merchant.io.moneymaker.app"
-    static let networks: [PKPaymentNetwork] = [.visa, .masterCard, .amex, .cartesBancaires, .maestro]
-
-    static var isAvailable: Bool { PKPaymentAuthorizationController.canMakePayments(usingNetworks: networks) }
-
-    private let client: MoneyMakerClient
-    private let externalPurchaseToken: String?
-    private var result: BillingStatus?
-    private var failure: Error?
-    private var continuation: CheckedContinuation<BillingStatus?, Error>?
-    private static var current: ProApplePay?
-
-    private init(client: MoneyMakerClient, externalPurchaseToken: String?) {
-        self.client = client
-        self.externalPurchaseToken = externalPurchaseToken
-    }
-
-    static func pay(client: MoneyMakerClient, externalPurchaseToken: String?) async throws -> BillingStatus? {
-        let request = PKPaymentRequest()
-        request.merchantIdentifier = merchantId
-        request.supportedNetworks = networks
-        request.merchantCapabilities = [.threeDSecure]
-        request.countryCode = "FR"
-        request.currencyCode = "EUR"
-        request.paymentSummaryItems = [
-            PKPaymentSummaryItem(label: String(localized: "MoneyMaker Pro · à vie"), amount: 29),
-            PKPaymentSummaryItem(label: "MoneyMaker", amount: 29),
-        ]
-        let session = ProApplePay(client: client, externalPurchaseToken: externalPurchaseToken)
-        let controller = PKPaymentAuthorizationController(paymentRequest: request)
-        controller.delegate = session
-        current = session
-        defer { current = nil }
-        return try await withCheckedThrowingContinuation { c in
-            session.continuation = c
-            controller.present { shown in
-                if !shown { session.finish() }
-            }
-        }
-    }
-
-    private func finish() {
-        guard let c = continuation else { return }
-        continuation = nil
-        if let failure { c.resume(throwing: failure) } else { c.resume(returning: result) }
-    }
-
-    nonisolated func paymentAuthorizationController(_ controller: PKPaymentAuthorizationController, didAuthorizePayment payment: PKPayment,
-                                                    handler completion: @escaping (PKPaymentAuthorizationResult) -> Void) {
-        Task { @MainActor in
-            do {
-                result = try await client.payProWithApplePay(payment, externalPurchaseToken: externalPurchaseToken)
-                completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
-            } catch {
-                failure = error
-                completion(PKPaymentAuthorizationResult(status: .failure, errors: [error]))
-            }
-        }
-    }
-
-    nonisolated func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
-        Task { @MainActor in
-            controller.dismiss { Task { @MainActor in self.finish() } }
-        }
+    /// Envoie la transaction signée par Apple ; le serveur la vérifie et renvoie le statut Pro.
+    func redeemAppStorePurchase(_ signedTransaction: String) async throws -> BillingStatus {
+        try await send("POST", "billing/appstore", body: ["signedTransaction": signedTransaction])
     }
 }

@@ -761,9 +761,19 @@ struct RecoveryReportTile: View {
 
 // MARK: - Apparition en cascade
 
+private struct RecoveryEntranceStaggerKey: EnvironmentKey { static let defaultValue = 0.07 }
+extension EnvironmentValues {
+    /// Écart entre l'apparition de deux tuiles ; l'intro de l'onboarding le prend plus long.
+    var recoveryEntranceStagger: Double {
+        get { self[RecoveryEntranceStaggerKey.self] }
+        set { self[RecoveryEntranceStaggerKey.self] = newValue }
+    }
+}
+
 struct RecoveryTileEntrance: ViewModifier {
     let index: Int
     @State private var shown = false
+    @Environment(\.recoveryEntranceStagger) private var stagger
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
@@ -774,7 +784,7 @@ struct RecoveryTileEntrance: ViewModifier {
             .onAppear {
                 guard !shown else { return }
                 if reduceMotion { shown = true; return }
-                withAnimation(RecoveryTileTheme.entrance.delay(0.05 + Double(index) * 0.07)) { shown = true }
+                withAnimation(RecoveryTileTheme.entrance.delay(0.05 + Double(index) * stagger)) { shown = true }
             }
     }
 }

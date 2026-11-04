@@ -100,6 +100,7 @@ struct MMPressStyle: ButtonStyle {
 struct MMPrimaryButton: View {
     let title: String
     var loading = false
+    var white = false
     let action: () -> Void
     var body: some View {
         Button(action: action) {
@@ -109,8 +110,8 @@ struct MMPrimaryButton: View {
             }
             .foregroundStyle(.black)
             .frame(maxWidth: .infinity).padding(.vertical, 17)
-            .background(MMColor.accent, in: Capsule())
-            .shadow(color: MMColor.accent.opacity(0.35), radius: 22, y: 8)
+            .background(white ? Color.white : MMColor.accent, in: Capsule())
+            .shadow(color: white ? .clear : MMColor.accent.opacity(0.35), radius: 22, y: 8)
         }
         .buttonStyle(MMPressStyle())
     }

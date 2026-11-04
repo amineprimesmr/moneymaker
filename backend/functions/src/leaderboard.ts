@@ -1,6 +1,7 @@
 // Classement public des business (façon TrustMRR) : chaque business choisit d'y figurer,
 // et ses chiffres viennent des stores (App Store, Google Play, Stripe), jamais d'une saisie.
-// Le classement est recalculé au plus toutes les 10 minutes et mis en cache dans Firestore.
+// Le classement est recalculé une fois par heure et mis en cache dans Firestore :
+// chaque calcul lit des milliers de documents, le faire plus souvent coûte plus qu'il n'apporte.
 
 import { HttpError } from "./engine";
 import { db, getProject } from "./store";
@@ -9,7 +10,7 @@ import { DEMO_UID } from "./demo";
 
 export const LEADERBOARD_CURRENCY = "EUR";
 const CACHE_DOC = "leaderboard/current";
-const TTL_MS = 10 * 60 * 1000;
+const TTL_MS = 2 * 60 * 60 * 1000;
 const MAX_ENTRIES = 500;
 
 export type LeaderboardSort = "mrr" | "revenue" | "growth" | "subscribers";
@@ -43,8 +44,8 @@ export interface LeaderboardEntry {
 
 export function sanitizeListing(body: any, prev?: PublicListing): PublicListing {
   if (typeof body !== "object" || body === null || Array.isArray(body)) throw new HttpError(400, "invalid_listing");
-  const listed = body.listed === undefined ? prev?.listed !== false : Boolean(body.listed);
-  const out: PublicListing = { listed, listedAt: listed ? (prev?.listed !== false ? prev?.listedAt ?? Date.now() : Date.now()) : undefined };
+  const listed = body.listed === undefined ? prev?.listed === true : Boolean(body.listed);
+  const out: PublicListing = { listed, listedAt: listed ? (prev?.listed === true ? prev?.listedAt ?? Date.now() : Date.now()) : undefined };
   const tagline = body.tagline ?? prev?.tagline;
   if (typeof tagline === "string" && tagline.trim()) out.tagline = tagline.trim().slice(0, 120);
   const website = body.website ?? prev?.website;
@@ -110,15 +111,15 @@ function sourcesOf(config: any, health: any): string[] {
 
 async function compute(publicBase: string): Promise<LeaderboardEntry[]> {
   const { convertMicros } = await import("./engine");
-  // Tous les business sont au classement par défaut ; seuls ceux retirés par leur
-  // propriétaire (listed: false) et les business de démonstration en sont exclus.
+  // Un business n'y figure que si son propriétaire l'a inscrit (listed: true) ;
+  // les business de démonstration en sont exclus.
   const all = await db.collection("projects").limit(MAX_ENTRIES * 2).get();
-  const docs = all.docs.filter(d => d.get("publicListing.listed") !== false && !(d.get("members") ?? []).includes(DEMO_UID)).slice(0, MAX_ENTRIES);
+  const docs = all.docs.filter(d => d.get("publicListing.listed") === true && !(d.get("members") ?? []).includes(DEMO_UID)).slice(0, MAX_ENTRIES);
   const rows = await Promise.all(docs.map(async d => {
     try {
       const pr = await getProject(d.id);
       const m = await projectMetrics(pr, 30);
-      const listing = (d.get("publicListing") ?? { listed: true }) as PublicListing;
+      const listing = d.get("publicListing") as PublicListing;
       const eur = (v: number) => convertMicros(v, m.currency, LEADERBOARD_CURRENCY);
       const prev = m.previous.netRevenueMicros;
       const v = d.get("iconVersion") as number | null | undefined;
@@ -146,9 +147,18 @@ async function compute(publicBase: string): Promise<LeaderboardEntry[]> {
 export async function leaderboard(publicBase: string, force = false): Promise<{ entries: LeaderboardEntry[]; updatedAt: number }> {
   const ref = db.doc(CACHE_DOC);
   const cached = (await ref.get()).data() as { entries: LeaderboardEntry[]; updatedAt: number } | undefined;
-  if (!force && cached && Date.now() - cached.updatedAt < TTL_MS) return cached;
+  if (!force && cached?.entries && cached.updatedAt > 0) {
+    // Périmé : on sert l'ancien classement tout de suite et on recalcule derrière
+    // (le tâche planifiée leaderboardRefresh le garde de toute façon à jour).
+    if (Date.now() - cached.updatedAt >= TTL_MS) void refreshLeaderboard(publicBase).catch(() => {});
+    return cached;
+  }
+  return refreshLeaderboard(publicBase);
+}
+
+export async function refreshLeaderboard(publicBase: string): Promise<{ entries: LeaderboardEntry[]; updatedAt: number }> {
   const fresh = { entries: await compute(publicBase), updatedAt: Date.now() };
-  await ref.set(fresh);
+  await db.doc(CACHE_DOC).set(fresh);
   return fresh;
 }
 

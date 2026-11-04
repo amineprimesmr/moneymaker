@@ -73,13 +73,29 @@ export function stripeOneTimePurchase(ch: Stripe.Charge, now = Date.now(), produ
   };
 }
 
-/** True when a charge pays a subscription invoice (newer API versions dropped `charge.invoice`). */
-export async function isInvoiceCharge(stripe: Stripe | undefined, ch: Stripe.Charge) {
-  if ((ch as any).invoice) return true;
-  if (!stripe || !ch.payment_intent) return /^Subscription (creation|update|cycle)/i.test(ch.description ?? "");
-  const pi = typeof ch.payment_intent === "string" ? ch.payment_intent : ch.payment_intent.id;
-  const list = await stripe.invoicePayments.list({ payment: { type: "payment_intent", payment_intent: pi }, limit: 1 }).catch(() => null);
-  return list ? list.data.length > 0 : /^Subscription/i.test(ch.description ?? "");
+/** Abonnement d'une facture Stripe (l'emplacement du champ change selon la version d'API). */
+export const invoiceSubscription = (inv: any): string | null => {
+  const s = inv?.subscription ?? inv?.parent?.subscription_details?.subscription ?? null;
+  return s ? String(typeof s === "string" ? s : s.id) : null;
+};
+
+/** True when a charge pays a subscription invoice: those are recorded through the subscription.
+ *  A one-time Checkout with « invoice_creation » also has an invoice, but no subscription: it stays a sale.
+ *  (Newer API versions dropped `charge.invoice`, hence the invoice-payments lookup.) */
+export async function isSubscriptionCharge(stripe: Stripe | undefined, ch: Stripe.Charge) {
+  const bySubscriptionText = /^Subscription (creation|update|cycle)/i.test(ch.description ?? "");
+  let invoice: unknown = (ch as any).invoice ?? null;
+  if (!invoice && stripe && ch.payment_intent) {
+    const pi = typeof ch.payment_intent === "string" ? ch.payment_intent : ch.payment_intent.id;
+    const list = await stripe.invoicePayments.list({ payment: { type: "payment_intent", payment_intent: pi }, limit: 1 }).catch(() => null);
+    if (!list) return bySubscriptionText;
+    invoice = list.data[0]?.invoice ?? null;
+  }
+  if (!invoice) return bySubscriptionText;
+  if (typeof invoice === "object") return Boolean(invoiceSubscription(invoice));
+  if (!stripe) return bySubscriptionText;
+  const inv = await stripe.invoices.retrieve(String(invoice)).catch(() => null);
+  return inv ? Boolean(invoiceSubscription(inv)) : bySubscriptionText;
 }
 
 /** Customer id for a one-time payment: app id in metadata, else known Stripe customer, else the buyer's email. */
@@ -135,7 +151,7 @@ export async function ingestStripeWebhook(project: Project, rawBody: Buffer, sig
     case "invoice.paid":
     case "invoice.payment_failed": {
       const inv = event.data.object as any;
-      const subId = inv.subscription ?? inv.parent?.subscription_details?.subscription;
+      const subId = invoiceSubscription(inv);
       if (stripe && subId) result = await storeSubscription(project, await stripe.subscriptions.retrieve(String(subId)), stripe);
       break;
     }
@@ -163,7 +179,7 @@ export async function ingestStripeWebhook(project: Project, rawBody: Buffer, sig
     }
     case "charge.succeeded": {
       const ch = event.data.object as Stripe.Charge;
-      if (!ch.paid || await isInvoiceCharge(stripe, ch)) break; // subscription invoices are handled through the subscription
+      if (!ch.paid || await isSubscriptionCharge(stripe, ch)) break; // subscription invoices are handled through the subscription
       const owner = await oneTimeOwner(project, ch);
       const name = ch.metadata?.product_id ? null : await checkoutProductName(stripe, ch.payment_intent);
       result = await upsertPurchase(project, owner, stripeOneTimePurchase(ch, Date.now(), name), [`stripe:${ch.payment_intent ?? ch.id}`, ...(ch.customer ? [`stripe_cus:${ch.customer}`] : [])]);

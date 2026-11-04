@@ -767,12 +767,6 @@ struct HomeTiles: View {
                             .environment(\.recoveryDotSeed, 50 + i)
                             .transition(.cascade(i))
                     }
-                } else {
-                    NavigationLink(value: PosthogRoute()) {
-                        ExtraStat(symbol: "chart.bar.xaxis", title: String(localized: "Brancher PostHog"), value: String(localized: "Paywall, entonnoir…"), ratio: 0.04).tile
-                    }
-                    .buttonStyle(MMPressStyle(scale: 0.97))
-                    .transition(.cascade(0))
                 }
 
                 ForEach(Array(extras.enumerated()), id: \.element.title) { i, e in

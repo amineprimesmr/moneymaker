@@ -402,7 +402,6 @@ struct GlobeSection: View {
                 .modifier(OnScreen(visible: $onScreen))
                 .onChange(of: picked) { _, _ in withAnimation(.snappy) { selected = nil } }
                 .animation(.smooth(duration: 0.5), value: picked)
-                ProjectPicker(projects: store.overview?.projects ?? [], selected: $picked)
                 MMLabel(text: String(localized: "Classement"), trailing: pickedProject?.name).padding(.horizontal, 4).mmAppear(2)
                 MMCard(padding: 0) {
                     VStack(spacing: 0) {

@@ -71,16 +71,6 @@
         }
       }
     },
-    " · démo" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : " · demo"
-          }
-        }
-      }
-    },
     "#%lld" : {
       "localizations" : {
         "en" : {
@@ -1891,6 +1881,16 @@
         }
       }
     },
+    "App Store, Google Play et Stripe,\nen direct." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Store, Google Play and Stripe,\nlive."
+          }
+        }
+      }
+    },
     "Apparence" : {
       "localizations" : {
         "en" : {
@@ -2311,6 +2311,16 @@
         }
       }
     },
+    "Cette adresse e-mail n'est pas valide." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This email address isn't valid."
+          }
+        }
+      }
+    },
     "Cha-ching" : {
       "localizations" : {
         "en" : {
@@ -2347,6 +2357,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Every MRR milestone unlocks an icon. No shortcuts."
+          }
+        }
+      }
+    },
+    "Chaque vente, en direct" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every sale, live"
           }
         }
       }
@@ -2581,6 +2601,26 @@
         }
       }
     },
+    "Colle ce message dans %@. Il crée ton compte et branche tes revenus." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste this message into %@. It creates your account and connects your revenue."
+          }
+        }
+      }
+    },
+    "Commencer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get started"
+          }
+        }
+      }
+    },
     "Commission autre store" : {
       "localizations" : {
         "en" : {
@@ -2597,6 +2637,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Store commission"
+          }
+        }
+      }
+    },
+    "Compare tes revenus vérifiés\navec les autres business." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compare your verified revenue\nwith other businesses."
           }
         }
       }
@@ -2631,6 +2681,16 @@
         }
       }
     },
+    "Configure MoneyMaker pour moi en suivant https://usemoneymaker.com/setup.md" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set up MoneyMaker for me by following https://usemoneymaker.com/setup.md"
+          }
+        }
+      }
+    },
     "Connecter" : {
       "localizations" : {
         "en" : {
@@ -2651,6 +2711,26 @@
         }
       }
     },
+    "Connexion" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in"
+          }
+        }
+      }
+    },
+    "Connexion impossible, réessaie." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't sign in, try again."
+          }
+        }
+      }
+    },
     "Connexion interrompue, réessaie." : {
       "localizations" : {
         "en" : {
@@ -2667,6 +2747,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "PostHog connections"
+          }
+        }
+      }
+    },
+    "Continuer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue"
+          }
+        }
+      }
+    },
+    "Continuer avec un e-mail" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue with email"
           }
         }
       }
@@ -2741,6 +2841,26 @@
         }
       }
     },
+    "Copier le message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy message"
+          }
+        }
+      }
+    },
+    "Copié !" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copied!"
+          }
+        }
+      }
+    },
     "Cotisations" : {
       "localizations" : {
         "en" : {
@@ -2807,6 +2927,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "30d growth"
+          }
+        }
+      }
+    },
+    "Créer mon compte" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create my account"
+          }
+        }
+      }
+    },
+    "Créer un compte" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create account"
           }
         }
       }
@@ -3061,16 +3201,6 @@
         }
       }
     },
-    "Découvrir avec un exemple" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Explore with a demo"
-          }
-        }
-      }
-    },
     "Délai médian avant achat" : {
       "localizations" : {
         "en" : {
@@ -3117,6 +3247,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zoom out"
+          }
+        }
+      }
+    },
+    "E-mail" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Email"
+          }
+        }
+      }
+    },
+    "E-mail de réinitialisation envoyé." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset email sent."
+          }
+        }
+      }
+    },
+    "E-mail ou mot de passe incorrect." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Incorrect email or password."
           }
         }
       }
@@ -3257,6 +3417,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Trial funnel"
+          }
+        }
+      }
+    },
+    "Entre ton e-mail d'abord." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter your email first."
           }
         }
       }
@@ -3691,6 +3861,16 @@
         }
       }
     },
+    "Grimpe au classement" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Climb the leaderboard"
+          }
+        }
+      }
+    },
     "Heure locale" : {
       "localizations" : {
         "en" : {
@@ -3901,26 +4081,6 @@
         }
       }
     },
-    "J'ai un jeton personnel" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I have a personal token"
-          }
-        }
-      }
-    },
-    "Jeton mm_pat_…" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Token mm_pat_…"
-          }
-        }
-      }
-    },
     "Jour" : {
       "localizations" : {
         "en" : {
@@ -4091,6 +4251,16 @@
         }
       }
     },
+    "Les chiffres qui comptent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The numbers that matter"
+          }
+        }
+      }
+    },
     "Les stores prélèvent la TVA du pays du client avant de te payer. Sur Stripe, en franchise, tu n'en factures pas." : {
       "localizations" : {
         "en" : {
@@ -4177,6 +4347,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "MRR"
+          }
+        }
+      }
+    },
+    "MRR, abonnés, churn et conversion,\npour chaque business." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MRR, subscribers, churn and conversion,\nfor every business."
           }
         }
       }
@@ -4377,6 +4557,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Show off your verified revenue, publicly."
+          }
+        }
+      }
+    },
+    "Mot de passe" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Password"
+          }
+        }
+      }
+    },
+    "Mot de passe oublié ?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Forgot password?"
+          }
+        }
+      }
+    },
+    "Mot de passe trop court (8 caractères minimum)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Password too short (8 characters minimum)."
           }
         }
       }
@@ -4647,6 +4857,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "New sale"
+          }
+        }
+      }
+    },
+    "Nouvelle vente de %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New sale of %@"
           }
         }
       }
@@ -5291,16 +5511,6 @@
         }
       }
     },
-    "Quitter la démo" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exit demo"
-          }
-        }
-      }
-    },
     "REACTIVATED" : {
       "localizations" : {
         "en" : {
@@ -5567,6 +5777,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lldd revenue"
+          }
+        }
+      }
+    },
+    "Revenu 28 j" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "28-day revenue"
           }
         }
       }
@@ -5847,6 +6067,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No expiration"
+          }
+        }
+      }
+    },
+    "Se connecter" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in"
           }
         }
       }
@@ -6301,6 +6531,16 @@
         }
       }
     },
+    "Tes clients sur la planète" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your customers on the globe"
+          }
+        }
+      }
+    },
     "Tes premières ventes apparaîtront ici, pays par pays." : {
       "localizations" : {
         "en" : {
@@ -6357,6 +6597,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Your MRR, for all your businesses or just one, with a goal."
+          }
+        }
+      }
+    },
+    "Ton agent s'occupe de tout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your agent handles everything"
           }
         }
       }
@@ -6501,6 +6751,16 @@
         }
       }
     },
+    "Tous tes revenus au même endroit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All your revenue in one place"
+          }
+        }
+      }
+    },
     "Tout voir" : {
       "localizations" : {
         "en" : {
@@ -6537,6 +6797,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Transactions"
+          }
+        }
+      }
+    },
+    "Trop d'essais, réessaie dans un instant." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Too many attempts, try again shortly."
           }
         }
       }
@@ -6607,6 +6877,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Downloads"
+          }
+        }
+      }
+    },
+    "Un compte existe déjà avec cet e-mail : connecte-toi avec ta méthode habituelle." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An account already exists with this email: sign in with your usual method."
+          }
+        }
+      }
+    },
+    "Un compte existe déjà avec cet e-mail : connecte-toi." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An account already exists with this email: sign in."
+          }
+        }
+      }
+    },
+    "Un son de caisse et une notification\nà chaque paiement." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A cash register sound and a notification\nfor every payment."
           }
         }
       }
@@ -6801,6 +7101,16 @@
         }
       }
     },
+    "Vois d'où viennent tes ventes,\npartout dans le monde." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See where your sales come from,\nall over the world."
+          }
+        }
+      }
+    },
     "Vu la 1re fois" : {
       "localizations" : {
         "en" : {
@@ -6937,6 +7247,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "the product"
+          }
+        }
+      }
+    },
+    "maintenant" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "now"
           }
         }
       }
@@ -7107,6 +7427,392 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "🏆"
+          }
+        }
+      }
+    },
+    "Connecte-toi à ton compte" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to your account"
+          }
+        }
+      }
+    },
+    "J'ai créé mon compte" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I've created my account"
+          }
+        }
+      }
+    },
+    "Apple" : {
+      "shouldTranslate" : false
+    },
+    "Google" : {
+      "shouldTranslate" : false
+    },
+    "Mes apps" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My apps"
+          }
+        }
+      }
+    },
+    "Apps" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps"
+          }
+        }
+      }
+    },
+    "Notes par pays" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ratings by country"
+          }
+        }
+      }
+    },
+    "Derniers avis" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Latest reviews"
+          }
+        }
+      }
+    },
+    "Aucune app App Store suivie pour l'instant." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No App Store app tracked yet."
+          }
+        }
+      }
+    },
+    "Aucune app App Store suivie" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No App Store app tracked"
+          }
+        }
+      }
+    },
+    "Introuvable sur l'App Store" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not found on the App Store"
+          }
+        }
+      }
+    },
+    "Classée dans %lld pays" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ranked in %lld countries"
+          }
+        }
+      }
+    },
+    "Ouvrir dans l'App Store" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open in App Store"
+          }
+        }
+      }
+    },
+    "HISTORIQUE ET MEILLEURES POSITIONS" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HISTORY & BEST POSITIONS"
+          }
+        }
+      }
+    },
+    "Pas encore classée dans un top." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not ranked in a chart yet."
+          }
+        }
+      }
+    },
+    "Sur les %lld derniers jours, classée dans %lld pays." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Over the last %1$lld days, ranked in %2$lld countries."
+          }
+        }
+      }
+    },
+    "Voir les %lld pays" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show all %lld countries"
+          }
+        }
+      }
+    },
+    "Actuel %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Now %lld"
+          }
+        }
+      }
+    },
+    "Pays classés par jour" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Countries ranked per day"
+          }
+        }
+      }
+    },
+    "Score" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Score"
+          }
+        }
+      }
+    },
+    "Présence émergente" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emerging presence"
+          }
+        }
+      }
+    },
+    "Présence solide" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Solid presence"
+          }
+        }
+      }
+    },
+    "Présence mondiale" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Worldwide presence"
+          }
+        }
+      }
+    },
+    "Basé sur %@ notes" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Based on %@ ratings"
+          }
+        }
+      }
+    },
+    "Avis écrits" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Written reviews"
+          }
+        }
+      }
+    },
+    "Aucun avis pour l'instant." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No reviews yet."
+          }
+        }
+      }
+    },
+    "Chercher une app de l'App Store" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search the App Store"
+          }
+        }
+      }
+    },
+    "Aucune app trouvée." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No app found."
+          }
+        }
+      }
+    },
+    "Débloquer avec Pro" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlock with Pro"
+          }
+        }
+      }
+    },
+    "Santé" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Health"
+          }
+        }
+      }
+    },
+    "Revenu par abonné, churn et conversion" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revenue per subscriber, churn and conversion"
+          }
+        }
+      }
+    },
+    "Graphiques, prévision LTV et anomalies" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Charts, LTV forecast and anomalies"
+          }
+        }
+      }
+    },
+    "Onboarding et conversion du paywall" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Onboarding and paywall conversion"
+          }
+        }
+      }
+    },
+    "Score, évolution, notes et avis" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Score, trends, ratings and reviews"
+          }
+        }
+      }
+    },
+    "Fiches apps · Notes, avis et tous les pays" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App pages · Ratings, reviews, every country"
+          }
+        }
+      }
+    },
+    "Santé · Revenu par abonné, churn, LTV" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Health · Revenue per subscriber, churn, LTV"
+          }
+        }
+      }
+    },
+    "Entonnoirs · Onboarding et paywall" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Funnels · Onboarding and paywall"
+          }
+        }
+      }
+    },
+    "Le plan gratuit suit %lld business. Pro les débloque tous, avec les notes, les avis et la santé de tes apps." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The free plan tracks %lld business. Pro unlocks them all, with ratings, reviews and app health."
+          }
+        }
+      }
+    },
+    "Recherches récentes" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent searches"
+          }
+        }
+      }
+    },
+    "Effacer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear"
           }
         }
       }

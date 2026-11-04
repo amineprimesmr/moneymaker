@@ -137,7 +137,8 @@ private func lastSaleText(_ l: FeedEvent?) -> String {
 // MARK: - Vue
 
 struct DashboardWidgetView: View {
-    @Environment(\.widgetFamily) var family
+    @Environment(\.widgetFamily) private var envFamily
+    private var family: WidgetFamily { WShotFamily.override ?? envFamily }
     let entry: DashEntry
 
     var body: some View {

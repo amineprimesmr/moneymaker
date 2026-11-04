@@ -5,7 +5,7 @@ import { JWT } from "google-auth-library";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpError } from "./engine";
 import { Project, ProjectConfig, db, getCredentials, sha256, upsertPurchase } from "./store";
-import { storeSubscription, stripeOneTimePurchase, oneTimeOwner, isInvoiceCharge } from "./stripe";
+import { storeSubscription, stripeOneTimePurchase, oneTimeOwner, isSubscriptionCharge, invoiceSubscription } from "./stripe";
 import { toAlpha2 } from "./countries";
 import { convertMicros } from "./engine";
 import { syncTrackers } from "./appstore";
@@ -59,8 +59,8 @@ export async function importStripeHistory(project: Project, stripe: Stripe) {
   const since = Math.floor(Date.now() / 1000) - 365 * 86400;
   let batch = db.batch(), pending = 0;
   for await (const inv of stripe.invoices.list({ status: "paid", created: { gte: since }, limit: 100 })) {
-    if (!inv.amount_paid) continue;
-    const subId = (inv as any).subscription ?? (inv as any).parent?.subscription_details?.subscription ?? null;
+    const subId = invoiceSubscription(inv);
+    if (!inv.amount_paid || !subId) continue; // factures de ventes uniques : importées avec les paiements plus bas
     const appUserId = (await db.doc(`projects/${project.id}/index/${sha256(`stripe:${subId}`)}`).get()).get("appUserId")
       ?? (await db.doc(`projects/${project.id}/index/${sha256(`stripe_cus:${inv.customer}`)}`).get()).get("appUserId")
       ?? `$stripe:${inv.customer}`;
@@ -68,7 +68,7 @@ export async function importStripeHistory(project: Project, stripe: Stripe) {
     const amount = inv.amount_paid * 10000;
     batch.set(db.doc(`projects/${project.id}/transactions/stripe_inv_${inv.id}`), {
       appUserId, store: "stripe", productId: inv.lines.data[0]?.pricing?.price_details?.price ?? (inv.lines.data[0] as any)?.price?.id ?? "stripe",
-      purchaseId: subId ?? inv.id, kind: inv.billing_reason === "subscription_cycle" ? "renewal" : "purchase",
+      purchaseId: subId, kind: inv.billing_reason === "subscription_cycle" ? "renewal" : "purchase",
       amountMicros: amount, currency, amountMicrosProject: convertMicros(amount, currency, project.config.currency),
       isSandbox: !inv.livemode, country: toAlpha2(inv.customer_address?.country), at: inv.created * 1000, imported: true,
     }, { merge: true });
@@ -79,7 +79,7 @@ export async function importStripeHistory(project: Project, stripe: Stripe) {
   // One-time payments (Checkout payment mode, Payment Links, direct charges) of the last 12 months.
   let payments = 0;
   for await (const ch of stripe.charges.list({ created: { gte: since }, limit: 100 })) {
-    if (!ch.paid || ch.status !== "succeeded" || await isInvoiceCharge(stripe, ch)) continue;
+    if (!ch.paid || ch.status !== "succeeded" || await isSubscriptionCharge(stripe, ch)) continue;
     const owner = await oneTimeOwner(project, ch);
     const purchase = stripeOneTimePurchase(ch);
     await upsertPurchase(project, owner, purchase, [`stripe:${ch.payment_intent ?? ch.id}`, ...(ch.customer ? [`stripe_cus:${ch.customer}`] : [])], { silent: true });

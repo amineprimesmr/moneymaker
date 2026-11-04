@@ -39,7 +39,7 @@
 </div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword,
+import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   browserLocalPersistence, setPersistence, signOut } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 
 const $ = s => document.querySelector(s);
@@ -53,7 +53,7 @@ const auth = getAuth(initializeApp(config));
 await setPersistence(auth, browserLocalPersistence);
 const requestId = new URLSearchParams(location.search).get("request");
 let pending = null;
-const fail = e => { $("#err").textContent = typeof e === "string" ? e : ({ "auth/invalid-credential": "E-mail ou mot de passe incorrect.",
+const fail = e => { $("#err").textContent = typeof e === "string" ? e : ({ "auth/invalid-credential": "E-mail ou mot de passe incorrect.", "auth/email-already-in-use": "Ce compte existe déjà : connecte-toi.", "auth/weak-password": "Mot de passe trop court (6 caractères minimum).",
   "auth/popup-closed-by-user": "Fenêtre de connexion fermée.", "auth/too-many-requests": "Trop d'essais, réessaie dans un instant." }[e.code] ?? e.message); };
 const api = async (path, user, opts = {}) => {
   const res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", ...(user ? { Authorization: `Bearer ${await user.getIdToken()}` } : {}) } });
@@ -62,16 +62,18 @@ const api = async (path, user, opts = {}) => {
   return j;
 };
 
-function loginForm() {
+function loginForm(create = false) {
   $("#body").innerHTML = `
     <button type="button" id="google" class="wide">Continuer avec Google</button>
     <form id="form" class="stack">
       <div class="wl-field"><span class="spin"></span><input id="email" type="email" placeholder="ton@email.com" autocomplete="email" required></div>
-      <div class="wl-field"><span class="spin"></span><input id="password" type="password" placeholder="Mot de passe" autocomplete="current-password" required></div>
-      <button class="primary wide wl-submit" type="submit">Se connecter</button>
-    </form>`;
+      <div class="wl-field"><span class="spin"></span><input id="password" type="password" placeholder="Mot de passe" autocomplete="${create ? "new-password" : "current-password"}" required></div>
+      <button class="primary wide wl-submit" type="submit">${create ? "Créer mon compte" : "Se connecter"}</button>
+    </form>
+    <p class="muted" style="font-size:13px;margin:0;text-align:center">${create ? "Déjà un compte ?" : "Pas encore de compte ?"} <a href="#" id="toggle">${create ? "Se connecter" : "Créer un compte"}</a></p>`;
+  $("#toggle").onclick = e => { e.preventDefault(); $("#err").textContent = ""; loginForm(!create); };
   $("#google").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(fail);
-  $("#form").onsubmit = e => { e.preventDefault(); $("#err").textContent = ""; signInWithEmailAndPassword(auth, $("#email").value.trim(), $("#password").value).catch(fail); };
+  $("#form").onsubmit = e => { e.preventDefault(); $("#err").textContent = ""; (create ? createUserWithEmailAndPassword : signInWithEmailAndPassword)(auth, $("#email").value.trim(), $("#password").value).catch(fail); };
 }
 
 function consent(user) {

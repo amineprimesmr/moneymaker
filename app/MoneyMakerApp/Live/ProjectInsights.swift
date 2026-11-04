@@ -8,28 +8,18 @@ import SwiftUI
 struct ProjectInsights: View {
     @EnvironmentObject var store: Store
     let p: ProjectSummary
-    @State private var apps: [TrackedAppSummary] = []
     @State private var events: [EventItem] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
-                if p.hasTrials ?? (p.activeTrials > 0) {
-                    RateTile(title: String(localized: "Conversion essai"), value: p.trialConversionRate, color: MMColor.accent)
-                }
-                RateTile(title: "Churn", value: p.churnRate, color: MMColor.red)
-            }
+            ProHealthCard(p: p)
             if p.billingIssues > 0 {
                 MMCard(padding: 16, radius: 22, glow: MMColor.orange) {
                     Label("\(p.billingIssues) problème(s) de paiement en cours", systemImage: "exclamationmark.triangle.fill")
                         .font(MMFont.system(14, .medium)).foregroundStyle(MMColor.orange)
                 }
             }
-            GrowthSections(p: p)
-            if !apps.isEmpty {
-                MMLabel(text: "App Store").padding(.horizontal, 4).padding(.top, 8)
-                ForEach(apps) { TrackedAppCard(app: $0) }
-            }
+            GrowthSections(p: p).proLocked("Graphiques, prévision LTV et anomalies")
             if !events.isEmpty {
                 HStack {
                     MMLabel(text: String(localized: "Activité"))
@@ -49,13 +39,8 @@ struct ProjectInsights: View {
             }
         }
         .task(id: p.projectId) {
-            async let a = try? store.client.trackedApps(projectId: p.projectId)
-            async let e = try? store.client.events(projectId: p.projectId)
-            let (na, ne) = await (a, e)
-            withAnimation(.easeOut(duration: 0.3)) {
-                apps = (na ?? []).filter { $0.own != false }
-                events = ne ?? []
-            }
+            let ne = try? await store.client.events(projectId: p.projectId)
+            withAnimation(.easeOut(duration: 0.3)) { events = ne ?? [] }
         }
     }
 }

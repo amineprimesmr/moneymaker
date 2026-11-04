@@ -27,5 +27,5 @@ test("inscription : site en https, date d'inscription conservée", () => {
   const again = L.sanitizeListing({ hideAmounts: true }, { ...first, listedAt: 42 });
   assert.strictEqual(again.listedAt, 42);
   assert.strictEqual(L.sanitizeListing({ listed: false }, again).listedAt, undefined);
-  assert.strictEqual(L.sanitizeListing({}).listed, true);
+  assert.strictEqual(L.sanitizeListing({}).listed, false);
 });
