@@ -296,8 +296,8 @@ const ro = new ResizeObserver(entries => {
   }
 });
 export function hydrate(root = document) {
-  for (const [sel, paint] of painters) root.querySelectorAll(sel).forEach(el => { paint(el); el._w = el.clientWidth; ro.observe(el); });
-  root.querySelectorAll(".gc").forEach(bindGlow);
+  for (const [sel, paint] of painters) root.querySelectorAll(sel).forEach(el => { if (el._hy) return; el._hy = true; paint(el); el._w = el.clientWidth; ro.observe(el); });
+  root.querySelectorAll(".gc").forEach(el => { if (el._gb) return; el._gb = true; bindGlow(el); });
 }
 
 // ── Anneau (RateTile) ───────────────────────────────────────────────────────────────────

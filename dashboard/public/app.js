@@ -4,6 +4,8 @@ import {
   createUserWithEmailAndPassword, signOut, connectAuthEmulator,
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import { tabGrowth } from "./growth.js";
+import { ic, money as kitMoney, glowChart, hydrate, ringSvg, deltaBadge, halfOverHalf, projectIcon, storeBadges } from "./kit.js";
+import { initScreens, leave, renderTabbar, renderSide, closeMenu, toggleMenu, allProjects, ensureStore, invalidateStore, desktop, renderHome, renderMetric, renderFeed, renderTx, renderCustomer, renderApps, renderAppDetail, renderBoard, renderPlanet } from "./screens.js";
 
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -19,7 +21,8 @@ if (!local) import("https://cdn.jsdelivr.net/npm/posthog-js@1.438.12/+esm").then
     disable_session_recording: true, person_profiles: "identified_only",
   })).catch(() => {});
 
-const state = { projects: [], view: "overview", projectId: null, tab: "metrics", days: 30 };
+const state = { projects: [], view: "home", projectId: null, tab: "metrics", days: 30, focus: null };
+let markReady; const ready = new Promise(r => markReady = r);
 
 // ── API ─────────────────────────────────────────────────────────────────
 async function api(path, opts = {}) {
@@ -33,8 +36,8 @@ async function api(path, opts = {}) {
   return json;
 }
 
-const money = (micros, cur = "EUR") => new Intl.NumberFormat("fr-FR", { style: "currency", currency: cur, maximumFractionDigits: Math.abs(micros) >= 1e10 ? 0 : 2 }).format((micros ?? 0) / 1e6);
-const pct = v => v == null ? "—" : `${(v * 100).toFixed(1)} %`;
+const money = (micros, cur = "EUR") => kitMoney(micros, cur);
+const pct = v => v == null ? "—" : `${(v * 100).toFixed(1).replace(".", ",")} %`;
 const date = t => t ? new Date(t).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "—";
 function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.append(t); setTimeout(() => t.remove(), 2600); }
 async function copy(text) { await navigator.clipboard.writeText(text); toast("Copié"); }
@@ -47,12 +50,12 @@ $("#google").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).cat
 const loginFail = e => { $("#loginError").textContent = e.message; document.querySelectorAll(".wl-field").forEach(f => { f.classList.remove("is-shake"); void f.offsetWidth; f.classList.add("is-shake"); }); };
 $("#emailForm").onsubmit = e => { e.preventDefault(); signInWithEmailAndPassword(auth, $("#email").value, $("#password").value).catch(loginFail); };
 $("#signup").onclick = () => createUserWithEmailAndPassword(auth, $("#email").value, $("#password").value).catch(loginFail);
-$("#logout").onclick = () => signOut(auth);
 
 onAuthStateChanged(auth, async user => {
   $("#login").classList.toggle("hidden", Boolean(user));
   $("#app").classList.toggle("hidden", !user);
-  if (user) { await acceptPendingInvite(); await loadProjects(); route(); proReturn(); }
+  if (user) { await ready; await acceptPendingInvite(); await loadProjects(); readHash(); route(); proReturn(); }
+  else { leave(); invalidateStore(); state.focus = null; closeMenu(); }
 });
 
 /** Retour de Stripe Checkout (?pro=success|cancel) : message, puis URL nettoyée. */
@@ -65,55 +68,71 @@ function proReturn() {
 
 async function loadProjects() {
   state.projects = (await api("/v1/projects")).projects;
-  $("#projectNav").innerHTML = state.projects.map(p => `<button class="nav" data-project="${esc(p.id)}">${esc(p.name)}</button>`).join("");
-  document.querySelectorAll("[data-project]").forEach(b => b.onclick = () => openProject(b.dataset.project));
+  invalidateStore();
+  renderSide();
 }
-document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => go({ view: b.dataset.view, projectId: null }));
-$("#newProject").onclick = newProjectDialog;
+$("#newProject").innerHTML = `${ic("plusc", 22)}<span>Nouveau business</span>`;
+$("#sideSettings").innerHTML = `${ic("gearf", 22)}<span>Réglages</span>`;
+$("#sideApp").innerHTML = `${ic("phone", 22)}<span>App iPhone</span>`;
+$("#newProject").onclick = () => { closeMenu(); newProjectDialog(); };
+$("#sideSettings").onclick = () => go({ view: "settings", projectId: null });
+$("#scrim").onclick = closeMenu;
+addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
+{
+  let last = 0;
+  $("#main").addEventListener("scroll", e => { const y = e.target.scrollTop; if (Math.abs(y - last) < 6) return; $("#tabbar").classList.toggle("shrink", y > last && y > 40); last = y; }, { passive: true, capture: true });
+  let queued = false;
+  const paintNew = () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; hydrate($("#stage")); hydrate($("#modal")); }); };
+  new MutationObserver(paintNew).observe($("#main"), { childList: true, subtree: true });
+  new MutationObserver(paintNew).observe($("#modalBody"), { childList: true, subtree: true });
+}
 
-function go(patch) { Object.assign(state, patch); history.replaceState(null, "", state.projectId ? `#${state.projectId}/${state.tab}` : `#${state.view}`); route(); }
+// ── Routage : une adresse par écran, retour du navigateur compris ───────
+const hashOf = () => ({
+  home: "#home", feed: "#feed", apps: "#apps", board: "#leaderboard", planet: "#planet", settings: "#settings",
+  metric: `#metric/${state.metric}`, tx: `#sale/${state.event?.projectId ?? state.eventRef?.projectId}/${encodeURIComponent(state.event?.id ?? state.eventRef?.id)}`,
+  customer: `#customer/${state.customer?.projectId}/${encodeURIComponent(state.customer?.appUserId)}`, app: `#app/${state.appItem?.appId}`,
+  project: `#${state.projectId}/${state.tab}`,
+}[state.view] ?? "#home");
+function readHash() {
+  const [a, b, c] = location.hash.slice(1).split("/").map(decodeURIComponent);
+  const snap = history.state?.snap ?? {};
+  const simple = { home: "home", overview: "home", feed: "feed", apps: "apps", leaderboard: "board", planet: "planet", settings: "settings", account: "settings" };
+  const go = (view, extra = {}) => Object.assign(state, { view, projectId: null }, snap, extra);
+  if (simple[a]) go(simple[a]);
+  else if (a === "metric") go("metric", { metric: b });
+  else if (a === "sale") go("tx", { eventRef: { projectId: b, id: c } });
+  else if (a === "customer") go("customer", { customer: { projectId: b, appUserId: c } });
+  else if (a === "app") go("app");
+  else if (state.projects.some(p => p.id === a)) Object.assign(state, { view: "project", projectId: a, tab: b || "metrics", openCustomer: c || null });
+  else go("home");
+}
+function go(patch) {
+  Object.assign(state, patch);
+  if (state.view !== "project") state.projectId = null;
+  const hash = hashOf();
+  if (location.hash !== hash) history.pushState({ depth: (history.state?.depth ?? 0) + 1, snap: { event: state.event, appItem: state.appItem, planetCC: state.planetCC } }, "", hash);
+  route();
+}
+function back() { if (history.state?.depth > 0) history.back(); else go({ view: { metric: "home", planet: "home", project: "home", tx: "feed", customer: "feed", app: "apps" }[state.view] ?? "home", projectId: null }); }
+matchMedia("(min-width: 1024px)").addEventListener("change", () => { if (auth.currentUser) route(); });
+addEventListener("popstate", () => { if (auth.currentUser) { readHash(); route(); } });
 function route() {
-  if (!state.projectId && location.hash.includes("/")) { const [pid, tab, cust] = location.hash.slice(1).split("/"); if (state.projects.some(p => p.id === pid)) Object.assign(state, { view: "project", projectId: pid, tab, openCustomer: cust ? decodeURIComponent(cust) : null }); }
-  document.querySelectorAll(".nav").forEach(b => b.classList.toggle("active", b.dataset.view === state.view && !state.projectId || b.dataset.project === state.projectId));
+  leave(); closeMenu(); renderTabbar();
+  $("#sideSettings").classList.toggle("on", state.view === "settings");
   const main = $("#main");
-  main.innerHTML = `<div class="empty">Chargement…</div>`;
-  const render = state.view === "project" ? renderProject : state.view === "account" ? renderAccount : renderOverview;
-  render(main).catch(e => main.innerHTML = `<div class="empty error">${esc(e.message)}</div>`);
+  main.scrollTop = 0; document.body.dataset.view = state.view;
+  $("#tabbar").classList.remove("shrink");
+  const render = { home: renderHome, metric: renderMetric, feed: renderFeed, tx: renderTx, customer: renderCustomer, apps: renderApps, app: renderAppDetail, board: renderBoard, planet: renderPlanet, settings: renderSettings, project: renderProject }[state.view] ?? renderHome;
+  render(main).catch(e => { console.error(e); main.innerHTML = `<div class="page"><div class="empty error">${esc(e.message)}</div></div>`; });
 }
 
 // ── Charts (dependency-free SVG) ────────────────────────────────────────
 let chartSeq = 0;
-// Courbe lissée (Catmull-Rom → Bézier), dégradé bleu → accent, halo flou, aire en fondu.
-function smoothPath(pts) {
-  return pts.map((p, i) => {
-    if (!i) return `M${p[0].toFixed(1)},${p[1].toFixed(1)}`;
-    const p0 = pts[i - 2] ?? pts[i - 1], p1 = pts[i - 1], p3 = pts[i + 1] ?? p;
-    const c1 = [p1[0] + (p[0] - p0[0]) / 6, p1[1] + (p[1] - p0[1]) / 6], c2 = [p[0] - (p3[0] - p1[0]) / 6, p[1] - (p3[1] - p1[1]) / 6];
-    return `C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p[0].toFixed(1)},${p[1].toFixed(1)}`;
-  }).join("");
-}
 function lineChart(points, cur, color = "var(--accent)", fmt = null) {
   if (points.length < 2) return `<div class="empty">Pas encore assez d'historique — le graphique se remplit chaque jour.</div>`;
-  const id = `c${++chartSeq}`;
-  const W = 600, H = 220, P = 10, max = Math.max(1, ...points.map(p => p.v)) * 1.08, min = Math.min(0, ...points.map(p => p.v));
-  const x = i => P + (i / (points.length - 1)) * (W - 2 * P), y = v => H - P - ((v - min) / (max - min || 1)) * (H - 2 * P);
-  const xy = points.map((p, i) => [x(i), y(p.v)]);
-  const d = smoothPath(xy);
-  const accent = color === "var(--accent)" ? "#00F19F" : color;
-  const grid = [0.25, 0.5, 0.75].map(f => `<line x1="0" x2="${W}" y1="${(H * f).toFixed(0)}" y2="${(H * f).toFixed(0)}" stroke="rgba(255,255,255,.05)" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/>`).join("");
-  const step = (W - 2 * P) / (points.length - 1);
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="graphique">
-    <defs>
-      <linearGradient id="${id}s" x1="0" x2="1"><stop offset="0" stop-color="#2E8BFF"/><stop offset="1" stop-color="${accent}"/></linearGradient>
-      <linearGradient id="${id}f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${accent}" stop-opacity=".26"/><stop offset=".6" stop-color="#2E8BFF" stop-opacity=".05"/><stop offset="1" stop-color="#2E8BFF" stop-opacity="0"/></linearGradient>
-      <filter id="${id}g" x="-10%" y="-30%" width="120%" height="160%"><feGaussianBlur stdDeviation="6"/></filter>
-    </defs>
-    ${grid}
-    <path d="${d}L${x(points.length - 1)},${H}L${x(0)},${H}Z" fill="url(#${id}f)"/>
-    <path d="${d}" fill="none" stroke="url(#${id}s)" stroke-width="5" opacity=".7" filter="url(#${id}g)"/>
-    <path d="${d}" fill="none" stroke="url(#${id}s)" stroke-width="2.2" stroke-linecap="round" vector-effect="non-scaling-stroke" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" style="animation:mmDraw 1.4s cubic-bezier(.16,1,.3,1) forwards"/>
-    ${xy.map(([cx, cy], i) => `<g><rect class="hit" x="${(cx - step / 2).toFixed(1)}" y="0" width="${step.toFixed(1)}" height="${H}" fill="transparent"><title>${esc(points[i].label)} · ${esc(fmt ? fmt(points[i].v) : money(points[i].v, cur))}</title></rect><g class="dot" opacity="0" pointer-events="none" style="transition:opacity .15s"><line x1="${cx}" x2="${cx}" y1="0" y2="${H}" stroke="rgba(255,255,255,.3)" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/><circle cx="${cx}" cy="${cy}" r="9" fill="${accent}" opacity=".25"/><circle cx="${cx}" cy="${cy}" r="4" fill="#fff"/></g></g>`).join("")}
-  </svg>`;
+  const day = d => /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(`${d}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : d;
+  return glowChart(points.map(p => ({ label: day(p.label), v: p.v, text: fmt ? fmt(p.v) : money(p.v, cur) })), { height: 180 });
 }
 function barChart(byDay, days, cur) {
   const id = `c${++chartSeq}`;
@@ -132,37 +151,20 @@ const kpi = (label, value, sub = "", hero = false) => `<div class="kpi ${hero ? 
 const daysPicker = () => `<div class="row seg">${[7, 30, 90, 365].map(d => `<button class="small ${state.days === d ? "primary" : ""}" data-days="${d}">${d} j</button>`).join("")}</div>`;
 function bindDays() { document.querySelectorAll("[data-days]").forEach(b => b.onclick = () => { state.days = Number(b.dataset.days); route(); }); }
 
-// ── Overview (all businesses) ───────────────────────────────────────────
-async function renderOverview(main) {
-  if (!state.projects.length) {
-    main.innerHTML = `<div class="head"><div><h1>Bienvenue 👋</h1><p class="muted">Crée ton premier business pour obtenir tes clés API.</p></div></div>
-      <div class="card empty"><button class="primary" id="first">Créer un business</button></div>`;
-    $("#first").onclick = newProjectDialog; return;
-  }
-  const o = await api(`/v1/overview?days=${state.days}`);
-  const c = o.currency;
-  main.innerHTML = `<div class="head"><div><h1>Vue globale</h1><p class="muted">${state.projects.length} business · mis à jour ${date(o.generatedAt)}</p></div>${daysPicker()}</div>
-  <div class="card section" id="assistantBanner"></div>
-  <div class="kpis">${kpi("MRR total", money(o.mrrMicros, c), `ARR ${money(o.mrrMicros * 12, c)}`, true)}${kpi(`Revenu ${state.days} j`, money(o.revenueMicros, c), "net des remboursements")}
-  ${kpi("Abonnés actifs", o.activeSubscriptions)}${kpi("Essais en cours", o.activeTrials)}${kpi(`Nouveaux clients ${state.days} j`, o.newCustomers)}</div>
-  <div class="card"><table><thead><tr><th>Business</th><th>MRR</th><th>Revenu ${state.days} j</th><th>Abonnés</th><th>Essais</th><th>Conversion essai</th><th>Churn</th></tr></thead><tbody>
-  ${o.projects.map(p => `<tr class="click" data-open="${esc(p.projectId)}"><td><b>${esc(p.name)}</b></td><td>${money(p.mrrMicros, p.currency)}</td><td>${money(p.netRevenueMicros, p.currency)}</td><td>${p.activeSubscriptions}</td><td>${p.activeTrials}</td><td>${pct(p.trialConversionRate)}</td><td>${pct(p.churnRate)}</td></tr>`).join("")}
-  </tbody></table></div>
-  <div class="card" style="margin-top:12px"><h2>Dernières alertes App Store</h2><div id="ovAlerts" class="muted">Chargement…</div></div>`;
-  api("/v1/alerts").then(({ alerts }) => { $("#ovAlerts").outerHTML = alerts.length ? `<table>${alerts.slice(0, 15).map(alertRow).join("")}</table>` : `<p class="muted">Aucune alerte — ajoute tes apps dans l'onglet App Store d'un business.</p>`; }).catch(() => null);
-  bindDays();
-  assistantCard($("#assistantBanner"), { banner: true }).catch(() => $("#assistantBanner")?.remove());
-  document.querySelectorAll("[data-open]").forEach(r => r.onclick = () => openProject(r.dataset.open));
-}
-
 // ── Project ─────────────────────────────────────────────────────────────
 const TABS = { start: "Démarrage", metrics: "Métriques", map: "Carte", cohorts: "Cohortes", charts: "Graphiques", appstore: "App Store", reviews: "Avis", alerts: "Alertes", customers: "Clients", events: "Événements", products: "Produits & accès", growth: "Paywalls & tests", connect: "Connexions", settings: "Réglages" };
 async function renderProject(main) {
   const p = state.projects.find(x => x.id === state.projectId);
   if (!TABS[state.tab]) state.tab = "metrics";
-  main.innerHTML = `<div class="head"><div><h1>${esc(p?.name)}</h1><p class="muted mono">${esc(state.projectId)}</p></div>${["metrics", "map"].includes(state.tab) ? daysPicker() : ""}</div>
-    <div class="tabs">${Object.entries(TABS).map(([k, v]) => `<button class="small ${state.tab === k ? "active" : ""}" data-tab="${k}">${v}</button>`).join("")}</div><div id="tab"></div>`;
+  await ensureStore().catch(() => {});
+  const o = allProjects().find(x => x.projectId === state.projectId) ?? { projectId: state.projectId, name: p?.name, stores: [] };
+  const admin = ["settings", "connect", "start"].includes(state.tab);
+  main.innerHTML = `<div class="page wide"><div class="dt-top"><button class="back glass" id="bzBack" aria-label="Retour">${ic("left", 19)}</button>${["metrics", "map"].includes(state.tab) ? daysPicker() : ""}</div>
+    <div class="bz-head">${projectIcon(o, 56)}<div style="min-width:0"><h1 class="page-title">${esc(p?.name)}</h1><div class="sb">${storeBadges(o.stores, 14)}</div>${admin ? `<div class="muted mono" style="font-size:12px;margin-top:4px">${esc(state.projectId)}</div>` : ""}</div></div>
+    <div class="chips">${Object.entries(TABS).map(([k, v]) => `<button class="${state.tab === k ? "on" : ""}" data-tab="${k}">${v}</button>`).join("")}</div><div id="tab" style="display:flex;flex-direction:column;gap:12px"></div></div>`;
+  $("#bzBack").onclick = back;
   document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => go({ tab: b.dataset.tab }));
+  main.querySelector(".chips .on")?.scrollIntoView({ block: "nearest", inline: "center" });
   bindDays();
   await ({ start: tabStart, metrics: tabMetrics, map: tabMap, cohorts: tabCohorts, charts: tabCharts, appstore: tabAppStore, reviews: tabReviews, alerts: tabAlerts, customers: tabCustomers, events: tabEvents, products: tabProducts, growth: el => tabGrowth(el, { api, esc, toast, money, pct, date, projectId: state.projectId, reload: loadProjects }), connect: tabConnect, settings: tabSettings }[state.tab] ?? tabMetrics)($("#tab"));
 }
@@ -195,7 +197,12 @@ async function tabMetrics(el) {
   const subsHistory = m.history.map(h => ({ label: h.date, v: (h.activeSubscriptions ?? 0) * 1e6 }));
   const mv = m.mrrMovement ?? { newMicros: 0, churnedMicros: 0, netMicros: 0 };
   const trials = Object.entries(m.trialsByProduct ?? {});
-  el.innerHTML = `<div class="kpis">${kpi("MRR", money(m.mrrMicros, c), `ARR ${money(m.arrMicros, c)}`, true)}
+  const churn = m.monthlyChurnRate ?? 0, conv = m.trialConversionRate ?? 0, mrrDelta = halfOverHalf(mrrHistory.map(h => h.v));
+  el.innerHTML = `<div class="bz-hero"><div class="card glow" style="padding:20px"><div class="mlabel"><span>MRR</span><span>${state.days} jours</span></div>
+      <div class="hero-val"><b>${money(m.mrrMicros, c)}</b>${deltaBadge(mrrDelta)}</div><div class="page-sub" style="margin:-8px 0 14px">ARR ${money(m.arrMicros, c)}</div>${lineChart(mrrHistory, c)}</div>
+    <div class="bz-side"><div class="rates"><div class="rate">${ringSvg(conv)}<div><div class="lb2">Conversion essais</div><div class="v2">${pct(m.trialConversionRate)}</div></div></div><div class="rate">${ringSvg(churn, churn > .1 ? "var(--red)" : "var(--orange)")}<div><div class="lb2">Churn mensuel</div><div class="v2">${pct(m.monthlyChurnRate)}</div></div></div></div>
+    ${m.billingIssues > 0 ? `<div class="card glow-orange"><div style="display:flex;align-items:center;gap:12px"><span style="color:var(--orange)">${ic("warning", 22)}</span><div><b style="font-weight:500">${m.billingIssues} problème${m.billingIssues > 1 ? "s" : ""} de paiement</b><div class="page-sub" style="font-size:13px">En période de grâce ou nouvelle tentative en cours.</div></div></div></div>` : ""}</div></div>
+    <div class="kpis">
     ${kpi(`Revenu ${state.days} j`, money(m.netRevenueMicros, c) + delta(m.netRevenueMicros, pv.netRevenueMicros), m.refundsMicros ? `remboursé ${money(m.refundsMicros, c)} (${pct(m.refundRate)})` : "aucun remboursement")}
     ${kpi("Abonnés actifs", m.activeSubscriptions, `${m.willNotRenew} ne renouvelleront pas`)}
     ${kpi("Essais", m.activeTrials, `conversion ${pct(m.trialConversionRate)}`)}
@@ -207,9 +214,9 @@ async function tabMetrics(el) {
     ${kpi("ARPU", money(m.arpuMicros, c), "revenu ÷ tous les clients")}
     ${kpi("Problèmes de paiement", m.billingIssues, "en grâce / retry")}
     ${kpi("Mouvement MRR", (mv.netMicros >= 0 ? "+" : "") + money(mv.netMicros, c), `+${money(mv.newMicros, c)} · −${money(mv.churnedMicros, c)}`)}</div>
-    <div class="grid2"><div class="card"><h3>MRR</h3>${lineChart(mrrHistory, c)}</div><div class="card"><h3>Revenu par jour</h3>${barChart(m.revenueByDay, Math.min(state.days, 90), c)}</div></div>
+    <div class="grid2"><div class="card"><h3>Revenu par jour</h3>${barChart(m.revenueByDay, Math.min(state.days, 90), c)}</div>
+      <div class="card"><h3>Abonnés actifs</h3>${lineChart(subsHistory, c, undefined, v => String(Math.round(v / 1e6)))}</div></div>
     <div class="grid2" style="margin-top:12px">
-      <div class="card"><h3>Abonnés actifs</h3>${lineChart(subsHistory, c, "var(--accent2)").replace(/<title>[^<]*<\/title>/g, "")}</div>
       <div class="card"><h3>Nouveau vs renouvellements</h3><table>
         <tr><td>Nouveaux achats</td><td style="text-align:right">${money(m.newRevenueMicros, c)}</td></tr>
         <tr><td>Renouvellements</td><td style="text-align:right">${money(m.renewalRevenueMicros, c)}</td></tr>
@@ -228,7 +235,7 @@ async function tabMetrics(el) {
 
 // ── World map (d3 + world-atlas, loaded on demand) ─────────────────────
 let geo;
-async function worldMap(container, values, { color = "#00d084", fmt = v => v, onClick } = {}) {
+async function worldMap(container, values, { color = "#00F19F", fmt = v => v, onClick } = {}) {
   geo ??= await Promise.all([
     import("https://cdn.jsdelivr.net/npm/d3@7.9.0/+esm"), import("https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/+esm"),
     fetch("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json").then(r => r.json()),
@@ -268,7 +275,7 @@ async function tabCohorts(el) {
   const { cohorts, currency } = await api(`/v1/projects/${state.projectId}/cohorts?months=12`);
   if (!cohorts.length) { el.innerHTML = `<div class="card empty">Les cohortes apparaissent dès les premiers paiements.</div>`; return; }
   const cols = cohorts[0].retention.length;
-  const cell = v => `<td style="text-align:center;background:rgba(0,208,132,${(v * 0.85).toFixed(2)});color:${v > .45 ? "#001a10" : "inherit"}">${Math.round(v * 100)}%</td>`;
+  const cell = v => `<td style="text-align:center;background:rgba(0,241,159,${(v * 0.85).toFixed(2)});color:${v > .45 ? "#001a10" : "inherit"}">${Math.round(v * 100)}%</td>`;
   el.innerHTML = `<div class="card section"><h2>Rétention des payeurs</h2><p class="muted">Part des clients d'une cohorte (mois du 1er paiement) qui paient encore N mois plus tard.</p>
     <div style="overflow-x:auto"><table><thead><tr><th>Cohorte</th><th>Clients</th>${Array.from({ length: cols }, (_, i) => `<th style="text-align:center">M${i}</th>`).join("")}</tr></thead>
     <tbody>${cohorts.map(r => `<tr><td>${r.month}</td><td>${r.size}</td>${r.retention.map((v, i) => i <= monthsSince(r.month) ? cell(v) : "<td></td>").join("")}</tr>`).join("")}</tbody></table></div></div>
@@ -346,7 +353,7 @@ async function shareCard(app, r) {
   } catch { /* icon without CORS: card still works */ }
   g.textAlign = "center"; g.fillStyle = "#eef3f1";
   g.font = "700 64px -apple-system, Inter, system-ui"; g.fillText(app.name ?? "", 540, 580);
-  g.font = "900 300px -apple-system, Inter, system-ui"; g.fillStyle = "#00d084"; g.fillText(`#${r.rank}`, 540, 900);
+  g.font = "900 300px -apple-system, Inter, system-ui"; g.fillStyle = "#00F19F"; g.fillText(`#${r.rank}`, 540, 900);
   g.fillStyle = "#eef3f1"; g.font = "600 58px -apple-system, Inter, system-ui";
   g.fillText(`${flag(r.cc)} ${countryName(r.cc)}`, 540, 1010);
   g.fillStyle = "#8a9a95"; g.font = "500 44px -apple-system, Inter, system-ui";
@@ -418,7 +425,7 @@ async function tabStart(el) {
   const s = await api(`/v1/projects/${state.projectId}/setup`);
   const groups = [...new Set(s.steps.map(x => x.group))];
   const pctDone = Math.round(s.progress * 100);
-  el.innerHTML = `<div class="card section"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${pctDone === 100 ? "✅ Tout est branché" : "Mise en route"}</h2><b style="flex:0">${pctDone} %</b></div>
+  el.innerHTML = `<div class="card section"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${pctDone === 100 ? "✅ Tout est branché" : "Mise en route"}</h2><b style="flex:none;white-space:nowrap">${pctDone} %</b></div>
     <div class="bar"><div style="width:${pctDone}%"></div></div>
     <p class="muted">Chaque étape se coche toute seule dès que MoneyMaker détecte qu'elle fonctionne. ${s.next ? "Prochaine étape surlignée." : "Les étapes bonus restent optionnelles."} <a href="/guide" target="_blank">Guide pas à pas →</a></p></div>
     ${groups.map(g => `<h3 style="margin:18px 0 8px">${esc(g)}</h3>${s.steps.filter(x => x.group === g).map(x => `<div class="card step ${x.id === s.next ? "next" : ""} ${x.done ? "done" : ""}">
@@ -823,17 +830,42 @@ async function assistantCard(el, { banner = false } = {}) {
 }
 
 // ── Account / tokens ────────────────────────────────────────────────────
-async function renderAccount(main) {
-  main.innerHTML = `<div class="head"><div><h1>Compte & accès</h1><p class="muted">${esc(auth.currentUser.email ?? auth.currentUser.uid)}</p></div></div>
-  <div class="card section" id="proCard"></div>
-  <div class="card section" id="assistants"></div>
-  <div class="card section"><h2>Jeton personnel (app iPhone, widgets, agents, scripts)</h2>
-    <p class="muted">Un jeton <code>mm_pat_</code> lit tous tes business. Colle-le dans l'app MoneyMaker sur iPhone pour les widgets, ou donne-le à ton agent pour qu'il crée et configure des projets.</p>
-    <div class="row"><input id="label" placeholder="Nom du jeton (ex. iPhone)"><button class="primary" style="flex:0;white-space:nowrap" id="mk">Créer un jeton</button></div><div id="tok" style="margin-top:12px"></div></div>
-  <div class="card section"><h2>Export comptable</h2>
-    <p class="muted">CSV du mois pour ton comptable : chaque transaction avec TVA, HT, commissions stores, frais Stripe et net, plus un récapitulatif par pays (déclaration TVA OSS).</p>
-    <div class="row"><input id="exportMonth" type="month" value="${new Date(Date.now() - 20 * 864e5).toISOString().slice(0, 7)}"><button class="primary" style="flex:0;white-space:nowrap" id="exportCsv">Télécharger le CSV</button></div></div>
-  <div class="card"><h2>API</h2><p class="muted">Base URL :</p>${copyRow(location.origin + "/v1")}<p><a href="/guide">Guide pas à pas</a> · <a href="/docs">Référence API</a> · <a href="/llms.txt">llms.txt (pour agents)</a></p></div>`;
+const setRow = (icon, title, right, attrs = "", tag = "div") => `<${tag} class="set-row ${attrs ? "" : "static"}" ${attrs}><span class="i">${ic(icon, 19)}</span><span class="tt">${title}</span><span class="tr">${right}</span></${tag}>`;
+const linkRow = (icon, title, href) => setRow(icon, title, `<span class="chev">${ic("right", 12)}</span>`, `href="${href}" style="text-decoration:none;color:inherit"`, "a");
+const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "CAD", "AUD", "JPY", "BRL"];
+function pref(key) { try { return localStorage.getItem(key); } catch { return null; } }
+function setPref(key, v) { try { v == null ? localStorage.removeItem(key) : localStorage.setItem(key, v); } catch {} }
+async function renderSettings(main) {
+  const user = auth.currentUser, n = state.projects.length, openAs = pref("mmOpenAs") === '"customer"' ? "customer" : "transaction";
+  main.innerHTML = `<div class="page">
+    <div style="display:flex;align-items:center;gap:12px"><button class="back glass" id="setBack" aria-label="Retour">${ic("left", 19)}</button><div class="page-title">Réglages</div></div>
+    <div class="set-cols"><div class="set-card"><div class="acc-card"><img src="/logo.png" alt=""><div style="min-width:0"><b>${esc(user.email ?? user.uid)}</b><i>${n} business suivi${n > 1 ? "s" : ""}</i></div></div></div>
+    <div id="proCard"></div>
+    <div><p class="set-title">Date et région</p><div class="set-card">
+      ${setRow("euro", "Devise d'affichage", `<select id="setCur" aria-label="Devise d'affichage"><option value="">Automatique</option>${CURRENCIES.map(c => `<option ${pref("mmCurrency") === c ? "selected" : ""}>${c}</option>`).join("")}</select>`)}
+      ${setRow("clock", "Heures", `<select id="setTz" aria-label="Fuseau des heures"><option value="">Locales</option><option value="1" ${pref("mmUTC") ? "selected" : ""}>UTC</option></select>`)}</div></div>
+    <div><p class="set-title">Transactions</p><div class="set-card">
+      ${setRow("bolt", "Ouvrir une vente", `<select id="setOpen" aria-label="Ouvrir une vente"><option value="transaction">Transaction</option><option value="customer" ${openAs === "customer" ? "selected" : ""}>Client</option></select>`)}</div></div>
+    <div><p class="set-title">Finances</p><div class="set-card set-pane">
+      <p class="muted" style="margin:0 0 12px;font-size:14px">CSV du mois pour ton comptable : chaque transaction avec TVA, HT, commissions stores, frais Stripe et net, plus un récapitulatif par pays (déclaration TVA OSS).</p>
+      <div class="row"><input id="exportMonth" type="month" value="${new Date(Date.now() - 20 * 864e5).toISOString().slice(0, 7)}"><button class="primary" style="flex:0;white-space:nowrap" id="exportCsv">Télécharger le CSV</button></div></div></div>
+    <div><p class="set-title">Assistant</p><div class="set-card set-pane" id="assistants"></div></div>
+    <div><p class="set-title">Jeton personnel</p><div class="set-card set-pane">
+      <p class="muted" style="margin:0 0 12px;font-size:14px">Un jeton <code>mm_pat_</code> lit tous tes business. Colle-le dans l'app MoneyMaker sur iPhone pour les widgets, ou donne-le à ton agent pour qu'il crée et configure des projets.</p>
+      <div class="row"><input id="label" placeholder="Nom du jeton (ex. iPhone)"><button class="primary" style="flex:0;white-space:nowrap" id="mk">Créer un jeton</button></div><div id="tok" style="margin-top:12px"></div></div></div>
+    <div><p class="set-title">API</p><div class="set-card"><div class="set-pane" style="padding-bottom:6px"><p class="muted" style="margin:0 0 8px;font-size:14px">Base URL</p>${copyRow(location.origin + "/v1")}</div>
+      ${linkRow("doc", "Guide pas à pas", "/guide")}${linkRow("key", "Référence API", "/docs")}${linkRow("sparkles", "llms.txt (pour agents)", "/llms.txt")}</div></div>
+    <div><p class="set-title">Assistance</p><div class="set-card">${linkRow("life", "Aide et contact", "/support")}${linkRow("doc", "Conditions d'utilisation", "/terms")}${linkRow("shield", "Confidentialité", "/privacy")}</div></div></div>
+    <button class="set-danger" id="logout">${ic("logout", 18)} Se déconnecter</button>
+    <button class="set-link" id="delAccount">Supprimer mon compte</button>
+  </div>`;
+  $("#setBack").onclick = back;
+  $("#logout").onclick = () => signOut(auth);
+  $("#delAccount").onclick = deleteAccountDialog;
+  const refresh = () => { invalidateStore(); };
+  $("#setCur").onchange = e => { setPref("mmCurrency", e.target.value || null); refresh(); };
+  $("#setTz").onchange = e => { setPref("mmUTC", e.target.value || null); refresh(); };
+  $("#setOpen").onchange = e => setPref("mmOpenAs", JSON.stringify(e.target.value));
   $("#exportCsv").onclick = async () => {
     const month = $("#exportMonth").value;
     const res = await fetch(`/v1/finance/export?month=${encodeURIComponent(month)}`, { headers: { Authorization: `Bearer ${await auth.currentUser.getIdToken()}` } });
@@ -844,21 +876,29 @@ async function renderAccount(main) {
   proCard($("#proCard"));
   $("#mk").onclick = async () => { const r = await api("/v1/tokens", { method: "POST", body: { label: $("#label").value || "token" } }); $("#tok").innerHTML = `<p class="muted">Affiché une seule fois :</p>${copyRow(r.token)}`; };
 }
+function deleteAccountDialog() {
+  openModal(`<h2>Supprimer mon compte ?</h2><p class="muted">Ton compte, tes jetons et les business dont tu es le seul membre (données de ventes, clés, réglages) seront supprimés. C'est irréversible.</p>
+    <div class="field"><label>Écris SUPPRIMER pour confirmer</label><input id="delConfirm" autocomplete="off"></div>
+    <div class="row" style="margin-top:14px"><button value="cancel">Annuler</button><button type="button" class="danger" id="delGo">Supprimer</button></div>`);
+  $("#delGo").onclick = async () => {
+    if ($("#delConfirm").value.trim() !== "SUPPRIMER") return toast("Écris SUPPRIMER pour confirmer");
+    $("#delGo").disabled = true;
+    try { await api("/v1/account", { method: "DELETE", body: { confirm: "SUPPRIMER" } }); $("#modal").close(); await signOut(auth); }
+    catch (e) { $("#delGo").disabled = false; toast(e.message); }
+  };
+}
 
-/** Pro est attaché au compte : acheté sur le web ou dans l'app iPhone, il est actif aux deux endroits. */
 async function proCard(el) {
   const b = await api("/v1/billing").catch(() => null);
   if (!b || (!b.pro && !b.available)) return el.remove();
   const where = { stripe: "sur le web", app_store: "dans l'app iPhone", granted: "offert" };
   const origin = (b.sources ?? []).map(s => where[s] ?? s).join(" et ");
-  el.innerHTML = b.pro
-    ? `<h2>MoneyMaker Pro · actif</h2><p class="muted">Business illimités, à vie, ici et dans l'app iPhone.${origin ? ` Acheté ${esc(origin)}.` : ""}</p>`
-    : `<h2>MoneyMaker Pro</h2><p class="muted">Le plan gratuit inclut ${b.freeProjects} business. Pro (29 €, une fois) les débloque tous, ici et dans l'app iPhone.</p>
-      <div class="row"><button class="primary" style="flex:0;white-space:nowrap" id="proBuy">Passer à Pro</button></div>`;
+  el.innerHTML = `<p class="set-title">MoneyMaker Pro</p><div class="set-card">${b.pro
+    ? setRow("crown", "Pro à vie", "Actif")
+    : setRow("crown", "Business illimités", `<span class="set-badge">29 € À VIE</span><span class="chev">${ic("right", 12)}</span>`, 'id="proBuy" role="button" tabindex="0"')}</div>
+    <p class="set-foot">${b.pro ? `Business illimités, à vie, ici et dans l'app iPhone.${origin ? ` Acheté ${esc(origin)}.` : ""}` : `Le plan gratuit inclut ${b.freeProjects} business. Paiement unique, sans abonnement.`}</p>`;
   if (!b.pro) $("#proBuy").onclick = () => proDialog(b);
 }
-
-// ── Modals ──────────────────────────────────────────────────────────────
 function openModal(html) { $("#modalBody").innerHTML = html; if (!$("#modal").open) $("#modal").showModal(); }
 /** MoneyMaker Pro : 29 € une fois, business illimités. Le plan gratuit en compte un. */
 function proDialog(b) {
@@ -988,17 +1028,22 @@ async function ltvSection(box) {
 async function tabCharts(el) {
   const c = (state.chart ??= { name: "mrr", days: 90, resolution: "day", store: "", country: "", product: "" }), cur = state.projects.find(p => p.id === state.projectId)?.config?.currency ?? "EUR";
   const opt = (v, l, sel) => `<option value="${esc(v)}" ${v === sel ? "selected" : ""}>${esc(l)}</option>`;
-  el.innerHTML = `<div class="card section"><div class="row" style="flex-wrap:wrap;gap:8px;align-items:end">
-      <div class="field" style="min-width:220px"><label>Graphique</label><select id="chName">${Object.entries(CHARTS).map(([k, [l]]) => opt(k, l, c.name)).join("")}</select></div>
-      <div class="field"><label>Période</label><select id="chDays">${[[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "12 mois"], [730, "24 mois"]].map(([v, l]) => opt(String(v), l, String(c.days))).join("")}</select></div>
-      <div class="field"><label>Résolution</label><select id="chRes">${[["day", "Jour"], ["week", "Semaine"], ["month", "Mois"]].map(([v, l]) => opt(v, l, c.resolution)).join("")}</select></div>
-      <div class="field"><label>Store</label><select id="chStore">${[["", "Tous"], ["app_store", "App Store"], ["play_store", "Google Play"], ["stripe", "Stripe"], ["paddle", "Paddle"], ["amazon", "Amazon"], ["galaxy", "Galaxy Store"], ["roku", "Roku"]].map(([v, l]) => opt(v, l, c.store)).join("")}</select></div>
-      <div class="field"><label>Pays</label><input id="chCountry" maxlength="2" placeholder="FR" value="${esc(c.country)}" style="width:70px"></div>
-      <div class="field"><label>Produit</label><input id="chProduct" placeholder="tous" value="${esc(c.product)}"></div>
-      <button id="chCsv" class="small">⬇︎ CSV</button></div></div><div id="chOut"><div class="empty">Chargement…</div></div><div id="benchOut" class="card section"></div><div id="ltvOut" class="card section"></div>`;
+  el.innerHTML = `<div class="chips">${Object.entries(CHARTS).map(([k, [l]]) => `<button class="${k === c.name ? "on" : ""}" data-ch="${k}">${esc(l)}</button>`).join("")}</div>
+    <div class="range glass" style="max-width:none;width:100%">${[[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "1 an"], [730, "2 ans"]].map(([v, l]) => `<button style="flex:1;padding:0 4px" class="${v === c.days ? "on" : ""}" data-chd="${v}">${l}</button>`).join("")}</div>
+    <div id="chOut"><div class="skeleton" style="height:320px"></div></div>
+    <details class="card"><summary class="muted" style="cursor:pointer">Filtres et export</summary><div class="grid2" style="grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+      <div class="field" style="margin:0"><label>Résolution</label><select id="chRes">${[["day", "Jour"], ["week", "Semaine"], ["month", "Mois"]].map(([v, l]) => opt(v, l, c.resolution)).join("")}</select></div>
+      <div class="field" style="margin:0"><label>Store</label><select id="chStore">${[["", "Tous"], ["app_store", "App Store"], ["play_store", "Google Play"], ["stripe", "Stripe"], ["paddle", "Paddle"], ["amazon", "Amazon"], ["galaxy", "Galaxy Store"], ["roku", "Roku"]].map(([v, l]) => opt(v, l, c.store)).join("")}</select></div>
+      <div class="field" style="margin:0"><label>Pays</label><input id="chCountry" maxlength="2" placeholder="FR" value="${esc(c.country)}"></div>
+      <div class="field" style="margin:0"><label>Produit</label><input id="chProduct" placeholder="tous" value="${esc(c.product)}"></div></div>
+      <button id="chCsv" class="small" style="margin-top:12px">Télécharger le CSV</button></details>
+    <div id="benchOut" class="card"></div><div id="ltvOut" class="card"></div>`;
+  el.querySelector(".chips .on")?.scrollIntoView({ block: "nearest", inline: "center" });
+  el.querySelectorAll("[data-ch]").forEach(b => b.onclick = () => { c.name = b.dataset.ch; tabCharts(el); });
+  el.querySelectorAll("[data-chd]").forEach(b => b.onclick = () => { c.days = Number(b.dataset.chd); tabCharts(el); });
   benchmarksSection($("#benchOut")).catch(e => $("#benchOut").innerHTML = `<div class="empty error">${esc(e.message)}</div>`);
   ltvSection($("#ltvOut")).catch(e => $("#ltvOut").innerHTML = `<div class="empty error">${esc(e.message)}</div>`);
-  const read = () => Object.assign(c, { name: $("#chName").value, days: Number($("#chDays").value), resolution: $("#chRes").value, store: $("#chStore").value, country: $("#chCountry").value.trim().toUpperCase(), product: $("#chProduct").value.trim() });
+  const read = () => Object.assign(c, { resolution: $("#chRes").value, store: $("#chStore").value, country: $("#chCountry").value.trim().toUpperCase(), product: $("#chProduct").value.trim() });
   const qs = (extra = {}) => new URLSearchParams(Object.fromEntries(Object.entries({ days: c.days, resolution: c.resolution, store: c.store, country: c.country, product: c.product, ...extra }).filter(([, v]) => v !== "" && v != null))).toString();
   el.querySelectorAll("select, input").forEach(i => i.onchange = () => { read(); tabCharts(el); });
   $("#chCsv").onclick = async () => {
@@ -1014,11 +1059,12 @@ async function tabCharts(el) {
   const [label, kind] = CHARTS[c.name];
   const sum = Object.entries(r.summary ?? {}).filter(([k, v]) => typeof v === "number" && !/^p\d+$/.test(k));
   const sumFmt = (k, v) => k === "value" ? fmt(v) : /^(revenue|refunds|amount|net)$/.test(k) || (r.unit === "micros" && ["new", "reactivated", "churned"].includes(k)) ? money(v, currency) : new Intl.NumberFormat("fr-FR").format(v);
-  const kpis = `<div class="kpis">${sum.slice(0, 6).map(([k, v]) => kpi(k === "value" ? label : (MOVE_LABEL[k] ?? k), sumFmt(k, v))).join("")}</div>`;
+  const kpis = `<div class="kpis">${sum.filter(([k]) => k !== "value").slice(0, 6).map(([k, v]) => kpi(MOVE_LABEL[k] ?? k, sumFmt(k, v))).join("")}</div>`;
+  const values = r.series.map(p => p.value).filter(v => v != null), heroValue = r.summary?.value ?? values.at(-1);
   let body;
   if (kind === "retention") {
     const ks = Object.keys(r.series[0] ?? {}).filter(k => /^p\d+$/.test(k));
-    const cell = v => v == null ? "<td></td>" : `<td style="text-align:center;background:rgba(0,208,132,${(v * 0.85).toFixed(2)});color:${v > .45 ? "#001a10" : "inherit"}">${Math.round(v * 100)}%</td>`;
+    const cell = v => v == null ? "<td></td>" : `<td style="text-align:center;background:rgba(0,241,159,${(v * 0.85).toFixed(2)});color:${v > .45 ? "#001a10" : "inherit"}">${Math.round(v * 100)}%</td>`;
     body = r.series.length ? `<div style="overflow-x:auto"><table><thead><tr><th>Cohorte</th><th>Abonnés</th>${ks.map(k => `<th style="text-align:center">M${k.slice(1)}</th>`).join("")}</tr></thead>
       <tbody>${r.series.map(p => `<tr><td>${esc(p.date.slice(0, 7))}</td><td>${p.size}</td>${ks.map(k => cell(p[k])).join("")}</tr>`).join("")}</tbody></table></div>` : `<div class="empty">Aucune cohorte sur la période.</div>`;
   } else if (kind === "funnel") {
@@ -1031,9 +1077,10 @@ async function tabCharts(el) {
   } else {
     body = lineChart(r.series.filter(p => p.value != null).map(p => ({ label: p.date, v: p.value })), currency, undefined, fmt);
   }
-  $("#chOut").innerHTML = `${kpis}<div class="card section"><h2>${esc(label)}</h2>${r.note ? `<p class="muted">${esc(r.note)}</p>` : ""}${body}
+  $("#chOut").innerHTML = `<div class="card glow" style="padding:20px;margin-bottom:12px"><div class="mlabel"><span>${esc(label)}</span><span>par ${{ day: "jour", week: "semaine", month: "mois" }[c.resolution]}</span></div>
+    ${heroValue != null ? `<div class="hero-val" style="margin-bottom:10px"><b style="font-size:44px">${fmt(heroValue)}</b>${values.length > 1 ? deltaBadge(halfOverHalf(values)) : ""}</div>` : ""}${r.note ? `<p class="muted" style="font-size:13px">${esc(r.note)}</p>` : ""}${body}
     <details style="margin-top:10px"><summary class="muted">Données</summary><div style="overflow-x:auto"><table><thead><tr>${Object.keys(r.series[0] ?? { date: 1, value: 1 }).map(k => `<th>${esc(k)}</th>`).join("")}</tr></thead>
-    <tbody>${r.series.slice().reverse().map(p => `<tr>${Object.entries(p).map(([k, v]) => `<td>${k === "date" ? esc(v) : k === "value" ? fmt(v) : esc(v ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div></details></div>`;
+    <tbody>${r.series.slice().reverse().map(p => `<tr>${Object.entries(p).map(([k, v]) => `<td>${k === "date" ? esc(v) : k === "value" ? fmt(v) : esc(v ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div></details></div>${kpis}`;
 }
 
 // ── Équipe : membres, rôles, invitations, journal ─────────────────────────
@@ -1057,7 +1104,7 @@ async function teamSection(box) {
   box.querySelectorAll("[data-remove]").forEach(b => b.onclick = async () => {
     const self = b.dataset.remove === me;
     if (!confirm(self ? "Quitter ce business ?" : "Retirer ce membre ?")) return;
-    try { await api(`/v1/projects/${pid}/members/${b.dataset.remove}`, { method: "DELETE" }); if (self) { await loadProjects(); return go({ view: "overview", projectId: null }); } reload(); } catch (e) { toast(e.message); }
+    try { await api(`/v1/projects/${pid}/members/${b.dataset.remove}`, { method: "DELETE" }); if (self) { await loadProjects(); return go({ view: "home", projectId: null }); } reload(); } catch (e) { toast(e.message); }
   });
   box.querySelectorAll("[data-copyinv]").forEach(b => b.onclick = () => copy(b.dataset.copyinv));
   box.querySelectorAll("[data-revoke]").forEach(b => b.onclick = async () => { try { await api(`/v1/projects/${pid}/invites/${b.dataset.revoke}`, { method: "DELETE" }); reload(); } catch (e) { toast(e.message); } });
@@ -1086,3 +1133,6 @@ async function acceptPendingInvite() {
     history.replaceState(null, "", `#${r.projectId}/metrics`);
   } catch (e) { toast(`Invitation : ${e.message}`); }
 }
+
+initScreens({ api, state, go, back, toast, openModal, newProjectDialog, assistantCard, countryName, alertRow, openProject });
+markReady();
