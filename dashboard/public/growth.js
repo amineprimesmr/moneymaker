@@ -117,12 +117,12 @@ export async function tabGrowth(el, h) {
     q("#pwPreview").innerHTML = `<div style="position:relative;max-width:320px;margin:0 auto;border-radius:36px;border:8px solid #222;background:${col.background};color:${col.text};padding:28px 18px 18px;min-height:520px;display:flex;flex-direction:column;gap:12px;font-family:-apple-system,system-ui,sans-serif">
       ${c.showCloseButton ? `<span style="position:absolute;top:12px;right:16px;opacity:${c.closeDelay ? .35 : .8}" title="${c.closeDelay ? `visible après ${c.closeDelay} s` : ""}">✕</span>` : ""}
       ${!minimal && c.heroImage ? `<img src="${esc(c.heroImage)}" style="width:100%;max-height:150px;object-fit:cover;border-radius:16px">` : ""}
-      ${t.title ? `<div style="font-size:24px;font-weight:800;text-align:center">${esc(t.title)}</div>` : ""}
-      ${t.subtitle ? `<div style="opacity:.75;text-align:center">${esc(t.subtitle)}</div>` : ""}
+      ${t.title ? `<div style="font-size:24px;font-weight:800;text-align:center"><bdi>${esc(t.title)}</bdi></div>` : ""}
+      ${t.subtitle ? `<div style="opacity:.75;text-align:center"><bdi>${esc(t.subtitle)}</bdi></div>` : ""}
       ${!minimal ? (t.features ?? []).map(f => `<div style="display:flex;gap:10px"><span style="color:${col.accent}">●</span><span>${esc(f.text)}</span><span style="opacity:.4;font-size:11px;margin-left:auto">${esc(f.icon ?? "")}</span></div>`).join("") : ""}
       <div style="display:flex;${cards ? "flex-direction:row;overflow-x:auto" : "flex-direction:column"};gap:8px;margin-top:auto">${pkgHtml}</div>
       <div style="background:${col.accent};color:#000;border-radius:14px;padding:14px;text-align:center;font-weight:700">${esc(t.cta || "Continuer")}</div>
-      <div style="display:flex;gap:12px;justify-content:center;font-size:11px;opacity:.7"><span>Restaurer</span>${(t.footerLinks ?? []).map(l => `<span>${esc(l.title)}</span>`).join("")}</div></div>`;
+      <div style="display:flex;gap:12px;justify-content:center;font-size:11px;opacity:.7"><span>Restaurer</span>${(t.footerLinks ?? []).map(l => `<span><bdi>${esc(l.title)}</bdi></span>`).join("")}</div></div>`;
   };
   el.querySelectorAll("#pwOff").forEach(s => s.onchange = fill);
   qa("#pwTpl,#pwTitle,#pwSub,#pwFeat,#pwHero,#pwBg,#pwAcc,#pwTxt,#pwCta,#pwClose,#pwDelay,#pwLinks,#pwLoc,#pwLang").forEach(i => i.oninput = i.onchange = preview);
@@ -199,7 +199,7 @@ export async function tabGrowth(el, h) {
   const statusPill = s => `<span class="pill ${s === "running" ? "ok" : s === "stopped" ? "" : "warn"}">${{ draft: "brouillon", running: "en cours", stopped: "terminée" }[s]}</span>`;
   const renderExps = () => {
     q("#exps").innerHTML = experiments.length ? `<table><thead><tr><th>Expérience</th><th>Placement</th><th>Variantes</th><th>Statut</th><th>Début</th><th></th></tr></thead><tbody>${experiments.map((e, i) => `<tr>
-      <td><b>${esc(e.name)}</b><div class="muted mono">${esc(e.id)}</div></td><td>${esc(e.placement ?? "default")}</td>
+      <td><b><bdi>${esc(e.name)}</bdi></b><div class="muted mono">${esc(e.id)}</div></td><td>${esc(e.placement ?? "default")}</td>
       <td>${e.variants.map(v => `${esc(v.id)} → <span class="mono">${esc(v.offeringId)}</span> (${v.weight})`).join("<br>")}</td>
       <td>${statusPill(e.status)}</td><td>${h.date(e.startedAt)}</td>
       <td style="white-space:nowrap">${e.status === "draft" ? `<button class="small primary" data-exgo="${i}">Lancer</button> <button class="small danger" data-exrm="${i}">Supprimer</button>` : ""}
@@ -218,7 +218,7 @@ export async function tabGrowth(el, h) {
     try {
       const r = await api(`/v1/projects/${projectId}/experiments/${encodeURIComponent(id)}/results`);
       const best = Math.max(...r.variants.map(v => v.probabilityToBeBest));
-      box.innerHTML = `<h3 style="margin-top:16px">Résultats — ${esc(r.experiment.name)}</h3><table><thead><tr><th>Variante</th><th>Offre</th><th>Inscrits</th><th>Affichages</th><th>Conversions</th><th>Taux</th><th>Revenu</th><th>ARPU</th><th>Proba. meilleure</th></tr></thead><tbody>${r.variants.map(v => `<tr>
+      box.innerHTML = `<h3 style="margin-top:16px">Résultats — <bdi>${esc(r.experiment.name)}</bdi></h3><table><thead><tr><th>Variante</th><th>Offre</th><th>Inscrits</th><th>Affichages</th><th>Conversions</th><th>Taux</th><th>Revenu</th><th>ARPU</th><th>Proba. meilleure</th></tr></thead><tbody>${r.variants.map(v => `<tr>
         <td><b>${esc(v.id)}</b></td><td class="mono">${esc(v.offeringId)}</td><td>${v.enrolled}</td><td>${v.impressions}</td><td>${v.conversions}</td>
         <td>${h.pct(v.conversionRate)}</td><td>${h.money(v.revenueMicros, r.currency)}</td><td>${h.money(v.arpuMicros, r.currency)}</td>
         <td>${v.probabilityToBeBest === best && best >= 0.95 ? `<span class="pill ok">${h.pct(v.probabilityToBeBest)}</span>` : h.pct(v.probabilityToBeBest)}</td></tr>`).join("")}</tbody></table>

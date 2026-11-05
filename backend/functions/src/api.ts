@@ -1702,7 +1702,10 @@ route("GET", "/v1/charts", async () => ({ charts: CHART_NAMES }));
 route("GET", "/v1/projects/:pid/charts/:name", async (req, res, [pid, name]) => {
   const project = await projectFor(await authenticate(req), pid);
   const csvOut = /\.csv$/.test(name) || req.query.format === "csv";
-  if (!csvOut) return widgetCached(req.headers["user-agent"], `chart|${project.id}|${req.originalUrl}`, () => projectChart(project, name, req.query as Record<string, unknown>));
+  if (!csvOut) {
+    const chart = await widgetCached(req.headers["user-agent"], `chart|${project.id}|${req.originalUrl}`, () => projectChart(project, name, req.query as Record<string, unknown>));
+    return chart.note ? { ...chart, note: errorMessage(chart.note, req.get("accept-language")) } : chart;
+  }
   const chart = await projectChart(project, name.replace(/\.csv$/, ""), req.query as Record<string, unknown>);
   res.set("Content-Type", "text/csv; charset=utf-8");
   res.set("Content-Disposition", `attachment; filename="${project.name}-${chart.name}.csv"`);

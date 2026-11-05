@@ -1067,5 +1067,8 @@
 "https://monapp.com": "https://myapp.com",
 "GCS : compte de service {\"type\":\"service_account\",…}": "GCS: service account {\"type\":\"service_account\",…}",
 "Écris {0} pour confirmer": "Type {0} to confirm",
-"1 an": "1 year"
+"1 an": "1 year",
+"3 mois": "3 months",
+"6 mois": "6 months",
+"30 derniers jours : {0} affichages · {1} achats · {2} fermetures{3}": "Last 30 days: {0} views · {1} purchases · {2} dismissals{3}"
 }

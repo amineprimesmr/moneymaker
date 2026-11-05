@@ -165,7 +165,7 @@ async function renderProject(main) {
   const o = allProjects().find(x => x.projectId === state.projectId) ?? { projectId: state.projectId, name: p?.name, stores: [] };
   const admin = ["settings", "connect", "start"].includes(state.tab);
   main.innerHTML = `<div class="page wide"><div class="dt-top"><button class="back glass" id="bzBack" aria-label="Retour">${ic("left", 19)}</button>${["metrics", "map"].includes(state.tab) ? daysPicker() : ""}</div>
-    <div class="bz-head">${projectIcon(o, 56)}<div style="min-width:0"><h1 class="page-title">${esc(p?.name)}</h1><div class="sb">${storeBadges(o.stores, 14)}</div>${admin ? `<div class="muted mono" style="font-size:12px;margin-top:4px">${esc(state.projectId)}</div>` : ""}</div></div>
+    <div class="bz-head">${projectIcon(o, 56)}<div style="min-width:0"><h1 class="page-title"><bdi>${esc(p?.name)}</bdi></h1><div class="sb">${storeBadges(o.stores, 14)}</div>${admin ? `<div class="muted mono" style="font-size:12px;margin-top:4px">${esc(state.projectId)}</div>` : ""}</div></div>
     <div class="chips">${Object.entries(TABS).map(([k, v]) => `<button class="${state.tab === k ? "on" : ""}" data-tab="${k}">${v}</button>`).join("")}</div><div id="tab" style="display:flex;flex-direction:column;gap:12px"></div></div>`;
   $("#bzBack").onclick = back;
   document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => go({ tab: b.dataset.tab }));
@@ -296,8 +296,8 @@ async function tabAppStore(el) {
   el.innerHTML = `<div class="row section"><input id="q" placeholder="Ajouter une app : nom ou identifiant App Store (la tienne ou un concurrent)…"><button class="primary" style="flex:0" id="search">Chercher</button>
     ${apps.length ? `<button style="flex:0;white-space:nowrap" id="refresh">↻ Scanner</button>` : ""}</div><div id="results"></div>
     ${apps.length ? apps.map(a => `<div class="card section">
-      <div class="row" style="align-items:center;gap:14px"><img src="${esc(a.icon ?? "")}" alt="" class="appicon"><div style="flex:1"><h2 style="margin:0">${esc(a.name ?? a.appId)} ${a.own === false ? '<span class="pill">concurrent</span>' : ""}</h2>
-        <p class="muted" style="margin:2px 0">${esc(a.developer ?? "")} · ${esc(a.genreName ?? "")} · ${a.rating ? "★ " + a.rating.toFixed(2) + " (" + (a.ratingCount ?? 0).toLocaleString(MM_LOCALE) + " notes)" : "pas encore de notes"}</p></div>
+      <div class="row" style="align-items:center;gap:14px"><img src="${esc(a.icon ?? "")}" alt="" class="appicon"><div style="flex:1"><h2 style="margin:0"><bdi>${esc(a.name ?? a.appId)}</bdi> ${a.own === false ? '<span class="pill">concurrent</span>' : ""}</h2>
+        <p class="muted" style="margin:2px 0"><bdi>${esc(a.developer ?? "")}</bdi> · ${esc(a.genreName ?? "")} · ${a.rating ? "★ " + a.rating.toFixed(2) + " (" + (a.ratingCount ?? 0).toLocaleString(MM_LOCALE) + " notes)" : "pas encore de notes"}</p></div>
         <div style="text-align:right;flex:0;white-space:nowrap"><div class="v" style="font-size:24px;font-weight:750">${a.countriesRanked ?? 0}</div><div class="muted small">pays classés</div></div>
         <div style="text-align:right;flex:0;white-space:nowrap"><div class="v" style="font-size:24px;font-weight:750">${a.bestRank ? "#" + a.bestRank : "—"}</div><div class="muted small">meilleur rang</div></div></div>
       <div class="row" style="margin-top:12px;flex-wrap:wrap;gap:6px">${(a.topRankings ?? []).map(r => `<span class="pill ok">${flag(r.cc)} #${r.rank} ${CHART[r.chart]}${r.scope === "genre" ? " · catégorie" : ""}${r.prevRank && r.prevRank !== r.rank ? (r.prevRank > r.rank ? " ▲" + (r.prevRank - r.rank) : " ▼" + (r.rank - r.prevRank)) : ""}</span>`).join("") || '<span class="muted">Pas encore classée — le scan tourne toutes les heures (25 grands marchés) et couvre les 177 pays en 6 h.</span>'}</div>
@@ -308,7 +308,7 @@ async function tabAppStore(el) {
   $("#search").onclick = async () => {
     const term = $("#q").value.trim(); if (!term) return;
     const results = /^\d{6,}$/.test(term) ? [{ appId: term, name: `App ${term}` }] : (await api(`/v1/appstore/search?term=${encodeURIComponent(term)}&country=${MM_LANG === "fr" ? "fr" : "us"}`)).results;
-    $("#results").innerHTML = `<div class="card section"><table>${results.map(r => `<tr><td style="width:44px">${r.icon ? `<img src="${esc(r.icon)}" class="appicon sm" alt="">` : ""}</td><td><b>${esc(r.name)}</b><div class="muted">${esc(r.developer ?? "")} · ${esc(r.genreName ?? "")}</div></td>
+    $("#results").innerHTML = `<div class="card section"><table>${results.map(r => `<tr><td style="width:44px">${r.icon ? `<img src="${esc(r.icon)}" class="appicon sm" alt="">` : ""}</td><td><b><bdi>${esc(r.name)}</bdi></b><div class="muted"><bdi>${esc(r.developer ?? "")}</bdi> · ${esc(r.genreName ?? "")}</div></td>
       <td style="text-align:right;white-space:nowrap"><button class="small primary" data-add="${esc(r.appId)}" data-own="1">C'est mon app</button> <button class="small" data-add="${esc(r.appId)}" data-own="0">Concurrent</button></td></tr>`).join("") || `<tr><td class="muted">Aucun résultat</td></tr>`}</table></div>`;
     document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => save([...tracked.filter(t => t.appId !== b.dataset.add), { appId: b.dataset.add, own: b.dataset.own === "1" }]));
   };
@@ -379,12 +379,12 @@ async function tabReviews(el) {
   ]);
   const app = apps.find(a => a.appId === state.reviewApp);
   const dist = [5, 4, 3, 2, 1].map(n => [n, reviews.filter(r => r.rating === n).length]);
-  el.innerHTML = `<div class="row section"><select id="rApp">${apps.map(a => `<option value="${esc(a.appId)}" ${a.appId === state.reviewApp ? "selected" : ""}>${esc(a.name ?? a.appId)}</option>`).join("")}</select>
+  el.innerHTML = `<div class="row section"><select id="rApp">${apps.map(a => `<option data-raw value="${esc(a.appId)}" ${a.appId === state.reviewApp ? "selected" : ""}>${esc(a.name ?? a.appId)}</option>`).join("")}</select>
     <select id="rCountry"><option value="">Tous les pays</option>${ratings.map(r => `<option value="${r.cc}" ${state.reviewCountry === r.cc ? "selected" : ""}>${flag(r.cc)} ${esc(countryName(r.cc))} (${r.count})</option>`).join("")}</select>
     <select id="rRating"><option value="">Toutes les notes</option>${[5, 4, 3, 2, 1].map(n => `<option value="${n}" ${String(state.reviewRating) === String(n) ? "selected" : ""}>${"★".repeat(n)}</option>`).join("")}</select></div>
     <div class="grid2 section"><div class="card"><h3>Notes par pays</h3><table>${ratings.slice(0, 12).map(r => `<tr><td>${flag(r.cc)} ${esc(countryName(r.cc))}</td><td>★ ${r.average?.toFixed(2) ?? "—"}</td><td style="text-align:right">${r.count.toLocaleString(MM_LOCALE)}</td></tr>`).join("") || `<tr><td class="muted">Pas encore de notes</td></tr>`}</table></div>
     <div class="card"><h3>Répartition (avis affichés)</h3>${dist.map(([n, c]) => `<div class="row" style="gap:8px;margin:4px 0"><span style="flex:0;width:60px">${"★".repeat(n)}</span><div style="flex:1;height:8px;background:var(--panel2);border-radius:4px"><div style="height:8px;border-radius:4px;background:var(--accent);width:${reviews.length ? (c / reviews.length * 100).toFixed(0) : 0}%"></div></div><span style="flex:0;width:32px;text-align:right">${c}</span></div>`).join("")}</div></div>
-    ${reviews.map(r => `<div class="card section review" data-id="${esc(r.id)}"><div class="row" style="justify-content:space-between"><b>${"★".repeat(r.rating)}<span class="muted">${"★".repeat(5 - r.rating)}</span> ${esc(r.title)}</b><span class="muted" style="flex:0;white-space:nowrap">${flag(r.country)} ${date(r.at)} · v${esc(r.version)}</span></div>
+    ${reviews.map(r => `<div class="card section review" data-id="${esc(r.id)}"><div class="row" style="justify-content:space-between"><b>${"★".repeat(r.rating)}<span class="muted">${"★".repeat(5 - r.rating)}</span> <bdi>${esc(r.title)}</bdi></b><span class="muted" style="flex:0;white-space:nowrap">${flag(r.country)} ${date(r.at)} · v${esc(r.version)}</span></div>
       <p class="rtext">${esc(r.content)}</p><div class="row" style="gap:6px;justify-content:space-between"><span class="muted">— ${esc(r.author)}</span><span class="row" style="flex:0;gap:6px"><button class="small" data-tr="${esc(r.id)}">Traduire</button><button class="small" data-sr="${esc(r.id)}">Partager</button></span></div></div>`).join("") || `<div class="card empty">Aucun avis récupéré pour ce filtre (scan toutes les 6 h).</div>`}`;
   $("#rApp").onchange = e => { state.reviewApp = e.target.value; state.reviewCountry = ""; tabReviews(el); };
   $("#rCountry").onchange = e => { state.reviewCountry = e.target.value; tabReviews(el); };
@@ -412,7 +412,7 @@ async function reviewCard(app, r, node) {
 }
 
 const ALERT = { NEW_COUNTRY: "🌍 Nouveau pays", TOP_100: "📈 Retour dans le top 100", TOP_10: "🏆 Top 10", TOP_1: "🥇 Numéro 1", JUMP: "🚀 Forte hausse", DROP: "📉 Forte baisse", LEFT_CHART: "Sortie du classement" };
-const alertRow = a => `<tr><td>${ALERT[a.type] ?? esc(a.type)}</td><td>${a.appIcon ? `<img src="${esc(a.appIcon)}" class="appicon xs" alt=""> ` : ""}${esc(a.appName ?? a.appId)}${a.own === false ? ' <span class="pill">concurrent</span>' : ""}${a.projectName ? ` <span class="muted">· ${esc(a.projectName)}</span>` : ""}</td>
+const alertRow = a => `<tr><td>${ALERT[a.type] ?? esc(a.type)}</td><td>${a.appIcon ? `<img src="${esc(a.appIcon)}" class="appicon xs" alt=""> ` : ""}<bdi>${esc(a.appName ?? a.appId)}</bdi>${a.own === false ? ' <span class="pill">concurrent</span>' : ""}${a.projectName ? ` <span class="muted">· <bdi>${esc(a.projectName)}</bdi></span>` : ""}</td>
   <td>${flag(a.cc)} ${esc(countryName(a.cc))}</td><td>${CHART[a.chart] ?? ""}${a.scope === "genre" ? " · catégorie" : ""}</td><td><b>${a.rank ? "#" + a.rank : "—"}</b>${a.prevRank ? ` <span class="muted">(avant #${a.prevRank})</span>` : ""}</td><td>${date(a.at)}</td></tr>`;
 async function tabAlerts(el) {
   const { alerts } = await api(`/v1/projects/${state.projectId}/alerts?limit=200`);
@@ -668,7 +668,7 @@ async function audiencesSection(box) {
   const opt = (v, l, sel) => `<option value="${esc(v)}" ${String(v) === String(sel ?? "") ? "selected" : ""}>${esc(l)}</option>`;
   const d = t => t ? new Date(t).toISOString().slice(0, 10) : "";
   box.innerHTML = `<h2>Audiences</h2>
-    ${audiences.length ? `<table><tbody>${audiences.map(a => `<tr><td><b>${esc(a.name)}</b> <span class="muted mono">${esc(a.id)}</span></td><td>${a.count ?? "—"} clients</td>
+    ${audiences.length ? `<table><tbody>${audiences.map(a => `<tr><td><b><bdi>${esc(a.name)}</bdi></b> <span class="muted mono">${esc(a.id)}</span></td><td>${a.count ?? "—"} clients</td>
       <td style="text-align:right"><button class="small" data-audload="${esc(a.id)}">Modifier</button> <button class="small" data-audcsv="${esc(a.id)}">⬇︎ CSV</button> <button class="small danger" data-auddel="${esc(a.id)}">Supprimer</button></td></tr>`).join("")}</tbody></table>` : `<p class="muted">Aucune audience. Compose des filtres, prévisualise, puis enregistre.</p>`}
     <div class="aud-form">
       <div class="field"><label>Statut</label><select data-af="status">${Object.entries(AUD_STATUS).map(([v, l]) => opt(v, l, f.status)).join("")}</select></div>
@@ -944,7 +944,7 @@ async function newProjectDialog() {
     const term = $("#pSearch").value.trim(); if (!term) return;
     const { results } = await api(`/v1/appstore/search?term=${encodeURIComponent(term)}&country=${MM_LANG === "fr" ? "fr" : "us"}`);
     $("#pResults").innerHTML = results.slice(0, 5).map(r => `<div class="row pick" data-app="${esc(r.appId)}" data-name="${esc(r.name)}" style="gap:10px;padding:8px;border-radius:10px;cursor:pointer;margin-top:6px">
-      <img src="${esc(r.icon)}" class="appicon sm" alt="" style="flex:0 0 40px"><div><b>${esc(r.name)}</b><div class="muted">${esc(r.developer)}</div></div></div>`).join("") || `<p class="muted">Aucun résultat — tu peux créer sans.</p>`;
+      <img src="${esc(r.icon)}" class="appicon sm" alt="" style="flex:0 0 40px"><div><b><bdi>${esc(r.name)}</bdi></b><div class="muted"><bdi>${esc(r.developer)}</bdi></div></div></div>`).join("") || `<p class="muted">Aucun résultat — tu peux créer sans.</p>`;
     document.querySelectorAll(".pick").forEach(el => el.onclick = () => {
       document.querySelectorAll(".pick").forEach(x => x.classList.remove("picked")); el.classList.add("picked");
       appId = el.dataset.app; if (!$("#pName").value) $("#pName").value = el.dataset.name;

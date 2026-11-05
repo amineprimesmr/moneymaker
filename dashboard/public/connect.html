@@ -93,7 +93,7 @@ function consent(user) {
     const scopes = [...document.querySelectorAll(".scope input")].filter(i => i.checked).map(i => i.value);
     try {
       const { redirect } = await api("/oauth/approve", user, { method: "POST", body: JSON.stringify({ request: requestId, consent: true, scopes }) });
-      $("#body").innerHTML = `<p class="done">Connecté ! Retour vers ${esc(p.name)}…</p>`;
+      $("#body").innerHTML = `<p class="done">Connecté ! Retour vers <bdi>${esc(p.name)}</bdi>…</p>`;
       location.replace(redirect);
     } catch (e) { $("#allow").disabled = false; fail(e.message); }
   };
@@ -103,7 +103,7 @@ async function grants(user) {
   $("#sub").textContent = "Assistants connectés à ton compte MoneyMaker.";
   const { grants } = await api("/oauth/grants", user);
   const live = grants.filter(g => !g.revoked && Date.parse(g.expiresAt) > Date.now());
-  $("#body").innerHTML = (live.length ? live.map(g => `<div class="grant"><div>${esc(g.name)}<small>${g.scopes.includes("moneymaker:write") ? "Lecture et modification" : "Lecture seule"}
+  $("#body").innerHTML = (live.length ? live.map(g => `<div class="grant"><div><bdi>${esc(g.name)}</bdi><small>${g.scopes.includes("moneymaker:write") ? "Lecture et modification" : "Lecture seule"}
     · depuis le ${new Date(g.createdAt).toLocaleDateString(MM_LOCALE)}${g.lastUsedAt ? ` · utilisé le ${new Date(g.lastUsedAt).toLocaleDateString(MM_LOCALE)}` : ""}</small></div>
     <button type="button" data-id="${esc(g.id)}">Déconnecter</button></div>`).join("") : `<p class="done">Aucun assistant connecté.</p>`)
     + `<p class="muted" style="font-size:13px;margin:0">Pour connecter Claude : <a href="/mcp-docs">guide d'installation</a>.</p>`;

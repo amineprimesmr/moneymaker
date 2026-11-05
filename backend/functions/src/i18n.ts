@@ -183,6 +183,12 @@ export const SETUP_EN: Record<string, { group: string; title: string; help: stri
 // Écrits en français dans le code ; renvoyés en anglais sauf si le client demande le français.
 
 const ERROR_EN: Record<string, string> = {
+  "Clé d'idempotence déjà utilisée pour une autre opération": "Idempotency key already used for another operation",
+  // Notes des graphiques
+  "Expansion/contraction non suivies : un changement de produit est compté comme churn + nouveau.": "Expansion/contraction not tracked: a product change counts as churn + new.",
+  "Grace / relance de paiement / annulé-mais-actif ne sont connus que pour le point courant.": "Grace period, billing retry and cancelled-but-active are only known for the current point.",
+  "Aucun événement de paywall enregistré pour ce projet.": "No paywall events recorded for this project.",
+  "DAU inconnu : il est relevé chaque nuit à partir de customers.lastSeenAt (snapshot quotidien).": "DAU unknown: it is recorded every night from customers.lastSeenAt (daily snapshot).",
   "Mode démo : lecture seule": "Demo mode: read-only",
   "Trop de requêtes, réessaie dans une minute": "Too many requests, try again in a minute",
   "Colle ta clé personnelle PostHog": "Paste your PostHog personal key",

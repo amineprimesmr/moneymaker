@@ -102,7 +102,7 @@ export function renderSide() {
   nav.innerHTML = [...list, ...fallback].map(p => {
     const on = ids.includes(p.projectId), s = setupCache[p.projectId];
     return `<div class="biz ${on ? "" : "off"} ${h.state.projectId === p.projectId ? "cur" : ""}" data-biz="${esc(p.projectId)}">
-      <button class="bn" data-name="${esc(p.projectId)}" aria-pressed="${on}"><span class="bic">${projectIcon(p, 38)}${s != null ? `<i class="st" style="background:${s >= 1 ? "var(--accent)" : "var(--orange)"}"></i>` : ""}</span><span>${esc(p.name)}</span></button>
+      <button class="bn" data-name="${esc(p.projectId)}" aria-pressed="${on}"><span class="bic">${projectIcon(p, 38)}${s != null ? `<i class="st" style="background:${s >= 1 ? "var(--accent)" : "var(--orange)"}"></i>` : ""}</span><span><bdi>${esc(p.name)}</bdi></span></button>
       <button class="bgo" data-open="${esc(p.projectId)}" aria-label="Ouvrir ${esc(p.name)}">${ic("right", 13)}</button>
       <button class="bck" data-toggle="${esc(p.projectId)}" aria-label="Sélectionner ${esc(p.name)}" style="color:${on ? "rgb(0,184,120)" : "rgba(0,0,0,.18)"}">${ic(on ? "checkf" : "ring", 22)}</button></div>`;
   }).join("");
@@ -131,7 +131,7 @@ async function scopeChanged() {
 
 function fanRow() {
   const sel = selectedProjects(), f = h.state.focus, p = sel.find(x => x.projectId === f);
-  return logoFan(sel, f) + (p ? `<button class="focus-pill glass" data-goproject="${esc(p.projectId)}">${platformMark(p.stores, 26) || projectIcon(p, 26)}<span>${esc(p.name)}</span></button>` : "");
+  return logoFan(sel, f) + (p ? `<button class="focus-pill glass" data-goproject="${esc(p.projectId)}">${platformMark(p.stores, 26) || projectIcon(p, 26)}<span><bdi>${esc(p.name)}</bdi></span></button>` : "");
 }
 function bindFan(root, repaint) {
   root.querySelectorAll("[data-focus]").forEach(b => b.onclick = async () => {
@@ -327,7 +327,7 @@ function bizValue(k, p) { return { revenue: p.netRevenueMicros, mrr: p.mrrMicros
 function bizRows(k, o) {
   const rows = o.projects.map(p => [p, bizValue(k, p)]).sort((a, b) => b[1] - a[1]), top = Math.max(rows[0]?.[1] ?? 1, 1);
   return rows.map(([p, v]) => `<button class="tile" data-goproject="${esc(p.projectId)}"><div class="biz-tile">
-    <div class="top"><span style="position:relative;flex:none">${projectIcon(p, 36)}<span style="position:absolute;right:-4px;bottom:-4px">${platformMark(p.stores, 16)}</span></span><div class="nm"><b>${esc(p.name)}</b><i>${esc(bizCaption(k, p))}</i></div><span class="val">${fmtMetric(k, v, p.currency)}</span><span style="color:var(--ink3)">${ic("right", 11)}</span></div>
+    <div class="top"><span style="position:relative;flex:none">${projectIcon(p, 36)}<span style="position:absolute;right:-4px;bottom:-4px">${platformMark(p.stores, 16)}</span></span><div class="nm"><b><bdi>${esc(p.name)}</bdi></b><i>${esc(bizCaption(k, p))}</i></div><span class="val">${fmtMetric(k, v, p.currency)}</span><span style="color:var(--ink3)">${ic("right", 11)}</span></div>
     ${sliderTrack(Math.min(Math.max(v / top, .04), 1), true)}</div></button>`).join("");
 }
 
@@ -540,7 +540,7 @@ async function customerBody(r) {
   const spent = events.filter(isRevenueEvent).reduce((s, e) => s + (e.priceMicros ?? 0), 0), cur = events.find(e => e.currency)?.currency ?? p?.currency ?? "EUR";
   const cells = [["Dépensé", money(spent, cur), "euro"], ["Achats", int(purchases.length), "bag"], ["Vu la première fois", first ? shortDay(first) : "—", "calendar"], ["Vu la dernière fois", last ? shortDay(last) : "—", "clock"]];
   const dotColor = t => ({ RENEWAL: "var(--accent)", INITIAL_PURCHASE: "var(--accent)", TRIAL_CONVERTED: "var(--accent)", NON_RENEWING_PURCHASE: "var(--accent)", UNCANCELLATION: "var(--accent)", BILLING_RECOVERED: "var(--accent)", TRIAL_STARTED: "var(--blue)", CANCELLATION: "var(--orange)", BILLING_ISSUE: "var(--orange)", REFUND: "var(--red)", REVOKED: "var(--red)" }[t] ?? "var(--ink3)");
-  return `<div class="cu-col"><div class="card"><div style="display:flex;align-items:center;gap:14px">${p ? projectIcon(p, 56) : ""}<div style="flex:1;min-width:0"><div style="font-size:18px;font-weight:500;overflow:hidden;text-overflow:ellipsis">${country ? `${flag(country)} ` : ""}${esc(masked(r.appUserId))}</div><div class="page-sub">${esc(p?.name ?? "")}</div></div>${tbadge(active ? { label: "ACTIF", color: "51,217,128" } : { label: "INACTIF", color: "255,255,255", grey: true })}</div></div>
+  return `<div class="cu-col"><div class="card"><div style="display:flex;align-items:center;gap:14px">${p ? projectIcon(p, 56) : ""}<div style="flex:1;min-width:0"><div style="font-size:18px;font-weight:500;overflow:hidden;text-overflow:ellipsis">${country ? `${flag(country)} ` : ""}${esc(masked(r.appUserId))}</div><div class="page-sub"><bdi>${esc(p?.name ?? "")}</bdi></div></div>${tbadge(active ? { label: "ACTIF", color: "51,217,128" } : { label: "INACTIF", color: "255,255,255", grey: true })}</div></div>
     <div class="grid2" style="grid-template-columns:1fr 1fr">${cells.map(([t, v, i]) => `<div style="background:rgba(255,255,255,.05);border-radius:16px;padding:14px"><div class="mini"  style="padding:0"><div class="h">${ic(i, 11)}<span>${esc(t)}</span></div><div class="val">${esc(v)}</div></div></div>`).join("")}</div>
     <div class="mlabel" style="padding:6px 4px 0"><span>Achats</span><span>${purchases.length}</span></div>
     <div class="card flush" style="overflow:hidden">${purchases.map(x => `<div class="fi" style="cursor:default"><span class="tx"><b><bdi>${esc(x.productId)}</bdi></b><i>${esc([storeLabel(x.store), x.expiresAt ? `jusqu'au ${shortDay(x.expiresAt)}` : "à vie"].filter(Boolean).join(" · "))}</i></span><span class="am"><b>${x.priceMicros ? money(x.priceMicros, x.currency) : ""}</b>${tbadge(x.status === "active" ? { label: "ACTIF", color: "51,217,128" } : { label: String(x.status).toUpperCase(), color: "255,255,255", grey: true })}</span></div>`).join("") || `<p class="muted" style="padding:18px;margin:0">Aucun achat.</p>`}</div></div>
@@ -553,7 +553,7 @@ async function customerBody(r) {
 const appLogo = (a, s) => a.icon ? `<img class="applogo" src="${esc(a.icon)}" alt="" style="width:${s}px;height:${s}px;border-radius:${s * .2237}px" onerror="this.removeAttribute('src')">` : `<span class="applogo" style="display:block;width:${s}px;height:${s}px;border-radius:${s * .2237}px"></span>`;
 function appRow(a) {
   const n = a.ratingCount ?? 0;
-  return `<button class="card app-row" data-app="${esc(a.appId)}">${appLogo(a, 52)}<span class="tx"><b>${esc(a.name)}</b>
+  return `<button class="card app-row" data-app="${esc(a.appId)}">${appLogo(a, 52)}<span class="tx"><b><bdi>${esc(a.name)}</bdi></b>
     ${a.rating != null ? `<i>${stars(a.rating)}${a.rating.toLocaleString(MM_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} · ${int(n)}</i>` : `<i>Pas encore de notes</i>`}
     ${a.countriesRanked > 0 ? `<u>Classée dans ${a.countriesRanked} pays</u>` : ""}</span>
     ${a.bestRank ? `<span class="rank">#${a.bestRank}</span>` : ""}<span style="color:var(--ink3)">${ic("right", 12)}</span></button>`;
@@ -571,8 +571,8 @@ export async function renderApps(main) {
   const paintHome = () => {
     if (document.activeElement === q && !q.value.trim()) {
       const ownOnly = own, rec = recents;
-      body.innerHTML = `${ownOnly.length ? `<div><div class="sec-title">Mes apps</div>${ownOnly.map(a => `<button class="compact" data-app="${esc(a.appId)}">${appLogo(a, 38)}<span>${esc(a.name)}</span></button>`).join("")}</div>` : ""}
-        ${rec.length ? `<div style="margin-top:10px"><div style="display:flex;justify-content:space-between"><div class="sec-title">Recherches récentes</div><button class="plain" id="clrRec" style="font-size:13px;color:var(--ink3)">Effacer</button></div>${rec.map(a => `<button class="compact" data-app="${esc(a.appId)}">${appLogo(a, 38)}<span>${esc(a.name)}</span></button>`).join("")}</div>` : ""}`;
+      body.innerHTML = `${ownOnly.length ? `<div><div class="sec-title">Mes apps</div>${ownOnly.map(a => `<button class="compact" data-app="${esc(a.appId)}">${appLogo(a, 38)}<span><bdi>${esc(a.name)}</bdi></span></button>`).join("")}</div>` : ""}
+        ${rec.length ? `<div style="margin-top:10px"><div style="display:flex;justify-content:space-between"><div class="sec-title">Recherches récentes</div><button class="plain" id="clrRec" style="font-size:13px;color:var(--ink3)">Effacer</button></div>${rec.map(a => `<button class="compact" data-app="${esc(a.appId)}">${appLogo(a, 38)}<span><bdi>${esc(a.name)}</bdi></span></button>`).join("")}</div>` : ""}`;
       bindRows([...ownOnly, ...rec]);
       body.querySelectorAll("[data-app]").forEach(b => b.onmousedown = e => e.preventDefault());
       const clr = document.getElementById("clrRec");
@@ -580,7 +580,7 @@ export async function renderApps(main) {
       return;
     }
     const untracked = (store.overview?.projects ?? []).filter(p => !own.some(a => a.projectId === p.projectId));
-    body.innerHTML = own.map(appRow).join("") + untracked.map(p => `<div class="card app-row" style="cursor:default">${projectIcon(p, 52)}<span class="tx"><b>${esc(p.name)}</b><i>Aucune app App Store suivie</i></span><button class="small" data-track="${esc(p.projectId)}" style="flex:none">Ajouter</button></div>`).join("");
+    body.innerHTML = own.map(appRow).join("") + untracked.map(p => `<div class="card app-row" style="cursor:default">${projectIcon(p, 52)}<span class="tx"><b><bdi>${esc(p.name)}</bdi></b><i>Aucune app App Store suivie</i></span><button class="small" data-track="${esc(p.projectId)}" style="flex:none">Ajouter</button></div>`).join("");
     bindRows(own);
     body.querySelectorAll("[data-track]").forEach(b => b.onclick = () => h.go({ view: "project", projectId: b.dataset.track, tab: "appstore" }));
   };
@@ -630,7 +630,7 @@ export async function renderAppDetail(main) {
     const timeline = Object.values(days).sort((x, y) => x.t - y.t);
     const shown = showAll ? countries : countries.slice(0, 8);
     body.innerHTML = `<div class="storeline"><span></span><a href="https://apps.apple.com/app/id${esc(a.appId)}" target="_blank" rel="noopener">Ouvrir dans l'App Store ${ic("ext", 12)}</a></div>
-      <div class="ad-grid"><div class="ad-l"><div class="card app-row" style="cursor:default;order:1">${appLogo(a, 58)}<span class="tx"><b>${esc(a.name)}</b>${a.developer ? `<i style="font-size:13px">${esc(a.developer)}</i>` : ""}</span><span class="hline"></span><span class="count-bubble"><b>${countries.length}</b>Pays</span></div>
+      <div class="ad-grid"><div class="ad-l"><div class="card app-row" style="cursor:default;order:1">${appLogo(a, 58)}<span class="tx"><b><bdi>${esc(a.name)}</bdi></b>${a.developer ? `<i style="font-size:13px"><bdi>${esc(a.developer)}</bdi></i>` : ""}</span><span class="hline"></span><span class="count-bubble"><b>${countries.length}</b>Pays</span></div>
       ${timeline.length > 1 ? `<div class="card" style="border-radius:22px;order:3"><div style="font-size:15px;font-weight:500;margin-bottom:12px">Pays classés par jour</div>${glowChart(timeline.map(d => ({ label: shortDay(d.t), v: d.set.size, text: `${d.set.size} pays` })), { height: 130 })}</div>` : ""}
             ${countries.length ? `<div class="card" style="border-radius:22px;order:4"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:15px;font-weight:500">Score</span><span style="font-size:22px;font-weight:500;font-variant-numeric:tabular-nums">${score.toLocaleString(MM_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span></div><div style="display:flex;gap:3px;margin:12px 0">${Array.from({ length: 20 }, (_, i) => `<i style="flex:1;height:18px;border-radius:3px;background:${i * 5 < score ? "var(--accent)" : "rgba(255,255,255,.1)"}"></i>`).join("")}</div><div class="page-sub" style="font-size:12px">${score < 20 ? "Présence émergente" : score < 60 ? "Présence solide" : "Présence mondiale"}</div></div>` : ""}
       <div class="card" style="border-radius:22px;order:5">${a.rating != null ? `<div style="display:flex;align-items:center;gap:14px"><span style="font-size:40px;font-weight:500;font-variant-numeric:tabular-nums">${a.rating.toLocaleString(MM_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span><div>${stars(a.rating)}<div class="page-sub" style="font-size:12px;margin-top:4px">Basé sur ${int(a.ratingCount)} notes</div></div></div>` : `<div style="font-size:15px;font-weight:500">Pas encore de notes</div>`}
@@ -655,9 +655,9 @@ function reviewsDialog(a, reviews) {
   let filter = null;
   const paint = () => {
     const shown = filter ? reviews.filter(r => r.rating === filter) : reviews;
-    h.openModal(`<div style="font-size:28px;font-weight:700;letter-spacing:-.6px">Avis écrits</div><div class="page-sub" style="margin-bottom:12px">${esc(a.name)}</div>
+    h.openModal(`<div style="font-size:28px;font-weight:700;letter-spacing:-.6px">Avis écrits</div><div class="page-sub" style="margin-bottom:12px"><bdi>${esc(a.name)}</bdi></div>
       <div class="chips" style="margin:0 0 12px;padding:0"><button type="button" class="${filter == null ? "on" : ""}" data-star="">Tous</button>${[5, 4, 3, 2, 1].map(s => `<button type="button" class="${filter === s ? "on" : ""}" data-star="${s}">${s} ★</button>`).join("")}</div>
-      <div class="stack">${shown.map(r => `<div class="card" style="border-radius:22px;animation:none"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px">${stars(r.rating)}<span class="page-sub" style="font-size:12px;margin:0">${r.country ? flag(r.country) : ""} ${esc(r.at ? shortDay(r.at) : "")}</span></div><div style="font-weight:500;margin-top:8px">${esc(r.title ?? "")}</div><p class="muted" style="margin:4px 0 0;font-size:14px">${esc(r.content ?? "")}</p></div>`).join("") || `<p class="muted">Aucun avis.</p>`}</div>
+      <div class="stack">${shown.map(r => `<div class="card" style="border-radius:22px;animation:none"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px">${stars(r.rating)}<span class="page-sub" style="font-size:12px;margin:0">${r.country ? flag(r.country) : ""} ${esc(r.at ? shortDay(r.at) : "")}</span></div><div style="font-weight:500;margin-top:8px"><bdi>${esc(r.title ?? "")}</bdi></div><p class="muted" style="margin:4px 0 0;font-size:14px">${esc(r.content ?? "")}</p></div>`).join("") || `<p class="muted">Aucun avis.</p>`}</div>
       <div class="row" style="margin-top:14px"><button>Fermer</button></div>`);
     document.querySelectorAll("[data-star]").forEach(b => b.onclick = e => { e.preventDefault(); filter = b.dataset.star ? Number(b.dataset.star) : null; paint(); });
   };
@@ -707,9 +707,9 @@ export async function renderBoard(main) {
     const es = r.entries ?? [], top = es.slice(0, 3), rest = es.slice(3);
     const col = (e, rank, cfg) => e ? `<div class="pcol ${cfg.side === "mid" ? "mid" : "side"}" style="animation-delay:${cfg.delay}s">
       ${rank === 1 ? `<div class="trophy">🏆</div>` : ""}<div class="p-ic">${icon3D(e, cfg.size, cfg.tilt)}${mine.has(e.projectId) ? `<span class="p-toi">Toi</span>` : ""}</div>
-      <div class="p-name">${esc(e.name)}</div><div class="p-val">${esc(lbValue(e, sort).text)}</div>${block(rank, cfg.front, cfg.depth, cfg.slant, cfg.side)}</div>` : `<div class="pcol ${cfg.side === "mid" ? "mid" : "side"}"></div>`;
+      <div class="p-name"><bdi>${esc(e.name)}</bdi></div><div class="p-val">${esc(lbValue(e, sort).text)}</div>${block(rank, cfg.front, cfg.depth, cfg.slant, cfg.side)}</div>` : `<div class="pcol ${cfg.side === "mid" ? "mid" : "side"}"></div>`;
     const firstMine = rest.find(e => mine.has(e.projectId))?.projectId;
-    const row = e => { const v = lbValue(e, sort), my = mine.has(e.projectId), g = e.growth30d; return `<${e.website ? `a href="${esc(e.website)}" target="_blank" rel="noopener"` : "div"} class="lb-row ${my ? "mine" : ""} ${e.projectId === firstMine ? "lb-pinned" : ""}"><span class="rk">${e.rank}${g ? `<i style="color:${g > 0 ? "var(--accent)" : "var(--red)"}">${g > 0 ? "▲" : "▼"}</i>` : ""}</span>${projectIcon(e, 38)}<span class="tx"><b>${esc(e.name)}</b><span>${(e.sources ?? []).map(srcIcon).join("")}${e.tagline ? `<em style="font-style:normal;overflow:hidden;text-overflow:ellipsis">${esc(e.tagline)}</em>` : ""}</span></span><span class="value">${esc(v.text)}<i>${v.unit}</i></span></${e.website ? "a" : "div"}>`; };
+    const row = e => { const v = lbValue(e, sort), my = mine.has(e.projectId), g = e.growth30d; return `<${e.website ? `a href="${esc(e.website)}" target="_blank" rel="noopener"` : "div"} class="lb-row ${my ? "mine" : ""} ${e.projectId === firstMine ? "lb-pinned" : ""}"><span class="rk">${e.rank}${g ? `<i style="color:${g > 0 ? "var(--accent)" : "var(--red)"}">${g > 0 ? "▲" : "▼"}</i>` : ""}</span>${projectIcon(e, 38)}<span class="tx"><b><bdi>${esc(e.name)}</bdi></b><span>${(e.sources ?? []).map(srcIcon).join("")}${e.tagline ? `<em style="font-style:normal;overflow:hidden;text-overflow:ellipsis"><bdi>${esc(e.tagline)}</bdi></em>` : ""}</span></span><span class="value">${esc(v.text)}<i>${v.unit}</i></span></${e.website ? "a" : "div"}>`; };
     const myBiz = (store.overview?.projects ?? []);
     const listed = es.filter(e => mine.has(e.projectId));
     document.getElementById("lbPodium").innerHTML = `<div class="podium">${col(top[1], 2, { size: 62, front: 142, depth: 26, slant: 22, tilt: 14, delay: .10, side: "left" })}${col(top[0], 1, { size: 80, front: 200, depth: 20, slant: 11, tilt: 0, delay: .22, side: "mid" })}${col(top[2], 3, { size: 62, front: 108, depth: 30, slant: 22, tilt: -14, delay: .02, side: "right" })}</div>`;
@@ -725,7 +725,7 @@ async function joinDialog(after) {
   const states = await Promise.all(list.map(p => h.api(`/v1/projects/${p.projectId}/public`).catch(() => ({ listed: false }))));
   const paint = () => {
     h.openModal(`<div style="font-size:24px;font-weight:700;letter-spacing:-.5px">Mes business au classement</div><p class="muted" style="margin:8px 0 14px;font-size:14px">Les chiffres viennent directement de tes stores et sont vérifiés. Tu peux masquer les montants exacts.</p>
-      <div class="stack">${list.map((p, i) => `<div class="card flush" style="animation:none;padding:12px 14px;border-radius:20px"><div style="display:flex;align-items:center;gap:12px">${projectIcon(p, 38)}<b style="flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name)}</b><button type="button" class="small ${states[i].listed ? "" : "primary"}" data-join="${i}" style="flex:none">${states[i].listed ? "Retirer" : "Inscrire"}</button></div>
+      <div class="stack">${list.map((p, i) => `<div class="card flush" style="animation:none;padding:12px 14px;border-radius:20px"><div style="display:flex;align-items:center;gap:12px">${projectIcon(p, 38)}<b style="flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><bdi>${esc(p.name)}</bdi></b><button type="button" class="small ${states[i].listed ? "" : "primary"}" data-join="${i}" style="flex:none">${states[i].listed ? "Retirer" : "Inscrire"}</button></div>
         ${states[i].listed ? `<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--ink2)"><input type="checkbox" data-hide="${i}" ${states[i].hideAmounts ? "checked" : ""}> Afficher une fourchette au lieu du montant</label>` : ""}</div>`).join("")}</div>
       <div class="row" style="margin-top:14px"><button>Fermer</button></div>`);
     document.querySelectorAll("[data-join]").forEach(b => b.onclick = async () => { const i = Number(b.dataset.join); b.disabled = true; states[i] = await h.api(`/v1/projects/${list[i].projectId}/public`, { method: "PUT", body: { ...states[i], listed: !states[i].listed } }).catch(e => { h.toast(e.message); return states[i]; }); paint(); after(); });
