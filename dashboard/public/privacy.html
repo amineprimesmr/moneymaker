@@ -1,26 +1,72 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Confidentialité · MoneyMaker</title><meta name="description" content="Politique de confidentialité de MoneyMaker.">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · MoneyMaker</title><meta name="description" content="MoneyMaker privacy policy.">
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png"><link rel="apple-touch-icon" href="/icon-180.png"><meta name="theme-color" content="#000000">
+<script>(function(){var q=new URLSearchParams(location.search).get('lang'),k='mmLang',v=null;if(q!=='fr'&&q!=='en')q=null;try{if(q)localStorage.setItem(k,q);v=localStorage.getItem(k)}catch(e){}var l=q||v||((navigator.language||'en').toLowerCase().indexOf('fr')===0?'fr':'en');document.documentElement.lang=l;document.documentElement.classList.add('l-'+l);if(l==='fr')document.title='Confidentialité · MoneyMaker'})()</script>
+<style>.i18n-fr{display:none}html.l-fr .i18n-fr{display:block}html.l-fr .i18n-en{display:none}</style>
 <link rel="stylesheet" href="/app.css"></head>
-<body class="doc"><main><nav class="crumbs"><a href="/">MoneyMaker</a><a href="/privacy">Confidentialité</a><a href="/terms">Conditions</a><a href="/support">Aide</a></nav>
+<body class="doc"><main>
+<div class="i18n-en"><nav class="crumbs"><a href="/">MoneyMaker</a><a href="/privacy?lang=en">Privacy</a><a href="/terms?lang=en">Terms</a><a href="/support?lang=en">Help</a><a href="?lang=fr">Français</a></nav>
+
+<h1>Privacy policy</h1>
+<p>MoneyMaker is a revenue dashboard for publishers of apps and digital products, available on the web (usemoneymaker.com) and on iPhone and iPad. This page explains what data is processed, why, and how to delete it.</p>
+
+<h2>Data we process</h2>
+<ul>
+<li><b>Your account</b>: email address and sign-in identifier (Apple, Google or email and password, handled by Firebase Authentication). MoneyMaker never sees your password.</li>
+<li><b>Your businesses</b>: name, configuration (products, premium access, currency), and the keys you choose to connect (store and Stripe accounts). These keys are stored on the server only, are never returned by the API and are used only to read your sales.</li>
+<li><b>Your customers' purchases</b>: the user identifier your app sends us (a pseudonym), product, price, currency, store country, subscription dates and status. For this data, MoneyMaker acts as a <b>processor</b>: you remain the controller for your own users.</li>
+<li><b>Optional financial settings</b>: legal status, rates, expenses, company name, only if you turn on "Net in pocket".</li>
+<li><b>Mobile app</b>: notification token (to send the sale notifications you turned on), notification preferences, time zone. No location, no contacts, no photos.</li>
+</ul>
+
+<h2>What we don't do</h2>
+<ul>
+<li>No advertising, no ad tracking, no third-party trackers, no selling or renting of data.</li>
+<li>The app contains no advertising SDK. Usage measurement is described below.</li>
+</ul>
+
+<h2>Why</h2>
+<p>Only to provide the service: calculate your revenue and metrics, send the notifications you asked for, validate your customers' purchases and grant their premium access. Legal basis: performance of a contract (GDPR, art. 6.1.b).</p>
+
+<h2>Usage measurement</h2>
+<p>We measure use of the site and the app with PostHog (servers in the European Union): pages and steps viewed, app opens, onboarding, paywall and purchase of MoneyMaker Pro, with a random identifier. No email, no revenue figures, no session recording. The site sets no cookie for this measurement.</p>
+
+<h2>Public leaderboard</h2>
+<p>Your business only appears on the leaderboard if you list it. Its name, logo, description, website, revenue and number of subscribers then become public (you can hide exact amounts). You can remove it at any time. A report records your identifier, the business concerned and your message.</p>
+
+<h2>Where the data is</h2>
+<p>On Google Cloud / Firebase, <b>europe-west1 region (Belgium)</b>. Traffic is encrypted (HTTPS), and data is encrypted at rest by Google. The third-party services involved are the ones you connect, and possibly Slack, Discord, Mixpanel, Amplitude, Segment, PostHog and AppsFlyer if you turn them on.</p>
+
+<h2>AI assistant (Claude): MCP connector</h2>
+<p>If you connect MoneyMaker to an assistant (Claude by Anthropic or another MCP client) from <a href="/connect">/connect</a>, the assistant receives, at your request and only during the conversation, the data of the businesses you have access to: revenue and subscription metrics, customers (app identifiers, countries, purchases), transactions, App Store rankings and reviews, finance, configuration and team members. Store keys are never sent.</p>
+<p>You choose read-only or read and write. Each change is made with your rights and recorded in the business's audit log; deletions require explicit confirmation. We only store hashes (SHA-256) of tokens, valid for 1 hour (access) and 90 days at most (authorization). You can revoke an assistant at any time on <a href="/connect">/connect</a>. What the assistant then does with the data is governed by its publisher's privacy policy.</p>
+<h2>Retention and deletion</h2>
+<p>Data is kept as long as your account exists. You can <b>delete your account at any time from the app</b> (Settings → Delete my account): your account, tokens, devices and the businesses of which you are the only member (sales, keys, settings) are erased immediately and permanently.</p>
+
+<h2>Your rights</h2>
+<p>Access, rectification, erasure, portability (CSV export in the dashboard), objection: <a href="mailto:contact@moneymakerr.com">contact@moneymakerr.com</a>. You can also contact the CNIL, the French data protection authority (cnil.fr).</p>
+
+<p class="muted" style="margin-top:48px">Last updated: November 5, 2026.</p></div>
+
+<div class="i18n-fr" lang="fr"><nav class="crumbs"><a href="/">MoneyMaker</a><a href="/privacy?lang=fr">Confidentialité</a><a href="/terms?lang=fr">Conditions</a><a href="/support?lang=fr">Aide</a><a href="?lang=en">English</a></nav>
 
 <h1>Politique de confidentialité</h1>
-<p>MoneyMaker est un tableau de bord de revenus pour les éditeurs d'apps et de produits numériques (App Store, Google Play, Stripe), disponible sur le web (usemoneymaker.com) et sur iPhone. Cette page explique quelles données sont traitées, pourquoi, et comment les supprimer.</p>
+<p>MoneyMaker est un tableau de bord de revenus pour les éditeurs d'apps et de produits numériques (App Store, Google Play, Stripe), disponible sur le web (usemoneymaker.com), sur iPhone et sur iPad. Cette page explique quelles données sont traitées, pourquoi, et comment les supprimer.</p>
 
 <h2>Données que nous traitons</h2>
 <ul>
-<li><b>Ton compte</b> : adresse e-mail et identifiant de connexion (Google ou e-mail/mot de passe, gérés par Firebase Authentication). Le mot de passe n'est jamais visible par MoneyMaker.</li>
+<li><b>Ton compte</b> : adresse e-mail et identifiant de connexion (Apple, Google ou e-mail/mot de passe, gérés par Firebase Authentication). Le mot de passe n'est jamais visible par MoneyMaker.</li>
 <li><b>Tes business</b> : nom, configuration (produits, accès premium, devise), et les clés que tu choisis de connecter (App Store Connect, achats intégrés Apple, Google Play, Stripe). Ces clés sont stockées côté serveur uniquement, ne sont jamais renvoyées par l'API et servent seulement à lire tes ventes.</li>
 <li><b>Les achats de tes clients</b> : identifiant d'utilisateur que ton app nous transmet (pseudonyme), produit, prix, devise, pays de la boutique, dates et statut de l'abonnement. Pour ces données, MoneyMaker agit comme <b>sous-traitant</b> : tu restes responsable du traitement vis-à-vis de tes propres utilisateurs.</li>
 <li><b>Réglages financiers optionnels</b> : statut juridique, taux, dépenses, nom de ton entreprise — uniquement si tu actives « Net en poche ».</li>
-<li><b>App iPhone</b> : jeton de notification (pour t'envoyer les notifications de vente que tu as activées), préférences de notification, fuseau horaire. Aucune géolocalisation, aucun contact, aucune photo.</li>
+<li><b>App mobile</b> : jeton de notification (pour t'envoyer les notifications de vente que tu as activées), préférences de notification, fuseau horaire. Aucune géolocalisation, aucun contact, aucune photo.</li>
 </ul>
 
 <h2>Ce que nous ne faisons pas</h2>
 <ul>
 <li>Aucune publicité, aucun suivi publicitaire, aucun traceur tiers, aucune vente ni location de données.</li>
-<li>L'app iPhone ne contient aucun SDK de publicité. La mesure d'audience est décrite ci-dessous.</li>
+<li>L'app ne contient aucun SDK de publicité. La mesure d'audience est décrite ci-dessous.</li>
 </ul>
 
 <h2>Pourquoi</h2>
@@ -44,4 +90,5 @@
 <h2>Tes droits</h2>
 <p>Accès, rectification, effacement, portabilité (export CSV dans le dashboard), opposition : <a href="mailto:contact@moneymakerr.com">contact@moneymakerr.com</a>. Tu peux aussi saisir la CNIL (cnil.fr).</p>
 
-<p class="muted" style="margin-top:48px">Dernière mise à jour : 26 octobre 2026.</p></main></body></html>
+<p class="muted" style="margin-top:48px">Dernière mise à jour : 5 novembre 2026.</p>
+</div></main></body></html>

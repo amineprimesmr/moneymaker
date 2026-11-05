@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
+<script src="/i18n.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Connexion · MoneyMaker</title>
 <meta name="robots" content="noindex">
@@ -76,7 +77,7 @@ onAuthStateChanged(auth, async user => {
   handing = true;
   $("#card").innerHTML = `<div class="done"><div class="logo" style="margin-bottom:14px">$</div><p>Connexion de ton iPhone…</p></div>`;
   try {
-    const res = await fetch("/v1/tokens", { method: "POST", headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" },
+    const res = await fetch("/v1/tokens", { method: "POST", headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Accept-Language": MM_LANG, "Content-Type": "application/json" },
       body: JSON.stringify({ label: "iPhone" }) });
     const { token } = await res.json();
     if (!token) throw new Error("token");

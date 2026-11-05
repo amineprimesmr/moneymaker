@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
+<script src="/i18n.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Connecter un assistant · MoneyMaker</title>
 <meta name="robots" content="noindex">
@@ -56,7 +57,7 @@ let pending = null;
 const fail = e => { $("#err").textContent = typeof e === "string" ? e : ({ "auth/invalid-credential": "E-mail ou mot de passe incorrect.", "auth/email-already-in-use": "Ce compte existe déjà : connecte-toi.", "auth/weak-password": "Mot de passe trop court (6 caractères minimum).",
   "auth/popup-closed-by-user": "Fenêtre de connexion fermée.", "auth/too-many-requests": "Trop d'essais, réessaie dans un instant." }[e.code] ?? e.message); };
 const api = async (path, user, opts = {}) => {
-  const res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", ...(user ? { Authorization: `Bearer ${await user.getIdToken()}` } : {}) } });
+  const res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", "Accept-Language": MM_LANG, ...(user ? { Authorization: `Bearer ${await user.getIdToken()}` } : {}) } });
   const j = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error({ expired_request: "Cette demande a expiré : relance la connexion depuis ton assistant.", unauthorized: "Session expirée : reconnecte-toi." }[j.error] ?? j.error ?? "Erreur");
   return j;
@@ -103,7 +104,7 @@ async function grants(user) {
   const { grants } = await api("/oauth/grants", user);
   const live = grants.filter(g => !g.revoked && Date.parse(g.expiresAt) > Date.now());
   $("#body").innerHTML = (live.length ? live.map(g => `<div class="grant"><div>${esc(g.name)}<small>${g.scopes.includes("moneymaker:write") ? "Lecture et modification" : "Lecture seule"}
-    · depuis le ${new Date(g.createdAt).toLocaleDateString("fr-FR")}${g.lastUsedAt ? ` · utilisé le ${new Date(g.lastUsedAt).toLocaleDateString("fr-FR")}` : ""}</small></div>
+    · depuis le ${new Date(g.createdAt).toLocaleDateString(MM_LOCALE)}${g.lastUsedAt ? ` · utilisé le ${new Date(g.lastUsedAt).toLocaleDateString(MM_LOCALE)}` : ""}</small></div>
     <button type="button" data-id="${esc(g.id)}">Déconnecter</button></div>`).join("") : `<p class="done">Aucun assistant connecté.</p>`)
     + `<p class="muted" style="font-size:13px;margin:0">Pour connecter Claude : <a href="/mcp-docs">guide d'installation</a>.</p>`;
   document.querySelectorAll("[data-id]").forEach(b => b.onclick = async () => {

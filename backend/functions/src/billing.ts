@@ -123,7 +123,7 @@ export async function assertCanCreateProject(uid: string) {
   // Tant que le paiement n'est pas configuré, personne n'est bloqué sans pouvoir payer.
   if (!(await configFor(uid)) || await isPro(uid)) return;
   if (await ownedProjects(uid) >= FREE_PROJECTS) {
-    throw new HttpError(402, "pro_required", `Le plan gratuit inclut ${FREE_PROJECTS} business. MoneyMaker Pro (29 €, une fois) les débloque tous.`);
+    throw new HttpError(402, "pro_required", `Le plan gratuit inclut ${FREE_PROJECTS} business. MoneyMaker Pro (achat unique) les débloque tous.`);
   }
 }
 

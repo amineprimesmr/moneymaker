@@ -178,3 +178,69 @@ export const SETUP_EN: Record<string, { group: string; title: string; help: stri
   appstore: { group: "Bonus", title: "Track App Store rankings", help: "Add your app and your competitors: rankings in 177 countries, alerts, reviews." },
   integrations: { group: "Bonus", title: "Connect Slack or your tools", help: "Slack/Discord to get notified of every sale, Mixpanel/Amplitude/Segment/PostHog for analytics, webhooks for your backend." },
 };
+
+// ── Messages d'erreur de l'API ──────────────────────────────────────────────────────────
+// Écrits en français dans le code ; renvoyés en anglais sauf si le client demande le français.
+
+const ERROR_EN: Record<string, string> = {
+  "Mode démo : lecture seule": "Demo mode: read-only",
+  "Trop de requêtes, réessaie dans une minute": "Too many requests, try again in a minute",
+  "Colle ta clé personnelle PostHog": "Paste your PostHog personal key",
+  "La clé APNs n'est pas encore configurée côté serveur.": "The APNs key isn't set up on the server yet.",
+  "Installe l'app MoneyMaker sur iPhone, connecte-toi et autorise les notifications.": "Install the MoneyMaker app, sign in and allow notifications.",
+  "Serveur PostHog invalide": "Invalid PostHog server",
+  "La clé personnelle PostHog commence par phx_": "PostHog personal keys start with phx_",
+  "L'identifiant du projet PostHog est un nombre": "The PostHog project ID is a number",
+  "Clé PostHog refusée : il faut une clé personnelle avec le droit Query": "PostHog key rejected: use a personal key with Query access",
+  "Projet PostHog introuvable": "PostHog project not found",
+  "Le paiement n'est pas encore configuré.": "Payment isn't set up yet.",
+  "Le paiement n'est pas encore ouvert.": "Payment isn't open yet.",
+  "Transaction App Store invalide.": "Invalid App Store transaction.",
+  "Cet achat est rattaché à un autre compte MoneyMaker.": "This purchase is linked to another MoneyMaker account.",
+  "Envoie {\"confirm\":\"SUPPRIMER\"}": "Send {\"confirm\":\"SUPPRIMER\"}",
+  "Une seule expérience active par placement": "Only one active experiment per placement",
+  "Format 1.2.3": "Format 1.2.3",
+  "Codes pays ISO à 2 lettres": "2-letter ISO country codes",
+  "Image introuvable ou illisible à cette adresse": "Image not found or unreadable at this address",
+  "Code promo inconnu ou expiré": "Unknown or expired promo code",
+  "Le JSON du compte de service Google est illisible": "The Google service account JSON is unreadable",
+  "L'adresse doit commencer par https://": "The address must start with https://",
+  "URL https:// attendue": "https:// URL expected",
+  "Au moins un poids > 0": "At least one weight > 0",
+  "X-Stripe-User-Id / X-Stripe-Account-Id requis": "X-Stripe-User-Id / X-Stripe-Account-Id required",
+  "Connexion en lecture seule": "Read-only connection",
+  "Colle ta clé secrète MoneyMaker (mm_sk_…) dans les réglages de l'app": "Paste your MoneyMaker secret key (mm_sk_…) in the app settings",
+  "Cette clé MoneyMaker appartient à un projet relié à un autre compte Stripe": "This MoneyMaker key belongs to a project linked to another Stripe account",
+  "Client Stripe non relié à un utilisateur MoneyMaker": "Stripe customer not linked to a MoneyMaker user",
+  "Invitation introuvable ou déjà utilisée": "Invitation not found or already used",
+  "Invitation expirée": "Invitation expired",
+  "Le dernier propriétaire ne peut pas quitter le projet": "The last owner can't leave the project",
+  "Le dernier propriétaire ne peut pas être rétrogradé": "The last owner can't be demoted",
+  "Secret de signature de l'app Stripe absent côté serveur (STRIPE_APP_SECRET)": "Stripe app signing secret missing on the server (STRIPE_APP_SECRET)",
+};
+const ERROR_EN_PATTERNS: [RegExp, string][] = [
+  [/^Rôle « (.+) » requis \(le tien : (.+)\)$/, "Role \"$1\" required (yours: $2)"],
+  [/^Le plan gratuit inclut (\d+) business\. MoneyMaker Pro \(achat unique\) les débloque tous\.$/, "The free plan includes $1 business. MoneyMaker Pro (one-time purchase) unlocks them all."],
+  [/^PostHog a répondu (.+)$/, "PostHog responded $1"],
+  [/^Envoie \{"confirm":"(.+)"\}$/, "Send {\"confirm\":\"$1\"}"],
+  [/^Expérience (.+) : variantes figées une fois lancée$/, "Experiment $1: variants are frozen once started"],
+  [/^Expérience (.+) : terminée, crée-en une nouvelle$/, "Experiment $1: finished, create a new one"],
+  [/^Expérience (.+) : 2 à 5 variantes$/, "Experiment $1: 2 to 5 variants"],
+  [/^Expérience (.+) : offre « (.+) » inconnue$/, "Experiment $1: unknown offering \"$2\""],
+  [/^Placement (.+) : offre « (.+) » inconnue$/, "Placement $1: unknown offering \"$2\""],
+  [/^Règle (.+) : offre « (.+) » inconnue$/, "Rule $1: unknown offering \"$2\""],
+  [/^Offre (.+) : packages\[\] attendu$/, "Offering $1: packages[] expected"],
+  [/^Rôles : (.+)$/, "Roles: $1"],
+  [/^Cette invitation est destinée à (.+)$/, "This invitation is for $1"],
+  [/^Graphiques : (.+)$/, "Charts: $1"],
+  [/^URL https:\/\/… ou schéma d'app \((.+)\) attendu$/, "https://… URL or app scheme ($1) expected"],
+];
+
+/** Message d'erreur dans la langue demandée (`Accept-Language`) ; anglais par défaut. */
+export function errorMessage(message: string, acceptLanguage?: string): string {
+  if (normLang(acceptLanguage, "en") === "fr") return message;
+  if (ERROR_EN[message]) return ERROR_EN[message];
+  for (const [re, en] of ERROR_EN_PATTERNS) if (re.test(message)) return message.replace(re, en);
+  return message;
+}
+

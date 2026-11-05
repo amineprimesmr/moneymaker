@@ -1,59 +1,59 @@
-# Configurer MoneyMaker
+# Set up MoneyMaker
 
-MoneyMaker affiche en direct les revenus d'apps et de business (App Store, Google Play, Stripe). L'utilisateur t'a demandé de configurer son compte. Tu fais le travail ; il n'intervient que pour se connecter et te donner ses clés. Parle-lui dans sa langue, simplement, une étape à la fois.
+MoneyMaker shows live revenue for apps and businesses (App Store, Google Play, Stripe). The user asked you to set up their account. You do the work; they only step in to sign in and give you their keys. Speak to them in their language, simply, one step at a time.
 
-## 1. Ajouter le serveur MCP
+## 1. Add the MCP server
 
-Adresse : `https://usemoneymaker.com/mcp` (HTTP, connexion OAuth). Selon ton outil :
+Address: `https://usemoneymaker.com/mcp` (HTTP, OAuth sign-in). Depending on your tool:
 
-- Claude Code : `claude mcp add --transport http moneymaker https://usemoneymaker.com/mcp`
-- Codex : `codex mcp add moneymaker --url https://usemoneymaker.com/mcp`, puis `codex mcp login moneymaker`
-- Cursor : ajoute à `~/.cursor/mcp.json` : `{"mcpServers":{"moneymaker":{"url":"https://usemoneymaker.com/mcp"}}}`
-- Application sans ligne de commande (Claude, ChatGPT…) : demande à l'utilisateur d'ajouter un connecteur personnalisé avec cette adresse.
+- Claude Code: `claude mcp add --transport http moneymaker https://usemoneymaker.com/mcp`
+- Codex: `codex mcp add moneymaker --url https://usemoneymaker.com/mcp`, then `codex mcp login moneymaker`
+- Cursor: add to `~/.cursor/mcp.json`: `{"mcpServers":{"moneymaker":{"url":"https://usemoneymaker.com/mcp"}}}`
+- App without a command line (Claude, ChatGPT…): ask the user to add a custom connector with this address.
 
-Les outils n'apparaissent souvent qu'après un redémarrage de la session, parfois avec un préfixe (`mcp__moneymaker__list_projects`). Dis à l'utilisateur quoi faire : redémarrer l'outil, puis lancer `/mcp` dans Claude Code pour s'authentifier. Il peut ensuite te redire « continue » : reprends à l'étape 2.
+Tools often appear only after the session restarts, sometimes with a prefix (`mcp__moneymaker__list_projects`). Tell the user what to do: restart the tool, then run `/mcp` in Claude Code to authenticate. They can then tell you "continue": resume at step 2.
 
-## 2. Créer le compte
+## 2. Create the account
 
-À la première connexion, une page MoneyMaker s'ouvre dans le navigateur. L'utilisateur y choisit Google ou « Créer un compte », puis clique sur **Autoriser** en gardant la lecture et la modification. Toi, tu ne saisis jamais son mot de passe. Attends sa confirmation, puis appelle `list_projects` pour vérifier la connexion.
+On first sign-in, a MoneyMaker page opens in the browser. The user chooses Google or "Create account", then clicks **Authorize**, keeping read and write access. You never type their password. Wait for their confirmation, then call `list_projects` to check the connection.
 
-## 3. Créer le business
+## 3. Create the business
 
-Si `list_projects` renvoie déjà le bon business, garde-le. Sinon demande son nom et ce qu'il vend. Pour une app iOS, trouve-la avec `search_app_store` et passe son ID en `appStoreAppId`. Pour une app Android, passe `googlePackageName`. Pour un business Stripe seul, le nom suffit. Fais confirmer, puis appelle `create_project` et garde le `projectId`, demandé par les outils suivants.
+If `list_projects` already returns the right business, keep it. Otherwise ask its name and what it sells. For an iOS app, find it with `search_app_store` and pass its ID as `appStoreAppId`. For an Android app, pass `googlePackageName`. For a Stripe-only business, the name is enough. Get confirmation, then call `create_project` and keep the `projectId`, which the next tools need.
 
-Le plan gratuit a un nombre limité de business. Si la création est refusée pour cette raison, explique que MoneyMaker Pro débloque les business illimités, sans rien acheter toi-même.
+The free plan has a limited number of businesses. If creation is refused for this reason, explain that MoneyMaker Pro unlocks unlimited businesses, without buying anything yourself.
 
-## 4. Brancher les revenus
+## 4. Connect revenue
 
-Demande quelles sources il utilise, puis traite seulement celles-là.
+Ask which sources they use, then handle only those.
 
-| Source | Ce qu'il te faut | Outil |
+| Source | What you need | Tool |
 |---|---|---|
-| Stripe | Clé restreinte `rk_` de préférence (`sk_` accepté) : lecture Abonnements, Factures, Clients, Paiements, écriture Webhook Endpoints. Dashboard Stripe › Développeurs › Clés API | `connect_stripe` |
-| App Store | Clé API App Store Connect, rôle App Manager ou Admin : issuer ID, key ID, contenu du `.p8`. Utilisateurs et accès › Intégrations | `connect_app_store` |
-| Google Play | JSON d'un compte de service invité dans la Play Console, droits « Voir les données financières » et « Gérer les commandes », et le nom du package. L'outil renvoie un endpoint Pub/Sub à configurer dans la Play Console : transmets-le | `connect_google_play` |
-| RevenueCat | Clé secrète `sk_`, pour importer l'historique | `import_revenuecat` |
+| Stripe | Restricted key `rk_` preferred (`sk_` accepted): read Subscriptions, Invoices, Customers, Payments, write Webhook Endpoints. Stripe Dashboard › Developers › API keys | `connect_stripe` |
+| App Store | App Store Connect API key, App Manager or Admin role: issuer ID, key ID, contents of the `.p8`. Users and Access › Integrations | `connect_app_store` |
+| Google Play | JSON of a service account invited in Play Console, with "View financial data" and "Manage orders" permissions, and the package name. The tool returns a Pub/Sub endpoint to set in Play Console: pass it on | `connect_google_play` |
+| RevenueCat | Secret key `sk_`, to import history | `import_revenuecat` |
 
-Sécurité des clés : l'utilisateur peut te coller une clé ou t'indiquer le chemin d'un fichier (`.p8`, JSON) que tu lis pour le passer à l'outil. Ne les réaffiche jamais, ne les copie dans aucun fichier et ne les inscris pas dans le dépôt. S'il préfère ne pas te les confier, il peut brancher la source lui-même sur https://usemoneymaker.com, puis tu reprends à l'étape 5.
+Key safety: the user can paste a key or give you the path of a file (`.p8`, JSON) that you read to pass to the tool. Never display them again, never copy them into a file and never add them to the repository. If they'd rather not share them, they can connect the source themselves on https://usemoneymaker.com, then you resume at step 5.
 
-Si `connect_app_store` signale une URL de notifications serveur déjà configurée, demande avant de la remplacer avec `setNotificationUrl: true`.
+If `connect_app_store` reports a server notification URL already set, ask before replacing it with `setNotificationUrl: true`.
 
-## 5. Vérifier
+## 5. Check
 
-N'annonce pas la réussite avant d'avoir vérifié :
+Don't announce success before checking:
 
-1. `get_import_status` avec le `jobId` renvoyé par `import_revenuecat`, si tu as lancé cet import.
-2. `get_setup_checklist` : traite ce qui manque, en signalant les étapes facultatives.
-3. `get_overview` : montre à l'utilisateur ses vrais chiffres. Un compte à zéro après un branchement réussi peut simplement vouloir dire que l'import n'est pas terminé : dis-le.
+1. `get_import_status` with the `jobId` returned by `import_revenuecat`, if you ran that import.
+2. `get_setup_checklist`: handle what's missing, flagging optional steps.
+3. `get_overview`: show the user their real numbers. A zero account after a successful connection may simply mean the import isn't finished: say so.
 
-## 6. Terminer sur l'iPhone
+## 6. Finish in the app
 
-Dis à l'utilisateur d'ouvrir l'app MoneyMaker, de toucher **J'ai déjà un compte** et de se connecter **avec le même compte**, puis d'accepter les notifications. Appelle ensuite `send_test_push` : il doit entendre le son de vente. Termine par un résumé court : ce qui est branché, ce qui reste à faire.
+Tell the user to open the MoneyMaker app, tap **I already have an account** and sign in **with the same account**, then allow notifications. Then call `send_test_push`: they should hear the sale sound. Finish with a short summary: what's connected, what's left to do.
 
-## Règles
+## Rules
 
-- Avant chaque écriture, dis ce que tu vas faire et obtiens son accord.
-- Les montants `…Micros` se divisent par 1 000 000.
-- En cas d'erreur, explique-la simplement et propose la suite. N'invente aucun chiffre.
+- Before each write, say what you're going to do and get their agreement.
+- `…Micros` amounts are divided by 1,000,000.
+- If an error occurs, explain it simply and suggest what's next. Never make up a number.
 
-Aide : https://usemoneymaker.com/support
+Help: https://usemoneymaker.com/support

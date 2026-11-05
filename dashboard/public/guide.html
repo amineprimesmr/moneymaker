@@ -1,5 +1,6 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="fr"><head><meta charset="utf-8">
+<script src="/i18n.js"></script><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Guide MoneyMaker</title>
 <meta name="description" content="Brancher ses abonnements App Store, Google Play et Stripe à MoneyMaker, étape par étape.">
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
@@ -60,7 +61,7 @@ try await MoneyMaker.shared.purchase(package)         // acheter (ou MoneyMakerP
 <li><a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank">Google Cloud → IAM → Comptes de service</a> (projet lié à Play Console) → <b>Créer</b> « moneymaker » → <b>Clés → Ajouter une clé → JSON</b>.</li>
 <li><a href="https://play.google.com/console/users-and-permissions" target="_blank">Play Console → Utilisateurs et autorisations</a> → <b>Inviter</b> l'email du compte de service → autorisations de l'app : <b>Afficher les données financières</b> et <b>Gérer les commandes et les abonnements</b>.</li>
 <li>MoneyMaker → <b>Connexions → Google Play</b> : package + contenu du JSON → <b>Connecter</b> (les abonnements sont importés).</li>
-<li>Notifications en temps réel : <a href="https://console.cloud.google.com/cloudpubsub/topic/list" target="_blank">Pub/Sub</a> → <b>Créer un sujet</b> « play-rtdn » → ajoute <code>google-play-developer-notifications@system.gserviceaccount.com</code> en <b>Éditeur Pub/Sub</b> du sujet → <b>Créer un abonnement</b> de type <b>Push</b> vers l'URL copiée depuis MoneyMaker.</li>
+<li>Notifications en temps réel : <a href="https://console.cloud.google.com/cloudpubsub/topic/list" target="_blank">Pub/Sub</a> → <b>Créer un sujet</b> « play-rtdn » → ajoute <code>google-play-developer-notifications@system.gserviceaccount.com</code> en tant qu'<b>Éditeur Pub/Sub</b> du sujet → <b>Créer un abonnement</b> de type <b>Push</b> vers l'URL copiée depuis MoneyMaker.</li>
 <li>Play Console → ton app → <b>Monétiser → Configuration de la monétisation</b> → colle le nom complet du sujet → <b>Envoyer un message de test</b>.</li>
 </ol>
 <div class="tip">Les nouvelles autorisations Play peuvent mettre jusqu'à 24 h à s'appliquer : si la connexion échoue juste après l'invitation, réessaie plus tard.</div>

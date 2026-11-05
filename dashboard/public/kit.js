@@ -73,15 +73,19 @@ export const ic = (name, size = 16, attrs = "") => `<svg width="${size}" height=
 
 // ── Formats (Int.money de l'app : le symbole collé au nombre) ────────────────────────────
 const SYMBOLS = { EUR: "€", USD: "$", GBP: "£", JPY: "¥", CHF: "CHF", CAD: "CA$", AUD: "A$" };
-const num = (v, d) => new Intl.NumberFormat("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }).format(v);
+const num = (v, d) => new Intl.NumberFormat(MM_LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d }).format(v);
 export function money(micros, cur = "EUR", compact = false) {
   const v = (micros ?? 0) / 1e6, sym = SYMBOLS[cur] ?? `${cur} `, abs = Math.abs(v);
-  if (compact && abs >= 1e6) return `${num(v / 1e6, abs >= 1e7 ? 0 : 1)} M${sym}`;
-  if (compact && abs >= 1e4) return `${num(v / 1e3, abs >= 1e5 ? 0 : 1)} k${sym}`;
+  // Anglais : symbole devant, signe moins avant le symbole (-€12.3k). Français : symbole collé après.
+  const fmt = (n, d, unit = "") => MM_LANG === "fr"
+    ? `${num(n, d)}${unit ? `\u00a0${unit}` : ""}${sym}`
+    : `${n < 0 ? "-" : ""}${sym}${num(Math.abs(n), d)}${unit}`;
+  if (compact && abs >= 1e6) return fmt(v / 1e6, abs >= 1e7 ? 0 : 1, "M");
+  if (compact && abs >= 1e4) return fmt(v / 1e3, abs >= 1e5 ? 0 : 1, "k");
   const whole = abs >= 1000 || Math.abs(v - Math.round(v)) < 0.005;
-  return `${num(v, whole ? 0 : 2)}${sym}`;
+  return fmt(v, whole ? 0 : 2);
 }
-export const int = v => new Intl.NumberFormat("fr-FR").format(Math.round(v ?? 0));
+export const int = v => new Intl.NumberFormat(MM_LOCALE).format(Math.round(v ?? 0));
 export const flag = cc => cc && cc.length === 2 && cc !== "??" ? String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1f1a5 + c.charCodeAt(0))) : "🌐";
 
 // ── Séries (dailySeries, halfOverHalf) ───────────────────────────────────────────────────

@@ -1,7 +1,8 @@
 <!doctype html>
 <html lang="fr">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<script src="/i18n.js"></script><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mon abonnement</title>
 <link rel="icon" href="/favicon.ico">
 <style>
@@ -22,7 +23,7 @@ main{max-width:420px;margin:0 auto;padding:48px 16px;text-align:center;display:f
   const fail = m => { msg.className = "err"; msg.textContent = m; };
   if (!pid || !token) return fail("Lien invalide ou expiré. Demande un nouveau lien depuis l'app.");
   try {
-    const r = await fetch(`/v1/web/${encodeURIComponent(pid)}/portal`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+    const r = await fetch(`/v1/web/${encodeURIComponent(pid)}/portal`, { method: "POST", headers: { "Content-Type": "application/json", "Accept-Language": MM_LANG }, body: JSON.stringify({ token }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error === "invalid_manage_token" ? "Lien invalide ou expiré. Demande un nouveau lien depuis l'app." : j.error === "no_stripe_customer" || j.error === "no_stripe_subscription" ? "Aucun abonnement web trouvé pour ce compte." : (j.message || j.error));
     location.replace(j.url);

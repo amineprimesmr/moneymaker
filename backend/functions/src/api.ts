@@ -1,5 +1,5 @@
 import type { Request } from "firebase-functions/v2/https";
-import { SETUP_EN } from "./i18n";
+import { SETUP_EN, errorMessage } from "./i18n";
 import type { Response } from "express";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
@@ -1955,7 +1955,7 @@ export async function handle(req: Request, res: Response) {
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
   const path = req.path.replace(/^\/api(?=\/)/, "");
   // Les webhooks des stores (Apple, Google, Stripe…) partagent quelques IP : ils ne sont pas limités.
-  if (!path.startsWith("/v1/webhooks/") && overRateLimit(req.ip ?? "unknown")) { res.status(429).json({ error: "rate_limited", message: "Trop de requêtes, réessaie dans une minute" }); return; }
+  if (!path.startsWith("/v1/webhooks/") && overRateLimit(req.ip ?? "unknown")) { res.status(429).json({ error: "rate_limited", message: errorMessage("Trop de requêtes, réessaie dans une minute", req.get("accept-language")) }); return; }
   try {
     // Mode démo : lecture seule.
     // Seule exception : l'achat Pro, pour qu'App Review puisse le tester depuis la démo (rien n'est enregistré).
@@ -1979,7 +1979,7 @@ export async function handle(req: Request, res: Response) {
   } catch (e) {
     const err = e instanceof HttpError ? e : new HttpError(500, "internal_error");
     if (!(e instanceof HttpError)) console.error(e);
-    if (!res.headersSent) res.status(err.status).json({ error: err.code, message: err.message });
+    if (!res.headersSent) res.status(err.status).json({ error: err.code, message: errorMessage(err.message, req.get("accept-language")) });
   }
 }
 

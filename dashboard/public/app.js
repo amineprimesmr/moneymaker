@@ -28,7 +28,7 @@ let markReady; const ready = new Promise(r => markReady = r);
 async function api(path, opts = {}) {
   const token = await auth.currentUser.getIdToken();
   const res = await fetch(path, {
-    ...opts, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(opts.headers ?? {}) },
+    ...opts, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Accept-Language": MM_LANG, ...(opts.headers ?? {}) },
     body: opts.body && typeof opts.body !== "string" ? JSON.stringify(opts.body) : opts.body,
   });
   const json = await res.json().catch(() => ({}));
@@ -37,8 +37,8 @@ async function api(path, opts = {}) {
 }
 
 const money = (micros, cur = "EUR") => kitMoney(micros, cur);
-const pct = v => v == null ? "—" : `${(v * 100).toFixed(1).replace(".", ",")} %`;
-const date = t => t ? new Date(t).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "—";
+const pct = v => v == null ? "—" : `${(v * 100).toLocaleString(MM_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`;
+const date = t => t ? new Date(t).toLocaleString(MM_LOCALE, { dateStyle: "short", timeStyle: "short" }) : "—";
 function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.append(t); setTimeout(() => t.remove(), 2600); }
 async function copy(text) { await navigator.clipboard.writeText(text); toast("Copié"); }
 window.mmCopy = copy;
@@ -134,7 +134,7 @@ function route() {
 let chartSeq = 0;
 function lineChart(points, cur, color = "var(--accent)", fmt = null) {
   if (points.length < 2) return `<div class="empty">Pas encore assez d'historique — le graphique se remplit chaque jour.</div>`;
-  const day = d => /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(`${d}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : d;
+  const day = d => /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(`${d}T12:00:00`).toLocaleDateString(MM_LOCALE, { day: "numeric", month: "short" }) : d;
   return glowChart(points.map(p => ({ label: day(p.label), v: p.v, text: fmt ? fmt(p.v) : money(p.v, cur) })), { height: 180 });
 }
 function barChart(byDay, days, cur) {
@@ -180,7 +180,7 @@ const delta = (cur, prev, fmt = v => v) => {
   return ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "▲" : "▼"} ${Math.abs(d * 100).toFixed(0)} %</span>`;
 };
 const COUNTRIES = await fetch("/countries.json").then(r => r.json()).catch(() => ({}));
-const countryName = cc => COUNTRIES[cc]?.name ?? (cc === "??" ? "Inconnu" : cc);
+const countryName = cc => mmCountry(cc, COUNTRIES[cc]?.name) ?? (cc === "??" ? "Inconnu" : cc);
 const flag = cc => cc && cc.length === 2 && cc !== "??" ? String.fromCodePoint(...[...cc].map(c => 0x1f1a5 + c.charCodeAt(0))) : "🌐";
 const topRows = (obj, fmt, n = 8) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n)
   .map(([k, v]) => `<tr><td>${flag(k)} ${esc(countryName(k))}</td><td style="text-align:right">${fmt(v)}</td></tr>`).join("") || `<tr><td class="muted">—</td></tr>`;
@@ -297,7 +297,7 @@ async function tabAppStore(el) {
     ${apps.length ? `<button style="flex:0;white-space:nowrap" id="refresh">↻ Scanner</button>` : ""}</div><div id="results"></div>
     ${apps.length ? apps.map(a => `<div class="card section">
       <div class="row" style="align-items:center;gap:14px"><img src="${esc(a.icon ?? "")}" alt="" class="appicon"><div style="flex:1"><h2 style="margin:0">${esc(a.name ?? a.appId)} ${a.own === false ? '<span class="pill">concurrent</span>' : ""}</h2>
-        <p class="muted" style="margin:2px 0">${esc(a.developer ?? "")} · ${esc(a.genreName ?? "")} · ${a.rating ? "★ " + a.rating.toFixed(2) + " (" + (a.ratingCount ?? 0).toLocaleString("fr-FR") + " notes)" : "pas encore de notes"}</p></div>
+        <p class="muted" style="margin:2px 0">${esc(a.developer ?? "")} · ${esc(a.genreName ?? "")} · ${a.rating ? "★ " + a.rating.toFixed(2) + " (" + (a.ratingCount ?? 0).toLocaleString(MM_LOCALE) + " notes)" : "pas encore de notes"}</p></div>
         <div style="text-align:right;flex:0;white-space:nowrap"><div class="v" style="font-size:24px;font-weight:750">${a.countriesRanked ?? 0}</div><div class="muted small">pays classés</div></div>
         <div style="text-align:right;flex:0;white-space:nowrap"><div class="v" style="font-size:24px;font-weight:750">${a.bestRank ? "#" + a.bestRank : "—"}</div><div class="muted small">meilleur rang</div></div></div>
       <div class="row" style="margin-top:12px;flex-wrap:wrap;gap:6px">${(a.topRankings ?? []).map(r => `<span class="pill ok">${flag(r.cc)} #${r.rank} ${CHART[r.chart]}${r.scope === "genre" ? " · catégorie" : ""}${r.prevRank && r.prevRank !== r.rank ? (r.prevRank > r.rank ? " ▲" + (r.prevRank - r.rank) : " ▼" + (r.rank - r.prevRank)) : ""}</span>`).join("") || '<span class="muted">Pas encore classée — le scan tourne toutes les heures (25 grands marchés) et couvre les 177 pays en 6 h.</span>'}</div>
@@ -307,7 +307,7 @@ async function tabAppStore(el) {
   const tracked = apps.map(a => ({ appId: a.appId, own: a.own !== false }));
   $("#search").onclick = async () => {
     const term = $("#q").value.trim(); if (!term) return;
-    const results = /^\d{6,}$/.test(term) ? [{ appId: term, name: `App ${term}` }] : (await api(`/v1/appstore/search?term=${encodeURIComponent(term)}&country=fr`)).results;
+    const results = /^\d{6,}$/.test(term) ? [{ appId: term, name: `App ${term}` }] : (await api(`/v1/appstore/search?term=${encodeURIComponent(term)}&country=${MM_LANG === "fr" ? "fr" : "us"}`)).results;
     $("#results").innerHTML = `<div class="card section"><table>${results.map(r => `<tr><td style="width:44px">${r.icon ? `<img src="${esc(r.icon)}" class="appicon sm" alt="">` : ""}</td><td><b>${esc(r.name)}</b><div class="muted">${esc(r.developer ?? "")} · ${esc(r.genreName ?? "")}</div></td>
       <td style="text-align:right;white-space:nowrap"><button class="small primary" data-add="${esc(r.appId)}" data-own="1">C'est mon app</button> <button class="small" data-add="${esc(r.appId)}" data-own="0">Concurrent</button></td></tr>`).join("") || `<tr><td class="muted">Aucun résultat</td></tr>`}</table></div>`;
     document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => save([...tracked.filter(t => t.appId !== b.dataset.add), { appId: b.dataset.add, own: b.dataset.own === "1" }]));
@@ -363,7 +363,7 @@ async function shareCard(app, r) {
   g.fillText(`${flag(r.cc)} ${countryName(r.cc)}`, 540, 1010);
   g.fillStyle = "#8a9a95"; g.font = "500 44px -apple-system, Inter, system-ui";
   g.fillText(`App Store · ${CHART[r.chart]}${r.scope === "genre" ? " · " + (app.genreName ?? "") : ""}`, 540, 1085);
-  g.font = "500 34px -apple-system, Inter, system-ui"; g.fillText(new Date().toLocaleDateString("fr-FR", { dateStyle: "long" }), 540, 1260);
+  g.font = "500 34px -apple-system, Inter, system-ui"; g.fillText(new Date().toLocaleDateString(MM_LOCALE, { dateStyle: "long" }), 540, 1260);
   const url = cv.toDataURL("image/png");
   openModal(`<h2>Carte à partager</h2><img src="${url}" alt="" style="width:100%;border-radius:12px"><div class="row" style="margin-top:12px"><a class="btnlink primary" download="${esc(app.name ?? "app")}-${r.cc}-${r.rank}.png" href="${url}">Télécharger le PNG</a><button>Fermer</button></div>`);
 }
@@ -382,7 +382,7 @@ async function tabReviews(el) {
   el.innerHTML = `<div class="row section"><select id="rApp">${apps.map(a => `<option value="${esc(a.appId)}" ${a.appId === state.reviewApp ? "selected" : ""}>${esc(a.name ?? a.appId)}</option>`).join("")}</select>
     <select id="rCountry"><option value="">Tous les pays</option>${ratings.map(r => `<option value="${r.cc}" ${state.reviewCountry === r.cc ? "selected" : ""}>${flag(r.cc)} ${esc(countryName(r.cc))} (${r.count})</option>`).join("")}</select>
     <select id="rRating"><option value="">Toutes les notes</option>${[5, 4, 3, 2, 1].map(n => `<option value="${n}" ${String(state.reviewRating) === String(n) ? "selected" : ""}>${"★".repeat(n)}</option>`).join("")}</select></div>
-    <div class="grid2 section"><div class="card"><h3>Notes par pays</h3><table>${ratings.slice(0, 12).map(r => `<tr><td>${flag(r.cc)} ${esc(countryName(r.cc))}</td><td>★ ${r.average?.toFixed(2) ?? "—"}</td><td style="text-align:right">${r.count.toLocaleString("fr-FR")}</td></tr>`).join("") || `<tr><td class="muted">Pas encore de notes</td></tr>`}</table></div>
+    <div class="grid2 section"><div class="card"><h3>Notes par pays</h3><table>${ratings.slice(0, 12).map(r => `<tr><td>${flag(r.cc)} ${esc(countryName(r.cc))}</td><td>★ ${r.average?.toFixed(2) ?? "—"}</td><td style="text-align:right">${r.count.toLocaleString(MM_LOCALE)}</td></tr>`).join("") || `<tr><td class="muted">Pas encore de notes</td></tr>`}</table></div>
     <div class="card"><h3>Répartition (avis affichés)</h3>${dist.map(([n, c]) => `<div class="row" style="gap:8px;margin:4px 0"><span style="flex:0;width:60px">${"★".repeat(n)}</span><div style="flex:1;height:8px;background:var(--panel2);border-radius:4px"><div style="height:8px;border-radius:4px;background:var(--accent);width:${reviews.length ? (c / reviews.length * 100).toFixed(0) : 0}%"></div></div><span style="flex:0;width:32px;text-align:right">${c}</span></div>`).join("")}</div></div>
     ${reviews.map(r => `<div class="card section review" data-id="${esc(r.id)}"><div class="row" style="justify-content:space-between"><b>${"★".repeat(r.rating)}<span class="muted">${"★".repeat(5 - r.rating)}</span> ${esc(r.title)}</b><span class="muted" style="flex:0;white-space:nowrap">${flag(r.country)} ${date(r.at)} · v${esc(r.version)}</span></div>
       <p class="rtext">${esc(r.content)}</p><div class="row" style="gap:6px;justify-content:space-between"><span class="muted">— ${esc(r.author)}</span><span class="row" style="flex:0;gap:6px"><button class="small" data-tr="${esc(r.id)}">Traduire</button><button class="small" data-sr="${esc(r.id)}">Partager</button></span></div></div>`).join("") || `<div class="card empty">Aucun avis récupéré pour ce filtre (scan toutes les 6 h).</div>`}`;
@@ -390,7 +390,7 @@ async function tabReviews(el) {
   $("#rCountry").onchange = e => { state.reviewCountry = e.target.value; tabReviews(el); };
   $("#rRating").onchange = e => { state.reviewRating = e.target.value; tabReviews(el); };
   el.querySelectorAll("[data-tr]").forEach(b => b.onclick = async () => {
-    const t = await api(`/v1/projects/${state.projectId}/appstore/${state.reviewApp}/reviews/${b.dataset.tr}/translate`, { method: "POST", body: { target: "fr" } });
+    const t = await api(`/v1/projects/${state.projectId}/appstore/${state.reviewApp}/reviews/${b.dataset.tr}/translate`, { method: "POST", body: { target: MM_LANG } });
     const card = b.closest(".review"); card.querySelector("b").lastChild.textContent = " " + t.title; card.querySelector(".rtext").textContent = t.content; b.disabled = true; b.textContent = `Traduit (${t.from ?? "?"} → fr)`;
   });
   el.querySelectorAll("[data-sr]").forEach(b => b.onclick = () => reviewCard(app, reviews.find(r => r.id === b.dataset.sr), b.closest(".review")));
@@ -447,12 +447,19 @@ async function tabConnect(el) {
   const p = await api(`/v1/projects/${state.projectId}`);
   const ok = b => b ? `<span class="pill ok">connecté</span>` : `<span class="pill warn">à connecter</span>`;
   const integ = p.credentials.integrations ?? [];
-  const agentPrompt = `Intègre MoneyMaker (abonnements) dans cette app en suivant ${location.origin}/llms.txt.
+  // Le prompt se copie tel quel : il est écrit ici dans les deux langues, pas traduit à l'affichage.
+  const agentAccess = Object.keys(p.config.entitlements)[0] ?? "premium";
+  const agentPrompt = MM_LANG === "fr" ? `Intègre MoneyMaker (abonnements) dans cette app en suivant ${location.origin}/llms.txt.
 Projet: ${p.id}
 Base URL: ${location.origin}/v1
 Clé publique SDK: <colle ta clé mm_pub_ ici>
-Accès à vérifier: ${Object.keys(p.config.entitlements)[0] ?? "premium"}
-Remplace toute logique RevenueCat/StoreKit existante, appelle MoneyMaker.configure au lancement, logIn avec l'id utilisateur, purchase() depuis le paywall, et verrouille les écrans premium avec isEntitled.`;
+Accès à vérifier: ${agentAccess}
+Remplace toute logique RevenueCat/StoreKit existante, appelle MoneyMaker.configure au lancement, logIn avec l'id utilisateur, purchase() depuis le paywall, et verrouille les écrans premium avec isEntitled.` : `Integrate MoneyMaker (subscriptions) into this app by following ${location.origin}/llms.txt.
+Project: ${p.id}
+Base URL: ${location.origin}/v1
+Public SDK key: <paste your mm_pub_ key here>
+Access to check: ${agentAccess}
+Replace any existing RevenueCat/StoreKit logic, call MoneyMaker.configure at launch, logIn with the user id, purchase() from the paywall, and lock premium screens with isEntitled.`;
   el.innerHTML = `<div class="card section"><h2>⚡ Brancher le SDK : demande à ton agent</h2><p class="muted">Colle ce prompt dans Claude, à la racine de ton app.</p><pre>${esc(agentPrompt)}</pre>
     <div class="row" style="margin-top:10px"><button class="primary" style="flex:0;white-space:nowrap" onclick='mmCopy(${esc(JSON.stringify(agentPrompt))})'>Copier le prompt</button><a href="/guide" style="flex:0;white-space:nowrap">Guide pas à pas →</a></div></div>
   <div class="grid2">
@@ -848,6 +855,7 @@ async function renderSettings(main) {
     <div id="proCard"></div>
     <div><p class="set-title">Date et région</p><div class="set-card">
       ${setRow("euro", "Devise d'affichage", `<select id="setCur" aria-label="Devise d'affichage"><option value="">Automatique</option>${CURRENCIES.map(c => `<option ${pref("mmCurrency") === c ? "selected" : ""}>${c}</option>`).join("")}</select>`)}
+      ${setRow("globe", "Langue", `<select id="setLang" aria-label="Langue"><option value="en" ${MM_LANG === "en" ? "selected" : ""}>English</option><option value="fr" ${MM_LANG === "fr" ? "selected" : ""}>Français</option></select>`)}
       ${setRow("clock", "Heures", `<select id="setTz" aria-label="Fuseau des heures"><option value="">Locales</option><option value="1" ${pref("mmUTC") ? "selected" : ""}>UTC</option></select>`)}</div></div>
     <div><p class="set-title">Transactions</p><div class="set-card">
       ${setRow("bolt", "Ouvrir une vente", `<select id="setOpen" aria-label="Ouvrir une vente"><option value="transaction">Transaction</option><option value="customer" ${openAs === "customer" ? "selected" : ""}>Client</option></select>`)}</div></div>
@@ -869,6 +877,7 @@ async function renderSettings(main) {
   $("#delAccount").onclick = deleteAccountDialog;
   const refresh = () => { invalidateStore(); };
   $("#setCur").onchange = e => { setPref("mmCurrency", e.target.value || null); refresh(); };
+  $("#setLang").onchange = e => mmSetLang(e.target.value);
   $("#setTz").onchange = e => { setPref("mmUTC", e.target.value || null); refresh(); };
   $("#setOpen").onchange = e => setPref("mmOpenAs", JSON.stringify(e.target.value));
   $("#exportCsv").onclick = async () => {
@@ -882,11 +891,12 @@ async function renderSettings(main) {
   $("#mk").onclick = async () => { const r = await api("/v1/tokens", { method: "POST", body: { label: $("#label").value || "token" } }); $("#tok").innerHTML = `<p class="muted">Affiché une seule fois :</p>${copyRow(r.token)}`; };
 }
 function deleteAccountDialog() {
+  const DELETE_WORD = MM_LANG === "fr" ? "SUPPRIMER" : "DELETE"; // Mot à taper ; l'API reçoit toujours « SUPPRIMER ».
   openModal(`<h2>Supprimer mon compte ?</h2><p class="muted">Ton compte, tes jetons et les business dont tu es le seul membre (données de ventes, clés, réglages) seront supprimés. C'est irréversible.</p>
-    <div class="field"><label>Écris SUPPRIMER pour confirmer</label><input id="delConfirm" autocomplete="off"></div>
+    <div class="field"><label>Écris ${DELETE_WORD} pour confirmer</label><input id="delConfirm" autocomplete="off"></div>
     <div class="row" style="margin-top:14px"><button value="cancel">Annuler</button><button type="button" class="danger" id="delGo">Supprimer</button></div>`);
   $("#delGo").onclick = async () => {
-    if ($("#delConfirm").value.trim() !== "SUPPRIMER") return toast("Écris SUPPRIMER pour confirmer");
+    if ($("#delConfirm").value.trim().toUpperCase() !== DELETE_WORD) return toast(`Écris ${DELETE_WORD} pour confirmer`);
     $("#delGo").disabled = true;
     try { await api("/v1/account", { method: "DELETE", body: { confirm: "SUPPRIMER" } }); $("#modal").close(); await signOut(auth); }
     catch (e) { $("#delGo").disabled = false; toast(e.message); }
@@ -932,7 +942,7 @@ async function newProjectDialog() {
   let appId = null;
   $("#pFind").onclick = async () => {
     const term = $("#pSearch").value.trim(); if (!term) return;
-    const { results } = await api(`/v1/appstore/search?term=${encodeURIComponent(term)}&country=fr`);
+    const { results } = await api(`/v1/appstore/search?term=${encodeURIComponent(term)}&country=${MM_LANG === "fr" ? "fr" : "us"}`);
     $("#pResults").innerHTML = results.slice(0, 5).map(r => `<div class="row pick" data-app="${esc(r.appId)}" data-name="${esc(r.name)}" style="gap:10px;padding:8px;border-radius:10px;cursor:pointer;margin-top:6px">
       <img src="${esc(r.icon)}" class="appicon sm" alt="" style="flex:0 0 40px"><div><b>${esc(r.name)}</b><div class="muted">${esc(r.developer)}</div></div></div>`).join("") || `<p class="muted">Aucun résultat — tu peux créer sans.</p>`;
     document.querySelectorAll(".pick").forEach(el => el.onclick = () => {
@@ -1060,10 +1070,10 @@ async function tabCharts(el) {
   let r;
   try { r = await api(`/v1/projects/${state.projectId}/charts/${c.name}?${qs()}`); } catch (e) { $("#chOut").innerHTML = `<div class="card empty error">${esc(e.message)}</div>`; return; }
   const currency = r.currency ?? cur;
-  const fmt = v => v == null ? "—" : r.unit === "micros" ? money(v, currency) : r.unit === "ratio" ? pct(v) : new Intl.NumberFormat("fr-FR").format(v);
+  const fmt = v => v == null ? "—" : r.unit === "micros" ? money(v, currency) : r.unit === "ratio" ? pct(v) : new Intl.NumberFormat(MM_LOCALE).format(v);
   const [label, kind] = CHARTS[c.name];
   const sum = Object.entries(r.summary ?? {}).filter(([k, v]) => typeof v === "number" && !/^p\d+$/.test(k));
-  const sumFmt = (k, v) => k === "value" ? fmt(v) : /^(revenue|refunds|amount|net)$/.test(k) || (r.unit === "micros" && ["new", "reactivated", "churned"].includes(k)) ? money(v, currency) : new Intl.NumberFormat("fr-FR").format(v);
+  const sumFmt = (k, v) => k === "value" ? fmt(v) : /^(revenue|refunds|amount|net)$/.test(k) || (r.unit === "micros" && ["new", "reactivated", "churned"].includes(k)) ? money(v, currency) : new Intl.NumberFormat(MM_LOCALE).format(v);
   const kpis = `<div class="kpis">${sum.filter(([k]) => k !== "value").slice(0, 6).map(([k, v]) => kpi(MOVE_LABEL[k] ?? k, sumFmt(k, v))).join("")}</div>`;
   const values = r.series.map(p => p.value).filter(v => v != null), heroValue = r.summary?.value ?? values.at(-1);
   let body;

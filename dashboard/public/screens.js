@@ -181,7 +181,7 @@ function extraStats(o, t) {
   out.push(["calendar", "ARR", money(o.mrrMicros * 12, cur), .5]);
   if (o.activeSubscriptions > 0) out.push(["person", "Revenu par abonné", money(o.mrrMicros / o.activeSubscriptions, cur), .5]);
   const churn = avg(o.projects.map(p => p.churnRate).filter(v => v != null));
-  if (churn != null) out.push(["undodown", "Désabonnement", `${(churn * 100).toFixed(1).replace(".", ",")} %`, churn]);
+  if (churn != null) out.push(["undodown", "Désabonnement", `${(churn * 100).toLocaleString(MM_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`, churn]);
   const conv = avg(o.projects.map(p => p.trialConversionRate).filter(v => v != null));
   if (conv != null) out.push(["seal", "Conversion des essais", `${Math.round(conv * 100)} %`, conv]);
   const issues = sum(o.projects, p => p.billingIssues);
@@ -333,8 +333,8 @@ function bizRows(k, o) {
 
 // ── Détail d'une carte (HomeMetricDetail) ───────────────────────────────────────────────
 const RANGES = [["Semaine", 7], ["Mois", 30], ["3 mois", 90], ["Année", 365]];
-const shortDay = t => new Date(t).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-const longDay = t => new Date(t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+const shortDay = t => new Date(t).toLocaleDateString(MM_LOCALE, { day: "numeric", month: "short" });
+const longDay = t => new Date(t).toLocaleDateString(MM_LOCALE, { weekday: "long", day: "numeric", month: "long" });
 const isToday = t => new Date(t).toDateString() === new Date().toDateString();
 export async function renderMetric(main) {
   const k = METRICS[h.state.metric] ? h.state.metric : "mrr", m = METRICS[k];
@@ -370,7 +370,7 @@ export async function renderMetric(main) {
       <div class="dt-hero"><canvas class="dots" data-anchor="topTrailing" data-seed="${m.seed}" data-reach=".9"></canvas>
         ${tileHead(m.icon, m.title(o))}<div class="v" id="dtV">${headline()}</div><div class="s" id="dtS">${subtitle()}</div>
         ${neon(pts.map(p => p.v), { money: Boolean(m.money) })}
-        <div class="axis"><span>${pts[0] ? (k === "today" ? new Date(pts[0].t).toLocaleTimeString("fr-FR", { hour: "numeric" }) : shortDay(pts[0].t)) : ""}</span><span>${k === "today" ? "Maintenant" : "Aujourd'hui"}</span></div></div>
+        <div class="axis"><span>${pts[0] ? (k === "today" ? new Date(pts[0].t).toLocaleTimeString(MM_LOCALE, { hour: "numeric" }) : shortDay(pts[0].t)) : ""}</span><span>${k === "today" ? "Maintenant" : "Aujourd'hui"}</span></div></div>
       ${k === "today" ? "" : `<div class="chips-days" id="dtDays">${pts.map((p, i) => `<button data-i="${i}"><em>${isToday(p.t) ? "Aujourd'hui" : shortDay(p.t)}</em><b>${money((k === "mrr" ? p.day : p.v) * 1e6, cur, true)}</b></button>`).join("")}</div>`}
       </div><div class="dt-right"><div class="stats2">${detailStats(k, o, t, pts, range).map(([tt, v, i]) => `<div class="tile mini static"><div class="h">${ic(i, 11)}<span>${esc(tt)}</span></div><div class="val">${esc(v)}</div></div>`).join("")}</div>
       <p class="note">${esc(m.explain)}</p></div></div>
@@ -391,7 +391,7 @@ export async function renderMetric(main) {
       if (end) end.style.display = "none";
       const val = k === "mrr" ? p.day : p.v;
       vEl.textContent = m.money ? money(val * 1e6, cur) : money(val * 1e6, cur);
-      sEl.textContent = k === "today" ? new Date(p.t).toLocaleTimeString("fr-FR", { hour: "numeric", minute: "2-digit" }) : longDay(p.t);
+      sEl.textContent = k === "today" ? new Date(p.t).toLocaleTimeString(MM_LOCALE, { hour: "numeric", minute: "2-digit" }) : longDay(p.t);
       main.querySelectorAll("#dtDays button").forEach(b => { const on = Number(b.dataset.i) === i; b.classList.toggle("on", on); if (on) b.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); });
     };
     const fromEvent = e => { const r = nv.getBoundingClientRect(); return Math.max(0, Math.min(pts.length - 1, Math.round((e.clientX - r.left) / r.width * (pts.length - 1)))); };
@@ -425,14 +425,14 @@ function detailStats(k, o, t, pts, range) {
 // ── Ventes en direct (FeedScreen) ───────────────────────────────────────────────────────
 const amountOf = e => (e.priceMicros ?? 0) > 0 || e.displayMicros ? money(e.displayMicros ?? e.priceMicros, e.displayCurrency ?? e.currency) : null;
 const projectOf = id => (store.overview?.projects ?? []).find(p => p.projectId === id);
-const timeOf = e => { const recent = Date.now() - e.at < 2 * 864e5, d = new Date(e.at), hm = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: tz() }); return recent ? hm : `${d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: tz() })} ${hm}`; };
+const timeOf = e => { const recent = Date.now() - e.at < 2 * 864e5, d = new Date(e.at), hm = d.toLocaleTimeString(MM_LOCALE, { hour: "2-digit", minute: "2-digit", timeZone: tz() }); return recent ? hm : `${d.toLocaleDateString(MM_LOCALE, { day: "numeric", month: "short", timeZone: tz() })} ${hm}`; };
 function feedRow(e) {
   const b = eventBadge(e), amt = amountOf(e), p = projectOf(e.projectId);
   return `<button class="fi" data-event="${esc(e.id)}"><span class="ic">${p ? projectIcon(p, 42) : projectIcon({ projectId: e.projectId, name: e.projectName }, 42)}${e.country ? `<span class="fl">${flag(e.country)}</span>` : ""}</span>
     <span class="tx"><b><bdi>${esc(e.productId ?? e.projectName ?? e.type)}</bdi></b><i>${esc([timeOf(e), storeLabel(e.store)].filter(Boolean).join(" · "))}</i></span>
     <span class="am"><b style="color:${["REFUND", "REVOKED"].includes(e.type) ? "var(--red)" : amt ? "var(--ink)" : "var(--ink3)"}">${amt ?? (b.free ? "Gratuit" : "")}</b>${tbadge(b)}</span></button>`;
 }
-const dayTitle = t => { const d = new Date(t), y = new Date(Date.now() - 864e5); return isToday(t) ? "Aujourd'hui" : d.toDateString() === y.toDateString() ? "Hier" : d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }).replace(/^./, c => c.toUpperCase()); };
+const dayTitle = t => { const d = new Date(t), y = new Date(Date.now() - 864e5); return isToday(t) ? "Aujourd'hui" : d.toDateString() === y.toDateString() ? "Hier" : d.toLocaleDateString(MM_LOCALE, { weekday: "long", day: "numeric", month: "long" }).replace(/^./, c => c.toUpperCase()); };
 function scopeLabel() { const ids = viewIds(), all = allProjects(); return ids.length === all.length ? "Tous les business" : ids.length === 1 ? projectOf(ids[0])?.name ?? "" : `${ids.length} business`; }
 export async function renderFeed(main) {
   main.innerHTML = `<div class="page"><div><div class="page-title">Ventes en direct</div><div class="page-sub" id="feedScope"></div></div><div class="feed-grid"><div id="feedBody" style="display:flex;flex-direction:column;gap:10px;min-width:0">${skeleton(1, 420)}</div><aside class="feed-pane" id="feedPane"></aside></div></div>`;
@@ -463,7 +463,7 @@ export async function renderFeed(main) {
     const ids = viewIds(), list = store.feed.filter(e => ids.includes(e.projectId));
     if (!list.length) { box.innerHTML = `<div class="card"><p class="muted" style="margin:0">Tes ventes apparaîtront ici en direct, dès la première.</p></div>`; return; }
     const groups = [];
-    for (const e of list) { const key = new Date(e.at).toLocaleDateString("fr-FR", { timeZone: tz() }); let g = groups.find(x => x.key === key); if (!g) groups.push(g = { key, at: e.at, items: [] }); g.items.push(e); }
+    for (const e of list) { const key = new Date(e.at).toLocaleDateString(MM_LOCALE, { timeZone: tz() }); let g = groups.find(x => x.key === key); if (!g) groups.push(g = { key, at: e.at, items: [] }); g.items.push(e); }
     box.innerHTML = groups.map(g => {
       const total = g.items.filter(e => (e.priceMicros ?? 0) > 0 && !["TRIAL_STARTED", "CANCELLATION", "EXPIRATION", "BILLING_ISSUE"].includes(e.type)).reduce((s, e) => s + (e.displayMicros ?? e.priceMicros) * (["REFUND", "REVOKED"].includes(e.type) ? -1 : 1), 0);
       return `<div class="day-head"><span>${esc(dayTitle(g.at))}</span><b>${money(total, cur)}</b></div><div class="card flush" style="overflow:hidden">${g.items.map(feedRow).join("")}</div>`;
@@ -507,8 +507,8 @@ function txBody(e) {
   return `<div class="tx-hero">${projectIcon(p ?? { projectId: e.projectId, name: e.projectName }, 110)}<span class="fl">${flag(e.country ?? "")}</span></div>
     ${sec([(e.productId ?? "").length > 22 ? txStack("square", "Produit", e.productId) : txRow("square", "Produit", esc(e.productId ?? "—")), txRow("dollar", "Revenu", esc(amountOf(e) ?? (b.free ? "Gratuit" : "—"))),
       ...(e.appUserId ? [`<div class="tx-row link" data-customer><span class="i">${ic("person", 18)}</span><div style="flex:1;min-width:0"><div class="k">Client</div><div class="k2" style="font-size:14px;color:var(--ink3);margin-top:3px">${esc(masked(e.appUserId))}</div></div><span style="color:var(--ink3)">${ic("right", 13)}</span></div>`] : [])])}
-    ${sec([txRow("calendar", "Date", esc(new Date(e.at).toLocaleString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: tz() }))), txRow("globe", "Pays", e.country ? `${flag(e.country)} ${esc(h.countryName(e.country))}` : "Inconnu"), txRow("store", "Boutique", esc(storeLabel(e.store) ?? "—")), `<div class="tx-row"><span class="i">${ic("tag", 18)}</span><span class="k">Type</span><span class="val">${tbadge(b)}</span></div>`,
-      ...(exp ? [txRow("clock", exp > Date.now() ? "Expire le" : "Expiré le", esc(new Date(exp).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })))] : []),
+    ${sec([txRow("calendar", "Date", esc(new Date(e.at).toLocaleString(MM_LOCALE, { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: tz() }))), txRow("globe", "Pays", e.country ? `${flag(e.country)} ${esc(h.countryName(e.country))}` : "Inconnu"), txRow("store", "Boutique", esc(storeLabel(e.store) ?? "—")), `<div class="tx-row"><span class="i">${ic("tag", 18)}</span><span class="k">Type</span><span class="val">${tbadge(b)}</span></div>`,
+      ...(exp ? [txRow("clock", exp > Date.now() ? "Expire le" : "Expiré le", esc(new Date(exp).toLocaleDateString(MM_LOCALE, { day: "numeric", month: "short", year: "numeric" })))] : []),
       ...(m > 0 ? [txRow("renew", "Période", m < 1 ? "Semaine" : m === 1 ? "Mois" : m === 12 ? "Année" : `${Math.round(m)} mois`)] : []), ...(e.isSandbox ? [txRow("hammer", "Environnement", "Test (sandbox)")] : [])])}
     ${sec([txStack("hash", "Transaction", e.purchaseId ?? e.id, true), txRow("grid", "Projet", esc(e.projectName ?? p?.name ?? "—"))])}`;
 }
@@ -545,7 +545,7 @@ async function customerBody(r) {
     <div class="mlabel" style="padding:6px 4px 0"><span>Achats</span><span>${purchases.length}</span></div>
     <div class="card flush" style="overflow:hidden">${purchases.map(x => `<div class="fi" style="cursor:default"><span class="tx"><b><bdi>${esc(x.productId)}</bdi></b><i>${esc([storeLabel(x.store), x.expiresAt ? `jusqu'au ${shortDay(x.expiresAt)}` : "à vie"].filter(Boolean).join(" · "))}</i></span><span class="am"><b>${x.priceMicros ? money(x.priceMicros, x.currency) : ""}</b>${tbadge(x.status === "active" ? { label: "ACTIF", color: "51,217,128" } : { label: String(x.status).toUpperCase(), color: "255,255,255", grey: true })}</span></div>`).join("") || `<p class="muted" style="padding:18px;margin:0">Aucun achat.</p>`}</div></div>
     <div class="cu-col"><div class="mlabel" style="padding:6px 4px 0"><span>Historique</span><span>${events.length}</span></div>
-    <div class="card">${events.slice(0, 60).map((e, i, all) => `<div style="display:flex;gap:12px"><div style="display:flex;flex-direction:column;align-items:center;width:8px;flex:none"><i style="width:8px;height:8px;border-radius:50%;background:${dotColor(e.type)};box-shadow:0 0 8px ${dotColor(e.type)};margin-top:6px"></i>${i < all.length - 1 ? `<i style="flex:1;width:1px;background:var(--hair);margin-top:3px"></i>` : ""}</div><div style="flex:1;min-width:0;padding-bottom:14px;display:flex;justify-content:space-between;gap:10px"><div style="min-width:0"><div style="font-size:14px;font-weight:500">${esc(eventBadge(e).label)}</div><div class="page-sub" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.productId ?? "")}</div></div><div class="page-sub" style="font-size:12px;white-space:nowrap">${esc(new Date(e.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}</div></div></div>`).join("") || `<p class="muted" style="margin:0">Rien pour l'instant.</p>`}</div>
+    <div class="card">${events.slice(0, 60).map((e, i, all) => `<div style="display:flex;gap:12px"><div style="display:flex;flex-direction:column;align-items:center;width:8px;flex:none"><i style="width:8px;height:8px;border-radius:50%;background:${dotColor(e.type)};box-shadow:0 0 8px ${dotColor(e.type)};margin-top:6px"></i>${i < all.length - 1 ? `<i style="flex:1;width:1px;background:var(--hair);margin-top:3px"></i>` : ""}</div><div style="flex:1;min-width:0;padding-bottom:14px;display:flex;justify-content:space-between;gap:10px"><div style="min-width:0"><div style="font-size:14px;font-weight:500">${esc(eventBadge(e).label)}</div><div class="page-sub" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.productId ?? "")}</div></div><div class="page-sub" style="font-size:12px;white-space:nowrap">${esc(new Date(e.at).toLocaleString(MM_LOCALE, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}</div></div></div>`).join("") || `<p class="muted" style="margin:0">Rien pour l'instant.</p>`}</div>
     <button class="ghost small" data-admin type="button" style="align-self:center">Gérer les accès</button></div>`;
 }
 
@@ -554,7 +554,7 @@ const appLogo = (a, s) => a.icon ? `<img class="applogo" src="${esc(a.icon)}" al
 function appRow(a) {
   const n = a.ratingCount ?? 0;
   return `<button class="card app-row" data-app="${esc(a.appId)}">${appLogo(a, 52)}<span class="tx"><b>${esc(a.name)}</b>
-    ${a.rating != null ? `<i>${stars(a.rating)}${a.rating.toFixed(1).replace(".", ",")} · ${int(n)}</i>` : `<i>Pas encore de notes</i>`}
+    ${a.rating != null ? `<i>${stars(a.rating)}${a.rating.toLocaleString(MM_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} · ${int(n)}</i>` : `<i>Pas encore de notes</i>`}
     ${a.countriesRanked > 0 ? `<u>Classée dans ${a.countriesRanked} pays</u>` : ""}</span>
     ${a.bestRank ? `<span class="rank">#${a.bestRank}</span>` : ""}<span style="color:var(--ink3)">${ic("right", 12)}</span></button>`;
 }
@@ -593,7 +593,7 @@ export async function renderApps(main) {
     if (!term) { results = []; return paintHome(); }
     timer = setTimeout(async () => {
       if (!results.length) body.innerHTML = `<div class="skeleton" style="height:88px"></div>`;
-      const r = await h.api(`/v1/appstore/search?term=${encodeURIComponent(term)}&country=fr`).catch(() => ({ results: [] }));
+      const r = await h.api(`/v1/appstore/search?term=${encodeURIComponent(term)}&country=${MM_LANG === "fr" ? "fr" : "us"}`).catch(() => ({ results: [] }));
       if (q.value.trim() !== term) return;
       results = (r.results ?? []).map(a => ({ ...a, appId: String(a.appId) }));
       body.innerHTML = results.map(appRow).join("") || `<div class="card"><p class="muted" style="margin:0">Aucune app trouvée.</p></div>`;
@@ -632,16 +632,16 @@ export async function renderAppDetail(main) {
     body.innerHTML = `<div class="storeline"><span></span><a href="https://apps.apple.com/app/id${esc(a.appId)}" target="_blank" rel="noopener">Ouvrir dans l'App Store ${ic("ext", 12)}</a></div>
       <div class="ad-grid"><div class="ad-l"><div class="card app-row" style="cursor:default;order:1">${appLogo(a, 58)}<span class="tx"><b>${esc(a.name)}</b>${a.developer ? `<i style="font-size:13px">${esc(a.developer)}</i>` : ""}</span><span class="hline"></span><span class="count-bubble"><b>${countries.length}</b>Pays</span></div>
       ${timeline.length > 1 ? `<div class="card" style="border-radius:22px;order:3"><div style="font-size:15px;font-weight:500;margin-bottom:12px">Pays classés par jour</div>${glowChart(timeline.map(d => ({ label: shortDay(d.t), v: d.set.size, text: `${d.set.size} pays` })), { height: 130 })}</div>` : ""}
-            ${countries.length ? `<div class="card" style="border-radius:22px;order:4"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:15px;font-weight:500">Score</span><span style="font-size:22px;font-weight:500;font-variant-numeric:tabular-nums">${score.toFixed(1).replace(".", ",")}</span></div><div style="display:flex;gap:3px;margin:12px 0">${Array.from({ length: 20 }, (_, i) => `<i style="flex:1;height:18px;border-radius:3px;background:${i * 5 < score ? "var(--accent)" : "rgba(255,255,255,.1)"}"></i>`).join("")}</div><div class="page-sub" style="font-size:12px">${score < 20 ? "Présence émergente" : score < 60 ? "Présence solide" : "Présence mondiale"}</div></div>` : ""}
-      <div class="card" style="border-radius:22px;order:5">${a.rating != null ? `<div style="display:flex;align-items:center;gap:14px"><span style="font-size:40px;font-weight:500;font-variant-numeric:tabular-nums">${a.rating.toFixed(1).replace(".", ",")}</span><div>${stars(a.rating)}<div class="page-sub" style="font-size:12px;margin-top:4px">Basé sur ${int(a.ratingCount)} notes</div></div></div>` : `<div style="font-size:15px;font-weight:500">Pas encore de notes</div>`}
+            ${countries.length ? `<div class="card" style="border-radius:22px;order:4"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:15px;font-weight:500">Score</span><span style="font-size:22px;font-weight:500;font-variant-numeric:tabular-nums">${score.toLocaleString(MM_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span></div><div style="display:flex;gap:3px;margin:12px 0">${Array.from({ length: 20 }, (_, i) => `<i style="flex:1;height:18px;border-radius:3px;background:${i * 5 < score ? "var(--accent)" : "rgba(255,255,255,.1)"}"></i>`).join("")}</div><div class="page-sub" style="font-size:12px">${score < 20 ? "Présence émergente" : score < 60 ? "Présence solide" : "Présence mondiale"}</div></div>` : ""}
+      <div class="card" style="border-radius:22px;order:5">${a.rating != null ? `<div style="display:flex;align-items:center;gap:14px"><span style="font-size:40px;font-weight:500;font-variant-numeric:tabular-nums">${a.rating.toLocaleString(MM_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span><div>${stars(a.rating)}<div class="page-sub" style="font-size:12px;margin-top:4px">Basé sur ${int(a.ratingCount)} notes</div></div></div>` : `<div style="font-size:15px;font-weight:500">Pas encore de notes</div>`}
         <div style="height:1px;background:var(--hair);margin:14px 0"></div><button class="plain" id="revBtn" style="display:flex;align-items:center;gap:8px;width:100%;font-size:14px;font-weight:500">${ic("chat", 15)}<span style="flex:1">Avis écrits</span><span class="page-sub" style="margin:0">${sheet.reviews.length}</span><span style="color:var(--ink3)">${ic("right", 12)}</span></button></div>
 </div><div class="ad-r"><div class="card" style="border-radius:22px;order:2"><div style="font-size:11px;font-weight:500;letter-spacing:1px;color:var(--ink3);margin-bottom:12px">HISTORIQUE ET MEILLEURES POSITIONS</div>
         <div style="font-size:20px;font-weight:500">${countries.length ? `Sur les ${tracked} derniers jours, classée dans ${countries.length} pays.` : "Pas encore classée dans un top."}</div>
         <div style="margin-top:6px">${shown.map(r => `<div class="rank-row"><span class="fl">${flag(r.cc)}</span><div class="nm"><b style="font-size:14px">${esc(h.countryName(r.cc))}</b>${r.bestAt ? `<i>${esc(shortDay(r.bestAt))}</i>` : ""}</div>${r.rank != null && r.rank !== r.bestRank ? `<span class="page-sub" style="font-size:11px;margin:0">Actuel ${r.rank}</span>` : ""}${r.prevRank != null && r.rank != null && r.prevRank !== r.rank ? `<span style="color:${r.rank < r.prevRank ? "var(--accent)" : "var(--ink3)"};${r.rank < r.prevRank ? "" : "transform:scaleY(-1)"}">${ic("up", 10)}</span>` : ""}<b style="min-width:36px;text-align:center;padding:6px;background:rgba(255,255,255,.1);border-radius:9px;font-size:14px;font-weight:500;font-variant-numeric:tabular-nums">${r.bestRank}</b></div>`).join("")}</div>
         ${countries.length > 8 ? `<button class="plain" id="allC" style="display:flex;justify-content:space-between;width:100%;font-size:14px;font-weight:500;margin-top:10px"><span>${showAll ? "Réduire" : `Voir les ${countries.length} pays`}</span>${ic(showAll ? "up" : "down", 12)}</button>` : ""}</div>
-      ${sheet.ratings.length ? `<div class="mlabel" style="padding:6px 4px 0;order:6"><span>Notes par pays</span><span>${sheet.ratings.length}</span></div><div class="card flush" style="overflow:hidden;order:7">${sheet.ratings.slice(0, 15).map(r => `<div class="cr" style="cursor:default"><span class="fl">${flag(r.cc)}</span><span style="flex:1;font-size:14px;font-weight:500">${esc(h.countryName(r.cc))}</span>${stars(r.average)}<span style="font-size:14px;font-weight:500;font-variant-numeric:tabular-nums">${r.average.toFixed(1).replace(".", ",")}</span><span class="page-sub" style="font-size:12px;margin:0;min-width:34px;text-align:right">${int(r.count)}</span></div>`).join("")}</div>` : ""}
+      ${sheet.ratings.length ? `<div class="mlabel" style="padding:6px 4px 0;order:6"><span>Notes par pays</span><span>${sheet.ratings.length}</span></div><div class="card flush" style="overflow:hidden;order:7">${sheet.ratings.slice(0, 15).map(r => `<div class="cr" style="cursor:default"><span class="fl">${flag(r.cc)}</span><span style="flex:1;font-size:14px;font-weight:500">${esc(h.countryName(r.cc))}</span>${stars(r.average)}<span style="font-size:14px;font-weight:500;font-variant-numeric:tabular-nums">${r.average.toLocaleString(MM_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span><span class="page-sub" style="font-size:12px;margin:0;min-width:34px;text-align:right">${int(r.count)}</span></div>`).join("")}</div>` : ""}
       </div></div>
-      ${a.rankedAt ? `<p class="updated" style="font-size:12px">Mis à jour le ${esc(new Date(a.rankedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }))}</p>` : ""}`;
+      ${a.rankedAt ? `<p class="updated" style="font-size:12px">Mis à jour le ${esc(new Date(a.rankedAt).toLocaleString(MM_LOCALE, { dateStyle: "medium", timeStyle: "short" }))}</p>` : ""}`;
     const all = document.getElementById("allC"); if (all) all.onclick = () => { showAll = !showAll; paint(); };
     document.getElementById("revBtn").onclick = () => { h.state.reviewsFor = { app: a, reviews: sheet.reviews }; reviewsDialog(a, sheet.reviews); };
     hydrate(body);
@@ -715,7 +715,7 @@ export async function renderBoard(main) {
     document.getElementById("lbPodium").innerHTML = `<div class="podium">${col(top[1], 2, { size: 62, front: 142, depth: 26, slant: 22, tilt: 14, delay: .10, side: "left" })}${col(top[0], 1, { size: 80, front: 200, depth: 20, slant: 11, tilt: 0, delay: .22, side: "mid" })}${col(top[2], 3, { size: 62, front: 108, depth: 30, slant: 22, tilt: -14, delay: .02, side: "right" })}</div>`;
     body.innerHTML = `<div class="lb-rows">${rest.map(row).join("")}</div>
       <button class="lb-join" id="lbJoin"><span style="display:flex">${myBiz.slice(0, 3).map((p, i) => `<span style="margin-left:${i ? -14 : 0}px;position:relative;z-index:${3 - i}">${projectIcon(p, 40)}</span>`).join("")}</span><b>${listed.length ? "Mes business au classement" : "Inscrire mon business"}</b><span style="color:var(--ink3)">${ic("right", 13)}</span></button>
-      <p class="lb-foot">${int(r.total)} business · mis à jour ${esc(new Date(r.updatedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }))}</p>`;
+      <p class="lb-foot">${int(r.total)} business · mis à jour ${esc(new Date(r.updatedAt).toLocaleTimeString(MM_LOCALE, { hour: "2-digit", minute: "2-digit" }))}</p>`;
     document.getElementById("lbJoin").onclick = () => joinDialog(paint);
   };
   await paint().catch(e => { const b = document.getElementById("lbBody"); if (b) b.innerHTML = `<div class="empty error">${esc(e.message)}</div>`; });

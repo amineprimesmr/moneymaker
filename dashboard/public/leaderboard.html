@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
+<script src="/i18n.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Classement — MoneyMaker</title>
 <meta name="description" content="Le classement public des apps et startups, sur des revenus vérifiés par l'App Store, Google Play et Stripe.">
@@ -65,7 +66,7 @@
 </main>
 <script>
 const SOURCES = { appstore: "App Store", googleplay: "Google Play", stripe: "Stripe" };
-const eur = m => (m / 1e6).toLocaleString("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: m >= 1e9 ? 0 : 2 });
+const eur = m => (m / 1e6).toLocaleString(MM_LOCALE, { style: "currency", currency: "EUR", maximumFractionDigits: m >= 1e9 ? 0 : 2 });
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 let sort = ["mrr", "revenue"].includes(new URLSearchParams(location.search).get("sort")) ? new URLSearchParams(location.search).get("sort") : "mrr";
 
@@ -73,7 +74,7 @@ function value(e) {
   switch (sort) {
     case "revenue": return e.revenue30dMicros == null ? e.revenueRange : eur(e.revenue30dMicros);
     case "growth": return e.growth30d == null ? "—" : `${e.growth30d >= 0 ? "+" : ""}${Math.round(e.growth30d * 100)} %`;
-    case "subscribers": return e.activeSubscriptions.toLocaleString("fr-FR") + " abonnés";
+    case "subscribers": return e.activeSubscriptions.toLocaleString(MM_LOCALE) + " abonnés";
     default: return e.mrrMicros == null ? e.mrrRange : eur(e.mrrMicros) + "/mois";
   }
 }
@@ -95,7 +96,7 @@ async function load() {
         <div class="tg">${esc(e.tagline ?? "")}</div></span>
       <span><div class="v">${esc(value(e))}</div>${e.growth30d != null && sort !== "growth" ? `<div class="g ${e.growth30d >= 0 ? "up" : "down"}">${e.growth30d >= 0 ? "▲" : "▼"} ${Math.abs(Math.round(e.growth30d * 100))} %</div>` : ""}</span>
     </a>`).join("") : (r.entries.length ? "" : `<div class="empty">Le classement démarre : sois le premier business inscrit.</div>`);
-    document.getElementById("updated").textContent = `${r.total} business · mis à jour ${new Date(r.updatedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
+    document.getElementById("updated").textContent = `${r.total} business · mis à jour ${new Date(r.updatedAt).toLocaleTimeString(MM_LOCALE, { hour: "2-digit", minute: "2-digit" })}`;
   } catch {
     rows.innerHTML = `<div class="empty">Classement indisponible pour le moment.</div>`;
   }
