@@ -25,7 +25,7 @@ struct OnboardingView: View {
 
     private let items: [Item] = [
         .init(title: String(localized: "Tous tes revenus au même endroit"),
-              subtitle: String(localized: "App Store, Google Play et Stripe,\nen direct."),
+              subtitle: String(localized: "App Store et Stripe,\nen direct."),
               image: "OnboardingHome"),
         .init(title: String(localized: "Chaque vente, en direct"),
               subtitle: String(localized: "Un son de caisse et une notification\nà chaque paiement."),
@@ -84,6 +84,7 @@ struct OnboardingView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { introModel.viewportWidth = $0 }
         .statusBarHidden(introPlaying)
         .task(id: introRun) {
             guard introPlaying else { return }
@@ -267,14 +268,15 @@ struct OnboardingPanorama: View {
     var body: some View {
         GeometryReader { geo in
             let height = geo.size.height
-            let slice = height * 1320 / 2868
+            // Sur un écran large, la bande grandit jusqu'à toujours couvrir toute la largeur.
+            let slice = max(height * 1320 / 2868, geo.size.width)
             let isLast = page == Self.pageCount - 1
             ZStack(alignment: .topLeading) {
                 // Une seule bande qui glisse d'un bloc : les images se chevauchent de 2 pt, aucun joint noir possible.
                 HStack(spacing: -2) {
                     ForEach(0..<Self.pageCount, id: \.self) { i in
                         Image("OnboardingPanorama\(i + 1)").resizable()
-                            .frame(width: slice + 2, height: height)
+                            .frame(width: slice + 2, height: max(height, slice * 2868 / 1320))
                     }
                 }
                 .offset(x: -CGFloat(page) * slice)

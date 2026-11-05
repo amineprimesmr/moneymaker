@@ -46,6 +46,7 @@ struct SignInView: View {
     @State private var step = Step.agentSetup
     @AppStorage("onboardingSeen") private var onboardingSeen = false
     @State private var onboardingPage = 0
+    @EnvironmentObject var store: Store
 
     var body: some View {
         ZStack {
@@ -80,6 +81,8 @@ struct SignInView: View {
             }
         }
         #endif
+        // Un jeton refusé doit se voir : seul l'écran de connexion affiche l'erreur.
+        .onChange(of: store.error) { _, e in if e != nil, step == .agentSetup { onboardingSeen = true; step = .signIn } }
         .environment(\.colorScheme, .dark)
         .transition(.opacity)
         .animation(MMMotion.reveal, value: step)
@@ -98,7 +101,7 @@ private struct AuthView: View {
             MMGlassIconButton(systemImage: "chevron.left") { if emailMode { emailMode = false } else { onBack() } }
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 5)
             // Le formulaire libère le haut de l'écran pour tenir au-dessus du clavier.
-            Color.clear.frame(height: emailMode ? 0 : 215)
+            Color.clear.frame(maxHeight: emailMode ? 0 : 215).layoutPriority(1)
             Spacer()
             Text("Connecte-toi à ton compte")
                 .font(MMFont.system(26, .semibold)).foregroundStyle(MMColor.ink)
@@ -120,6 +123,7 @@ private struct AuthView: View {
             }
         }
         .padding(.horizontal, 24).padding(.bottom, 20)
+        .frame(maxWidth: MMAdaptive.formWidth)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(PanoramaScrim())
         .animation(.smooth(duration: 0.4), value: emailMode)
@@ -136,7 +140,10 @@ struct RootTabView: View {
     @State private var tab = 0
     @State private var homePath = NavigationPath()
     @ObservedObject private var prompt = NotificationPrompt.shared
+    @ObservedObject private var tutorial = HomeTutorial.shared
     @State private var menuOpen = false
+    @State private var rootWidth: CGFloat = 0
+    private var pinsSidebar: Bool { rootWidth >= MMAdaptive.sidebarMinWidth }
 
     private let items: [MMTabBar.Item] = [
         .init(tag: 0, title: String(localized: "Accueil"), icon: "square.grid.2x2.fill"),
@@ -148,9 +155,23 @@ struct RootTabView: View {
 
     var body: some View {
         shell
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+            rootWidth = size.width
+            tutorial.isAvailable = MMAdaptive.allowsTutorial(in: size)
+            if size.width >= MMAdaptive.sidebarMinWidth { menuOpen = false }
+        }
         .task { LaunchSync.runOnce(store) }
-        .fullScreenCover(isPresented: $showSettings) { LiveSettingsView() }
-        .task { await prompt.presentIfNeeded() }
+        .fullScreenCover(isPresented: $showSettings) { LiveSettingsView().mmCoverColumn() }
+        // Le tutoriel passe avant la demande de notifications : rien ne s'ouvre par-dessus.
+        .task {
+            await tutorial.runIfNeeded(store: store, canDetail: { tutorialMetric != nil }, canStart: canStartTutorial)
+            await prompt.presentIfNeeded()
+        }
+        .onChange(of: tutorial.replayRequest) { _, _ in
+            tab = 0; menuOpen = false; homePath = NavigationPath()
+            Task { await tutorial.replay(store: store, canDetail: { tutorialMetric != nil }, canStart: canStartTutorial) }
+        }
+        .onChange(of: tutorial.scene) { _, scene in applyTutorial(scene) }
         .sheet(isPresented: $prompt.isPresented) {
             NotificationPermissionView { prompt.enable() } secondaryAction: { prompt.later() }
         }
@@ -170,10 +191,39 @@ struct RootTabView: View {
         .onChange(of: store.overview?.projects.count) { _, _ in route(router.pending) }
     }
 
+    private func canStartTutorial() -> Bool { tab == 0 && homePath.isEmpty && !menuOpen && router.pending == nil && tutorial.isAvailable }
+
+    /// La carte ouverte par le tutoriel : la première de l'accueil.
+    private var tutorialMetric: HomeMetric? {
+        store.scoped.flatMap { o in HomeMetric.visible(o, today: store.today).first(where: \.isBigTile) }
+    }
+
+    /// Le tutoriel passe par les mêmes états qu'un vrai toucher.
+    private func applyTutorial(_ scene: HomeTutorialScene?) {
+        guard let scene else { return }
+        withAnimation(.snappy(duration: 0.35, extraBounce: 0.08)) { tab = scene.tab }
+        menuOpen = scene.menu
+        if scene.detail {
+            if homePath.isEmpty, let metric = tutorialMetric { homePath.append(metric) }
+        } else if !homePath.isEmpty {
+            homePath = NavigationPath()
+        }
+    }
+
     @ViewBuilder
     private var shell: some View {
         let key: AnyHashable = "\(tab)|\(homePath.count)"
-        if #available(iOS 26.0, *) {
+        if pinsSidebar {
+            // Grand écran : le menu des business reste à gauche, l'app occupe le reste.
+            HStack(spacing: 0) {
+                sideBar
+                    .frame(width: MMAdaptive.sidebarWidth)
+                    .frame(maxHeight: .infinity)
+                    .background(SideBarBackdrop().ignoresSafeArea())
+                tabs
+            }
+            .environment(\.mmPinnedSidebar, true)
+        } else if #available(iOS 26.0, *) {
             // Menu façon Instagram : page entière cachée à gauche, l'app glisse vers la droite.
             IGAccessoryView(isEnabled: tab == 0 && homePath.isEmpty, isVisible: $menuOpen, contentKey: key, accessoryKey: sideBarKey,
                             backdrop: AnyView(SideBarBackdrop())) {
@@ -204,7 +254,7 @@ struct RootTabView: View {
     private var tabBar: some View {
         let reselect: (Int) -> Void = { t in if t == 0 { withAnimation { homePath = NavigationPath() } } }
         // Tab bar d'origine, qui rétrécit au défilement (effet Instagram).
-        ShrinkingTabBar { MMTabBar(selection: $tab, items: items, onReselect: reselect) }
+        ShrinkingTabBar { MMTabBar(selection: $tab, items: items, onReselect: reselect, showsTutorialTargets: true) }
     }
 
     @State private var appsSearching = false
@@ -214,11 +264,11 @@ struct RootTabView: View {
             MMColor.bg.ignoresSafeArea()
             // L'Accueil reste monté (scroll et état conservés) ;
             // la planète n'est rendue que visible : elle anime 60 i/s.
-            OverviewView(path: $homePath, menuOpen: $menuOpen).tabLayer(tab == 0)
+            OverviewView(path: $homePath, menuOpen: $menuOpen).mmReadableColumn().tabLayer(tab == 0)
             // Onglets secondaires : rendus seulement quand ils sont visibles (rien ne tourne en arrière-plan).
-            if tab == 1 { NavigationStack { FeedScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
-            if tab == 2 { NavigationStack { AppsScreen(searchActive: $appsSearching).toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
-            if tab == 3 { NavigationStack { LeaderboardScreen().toolbar(.hidden, for: .navigationBar) }.transition(.opacity) }
+            if tab == 1 { NavigationStack { FeedScreen().toolbar(.hidden, for: .navigationBar) }.mmReadableColumn().transition(.opacity) }
+            if tab == 2 { NavigationStack { AppsScreen(searchActive: $appsSearching).toolbar(.hidden, for: .navigationBar) }.mmReadableColumn().transition(.opacity) }
+            if tab == 3 { NavigationStack { LeaderboardScreen().toolbar(.hidden, for: .navigationBar) }.mmReadableColumn().transition(.opacity) }
             // Pendant une recherche d'app, la barre laisse toute la place au clavier.
             if !(tab == 2 && appsSearching) {
                 tabBar
@@ -233,6 +283,8 @@ struct RootTabView: View {
 
     private func route(_ d: Router.Destination?) {
         guard let d else { return }
+        // Une notification ou un lien profond prend le pas sur la visite guidée.
+        if tutorial.scene != nil { tutorial.abort(); menuOpen = false }
         // Lancement à froid : les écrans d'un business attendent la première vue d'ensemble.
         switch d { case .project, .charts: if store.overview == nil { return }; default: break }
         router.pending = nil
@@ -264,6 +316,8 @@ private extension View {
 struct OverviewView: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var launch = LaunchCoordinator.shared
+    @ObservedObject private var tutorial = HomeTutorial.shared
+    @Environment(\.mmPinnedSidebar) private var pinnedSidebar
     @Binding var path: NavigationPath
     @Binding var menuOpen: Bool
     @State private var showSettings = false
@@ -272,10 +326,12 @@ struct OverviewView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
+            ScrollViewReader { scroller in
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     header
-                        .fullScreenCover(isPresented: $showSettings) { LiveSettingsView() }
+                        .id(HomeTutorialAnchor.top)
+                        .fullScreenCover(isPresented: $showSettings) { LiveSettingsView().mmCoverColumn() }
                     if !TourFlags.isOn { EnableAlertsCard().mmAppear(1) }
                     // Tout ce qui suit dépend du business choisi : changer d'identité rejoue la cascade
                     // avec les nouvelles données — l'Accueil se transforme au lieu d'ouvrir une page.
@@ -284,7 +340,7 @@ struct OverviewView: View {
                         // Grille de tuiles reprise de la page Effort de V2 ; toucher ouvre le détail.
                         Group { if !PerfProbe.isOff("tiles") { HomeTiles(o: o, today: store.today).mmDataSwap(scope) } }
                             .task(id: scope) { await PosthogStore.shared.load(o.projects.map(\.projectId), client: store.client) }
-                        if !PerfProbe.isOff("globe") { GlobeSection() }
+                        if !PerfProbe.isOff("globe") { GlobeSection().id(HomeTutorialAnchor.globe).homeTutorialTarget(.globe) }
                         Text("Mis à jour \(Date(timeIntervalSince1970: o.generatedAt / 1000).formatted(.relative(presentation: .named)))")
                             .font(MMFont.system(11)).foregroundStyle(MMColor.ink3).frame(maxWidth: .infinity).padding(.top, 6)
                     } else {
@@ -297,6 +353,11 @@ struct OverviewView: View {
                 .padding(.horizontal, 16).padding(.bottom, 24)
             }
             .scrollIndicators(.hidden)
+            // La visite guidée fait défiler l'accueil.
+            .onChange(of: tutorial.scene?.anchor) { _, anchor in
+                guard let anchor else { return }
+                withAnimation(.smooth(duration: 0.7)) { scroller.scrollTo(anchor, anchor: .top) }
+            }
             .environment(\.homeZoom, zoomNS)
             .igShrinksTabBar()
             .simultaneousGesture(TapGesture().onEnded { store.clearFocus() })
@@ -313,6 +374,7 @@ struct OverviewView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .mmPage()
+            }
         }
         #if DEBUG
         .onReceive(AutoTour.shared.$metric) { m in if let m { path.append(m) } }
@@ -341,7 +403,7 @@ struct OverviewView: View {
                 .opacity(launch.logoLanded ? 1 : 0)
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .leading) {
-                    menuButton.mmAppear(0)
+                    if !pinnedSidebar { menuButton.mmAppear(0).homeTutorialTarget(.menuButton) }
                 }
                 .overlay(alignment: .trailing) {
                     Button { showSettings = true } label: {
@@ -352,6 +414,7 @@ struct OverviewView: View {
                     .buttonStyle(MMPressStyle(scale: 0.92))
                     .accessibilityLabel("Réglages")
                     .mmAppear(0)
+                    .homeTutorialTarget(.gear)
                 }
                 .accessibilityLabel("MoneyMaker")
                 .padding(.bottom, 14)
@@ -448,6 +511,7 @@ struct OverviewView: View {
             }
             .scrollTargetBehavior(.viewAligned)
             .scrollIndicators(.hidden)
+            .mmRail()
             .scrollClipDisabled()
         }
     }
@@ -803,6 +867,7 @@ struct Stars: View {
 @MainActor
 enum LaunchSync {
     private static var started = false
+    private(set) static var finished = false
     static func runOnce(_ store: Store) {
         guard !started else { return }
         started = true
@@ -814,6 +879,7 @@ enum LaunchSync {
             await loaded
             try? await Task.sleep(for: .milliseconds(1300))
             HealthSyncStatus.shared.finish(succeeded: store.error == nil)
+            finished = true
         }
     }
 }

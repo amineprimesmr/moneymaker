@@ -1,6 +1,22 @@
 {
-  "sourceLanguage" : "fr",
+  "sourceLanguage" : "en",
   "strings" : {
+    " k" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " k"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " k"
+          }
+        }
+      }
+    },
     " M" : {
       "localizations" : {
         "en" : {
@@ -8,15 +24,11 @@
             "state" : "translated",
             "value" : " M"
           }
-        }
-      }
-    },
-    " k" : {
-      "localizations" : {
-        "en" : {
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : " k"
+            "value" : " M"
           }
         }
       }
@@ -28,12 +40,24 @@
             "state" : "translated",
             "value" : " · category"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " · catégorie"
+          }
         }
       }
     },
     "#%lld" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "#%lld"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "#%lld"
@@ -48,12 +72,24 @@
             "state" : "translated",
             "value" : "%@"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@"
+          }
         }
       }
     },
     "%@ %@" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ %@"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ %@"
@@ -68,6 +104,12 @@
             "state" : "translated",
             "value" : "%@ %@ · %@"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ %@ · %@"
+          }
         }
       }
     },
@@ -78,12 +120,24 @@
             "state" : "translated",
             "value" : "%@ today"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ aujourd'hui"
+          }
         }
       }
     },
     "%@ · %@" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %@"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ · %@"
@@ -98,12 +152,24 @@
             "state" : "translated",
             "value" : "%lld"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld"
+          }
         }
       }
     },
     "%lld %%" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%%"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld %%"
@@ -117,6 +183,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld%% of %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld %% de %@"
           }
         }
       }
@@ -166,7 +238,71 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld subscribers · %lld trials"
+            "value" : "%#@subs@ · %#@trials@"
+          },
+          "substitutions" : {
+            "subs" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg subscriber"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg subscribers"
+                    }
+                  }
+                }
+              }
+            },
+            "trials" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg trial"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg trials"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld abonnés · %lld essais"
+          }
+        }
+      }
+    },
+    "%lld j" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lldd"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld j"
           }
         }
       }
@@ -174,9 +310,27 @@
     "%lld jours" : {
       "localizations" : {
         "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld day"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld days"
+                }
+              }
+            }
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld days"
+            "value" : "%lld jours"
           }
         }
       }
@@ -224,9 +378,27 @@
     "%lld ventes" : {
       "localizations" : {
         "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld sale"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld sales"
+                }
+              }
+            }
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld sales"
+            "value" : "%lld ventes"
           }
         }
       }
@@ -236,7 +408,55 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld sales · %lld trials"
+            "value" : "%#@sales@ · %#@trials@"
+          },
+          "substitutions" : {
+            "sales" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg sale"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg sales"
+                    }
+                  }
+                }
+              }
+            },
+            "trials" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg trial"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg trials"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld ventes · %lld essais"
           }
         }
       }
@@ -244,6 +464,12 @@
     "+%@" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%@"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "+%@"
@@ -258,6 +484,12 @@
             "state" : "translated",
             "value" : "+%1$@ vs previous record (%2$@)"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%@ vs ancien record (%@)"
+          }
         }
       }
     },
@@ -267,6 +499,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "+%@ · %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%@ · %@"
+          }
+        }
+      }
+    },
+    "28 j" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "28d"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "28 j"
           }
         }
       }
@@ -278,15 +532,27 @@
             "state" : "translated",
             "value" : "28d · %@"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "28 j · %@"
+          }
         }
       }
     },
-    "AUJOURD'HUI" : {
+    "Abonnements" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TODAY"
+            "value" : "Subscriptions"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abonnements"
           }
         }
       }
@@ -298,6 +564,12 @@
             "state" : "translated",
             "value" : "Subscribers"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abonnés"
+          }
         }
       }
     },
@@ -307,6 +579,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Active subscribers"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abonnés actifs"
           }
         }
       }
@@ -318,6 +596,12 @@
             "state" : "translated",
             "value" : "Access granted"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accès offert"
+          }
         }
       }
     },
@@ -328,12 +612,24 @@
             "state" : "translated",
             "value" : "Purchase"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Achat"
+          }
         }
       }
     },
     "Active Customers" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active Customers"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Active Customers"
@@ -348,6 +644,12 @@
             "state" : "translated",
             "value" : "Active Trials"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active Trials"
+          }
         }
       }
     },
@@ -357,6 +659,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Add your personal token (mm_pat_…)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajoute ton jeton personnel (mm_pat_…)."
           }
         }
       }
@@ -368,6 +676,12 @@
             "state" : "translated",
             "value" : "Cancellation"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Annulation"
+          }
         }
       }
     },
@@ -377,6 +691,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Stop live"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrêter le direct"
           }
         }
       }
@@ -388,6 +708,12 @@
             "state" : "translated",
             "value" : "At current pace"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Au rythme actuel"
+          }
         }
       }
     },
@@ -398,6 +724,44 @@
             "state" : "translated",
             "value" : "No ranking alerts"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucune alerte de classement"
+          }
+        }
+      }
+    },
+    "Aucune vente pour l'instant" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No sales yet"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucune vente pour l'instant"
+          }
+        }
+      }
+    },
+    "AUJOURD'HUI" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TODAY"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AUJOURD'HUI"
+          }
         }
       }
     },
@@ -407,6 +771,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Today"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aujourd'hui"
           }
         }
       }
@@ -458,6 +828,44 @@
             "state" : "translated",
             "value" : "Other app"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autre app"
+          }
+        }
+      }
+    },
+    "avec au moins une vente" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "with at least one sale"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "avec au moins une vente"
+          }
+        }
+      }
+    },
+    "BILLING ISSUE" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BILLING ISSUE"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BILLING ISSUE"
+          }
         }
       }
     },
@@ -466,7 +874,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Businesses"
+            "value" : "Business"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Business"
           }
         }
       }
@@ -478,15 +892,27 @@
             "state" : "translated",
             "value" : "Next business"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Business suivant"
+          }
         }
       }
     },
-    "CONVERSION" : {
+    "CANCELLED" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CONVERSION"
+            "value" : "CANCELED"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CANCELLED"
           }
         }
       }
@@ -498,6 +924,44 @@
             "state" : "translated",
             "value" : "This month"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce mois-ci"
+          }
+        }
+      }
+    },
+    "Cet achat est rattaché à un autre compte MoneyMaker." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This purchase is linked to another MoneyMaker account."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet achat est rattaché à un autre compte MoneyMaker."
+          }
+        }
+      }
+    },
+    "Cette connexion est en lecture seule." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This connection is read-only."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette connexion est en lecture seule."
+          }
         }
       }
     },
@@ -507,6 +971,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Plan change"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changement d'offre"
+          }
+        }
+      }
+    },
+    "Changer de courbe" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change chart"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changer de courbe"
           }
         }
       }
@@ -518,6 +1004,12 @@
             "state" : "translated",
             "value" : "Change chart"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changer de graphique"
+          }
         }
       }
     },
@@ -527,6 +1019,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Every sale, trial, and refund, the moment it happens."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chaque vente, essai et remboursement, dès qu'il arrive."
           }
         }
       }
@@ -538,6 +1036,12 @@
             "state" : "translated",
             "value" : "Ranking"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Classement"
+          }
         }
       }
     },
@@ -547,6 +1051,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rankings"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Classements"
           }
         }
       }
@@ -558,6 +1068,92 @@
             "state" : "translated",
             "value" : "App Store rankings"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Classements App Store"
+          }
+        }
+      }
+    },
+    "Clients actifs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active customers"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clients actifs"
+          }
+        }
+      }
+    },
+    "Clé PostHog refusée : il faut une clé personnelle avec le droit Query." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PostHog key rejected: use a personal key with Query access."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clé PostHog refusée : il faut une clé personnelle avec le droit Query."
+          }
+        }
+      }
+    },
+    "Colle ta clé personnelle PostHog." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste your PostHog personal key."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Colle ta clé personnelle PostHog."
+          }
+        }
+      }
+    },
+    "Connecte-toi dans l'app et autorise les notifications." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to the app and allow notifications."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connecte-toi dans l'app et autorise les notifications."
+          }
+        }
+      }
+    },
+    "CONVERSION" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CONVERSION"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CONVERSION"
+          }
         }
       }
     },
@@ -567,6 +1163,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cumulative"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cumul"
           }
         }
       }
@@ -578,6 +1180,12 @@
             "state" : "translated",
             "value" : "Cumulative · 28 days"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cumul · 28 jours"
+          }
         }
       }
     },
@@ -587,6 +1195,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Last: +%@ · %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dernière : +%@ · %@"
           }
         }
       }
@@ -598,6 +1212,12 @@
             "state" : "translated",
             "value" : "Last sale"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dernière vente"
+          }
         }
       }
     },
@@ -607,6 +1227,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Last sale · %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dernière vente · %@"
           }
         }
       }
@@ -618,6 +1244,60 @@
             "state" : "translated",
             "value" : "Live revenue"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Direct des revenus"
+          }
+        }
+      }
+    },
+    "Donnée" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metric"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Donnée"
+          }
+        }
+      }
+    },
+    "déjà" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "so far"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "déjà"
+          }
+        }
+      }
+    },
+    "en attente de la vente du jour" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "waiting for today's sale"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "en attente de la vente du jour"
+          }
         }
       }
     },
@@ -627,6 +1307,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Paused"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En pause"
           }
         }
       }
@@ -638,6 +1324,12 @@
             "state" : "translated",
             "value" : "In your currency's units, e.g. 10000"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En unités de ta devise, ex. 10000"
+          }
         }
       }
     },
@@ -647,6 +1339,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Error %lld"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erreur %lld"
+          }
+        }
+      }
+    },
+    "essai" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "trial"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "essai"
           }
         }
       }
@@ -658,6 +1372,12 @@
             "state" : "translated",
             "value" : "Trial converted"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Essai converti"
+          }
         }
       }
     },
@@ -667,6 +1387,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Trial started"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Essai démarré"
           }
         }
       }
@@ -678,6 +1404,44 @@
             "state" : "translated",
             "value" : "Trials"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Essais"
+          }
+        }
+      }
+    },
+    "essais" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "trials"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "essais"
+          }
+        }
+      }
+    },
+    "Essais actifs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active trials"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Essais actifs"
+          }
         }
       }
     },
@@ -687,6 +1451,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Trials, subscriptions, MRR, revenue, and customers, with your revenue chart."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Essais, abonnements, MRR, revenu et clients, avec la courbe des revenus."
           }
         }
       }
@@ -698,6 +1468,28 @@
             "state" : "translated",
             "value" : "Expiration"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expiration"
+          }
+        }
+      }
+    },
+    "EXPIRED" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EXPIRED"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EXPIRED"
+          }
         }
       }
     },
@@ -707,6 +1499,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "End of month"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fin du mois"
           }
         }
       }
@@ -718,6 +1516,12 @@
             "state" : "translated",
             "value" : "Projected end of month"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fin du mois estimée"
+          }
         }
       }
     },
@@ -727,6 +1531,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Big drop"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Forte baisse"
           }
         }
       }
@@ -738,6 +1548,12 @@
             "state" : "translated",
             "value" : "Big jump"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Forte hausse"
+          }
         }
       }
     },
@@ -747,6 +1563,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Chart"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Graphique"
           }
         }
       }
@@ -758,6 +1580,93 @@
             "state" : "translated",
             "value" : "Free"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gratuites"
+          }
+        }
+      }
+    },
+    "il y a %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ago"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "il y a %@"
+          }
+        }
+      }
+    },
+    "Image introuvable ou illisible à cette adresse." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Image not found or unreadable at this address."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Image introuvable ou illisible à cette adresse."
+          }
+        }
+      }
+    },
+    "Invitation expirée." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invitation expired."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invitation expirée."
+          }
+        }
+      }
+    },
+    "Invitation introuvable ou déjà utilisée." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invitation not found or already used."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invitation introuvable ou déjà utilisée."
+          }
+        }
+      }
+    },
+    "j" : {
+      "comment" : "Abréviation de jour (1j 5h)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "d"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "j"
+          }
         }
       }
     },
@@ -767,6 +1676,60 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Day"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jour"
+          }
+        }
+      }
+    },
+    "jour" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "day"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "jour"
+          }
+        }
+      }
+    },
+    "jour %lld/%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "day %1$lld/%2$lld"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "jour %lld/%lld"
+          }
+        }
+      }
+    },
+    "jours" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "days"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "jours"
           }
         }
       }
@@ -778,6 +1741,60 @@
             "state" : "translated",
             "value" : "Consecutive days with at least one sale, your best streak and the last 14 days."
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jours d'affilée avec au moins une vente, ton record et les 14 derniers jours."
+          }
+        }
+      }
+    },
+    "L'adresse doit commencer par https://." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The address must start with https://."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'adresse doit commencer par https://."
+          }
+        }
+      }
+    },
+    "L'identifiant du projet PostHog est un nombre." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The PostHog project ID is a number."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'identifiant du projet PostHog est un nombre."
+          }
+        }
+      }
+    },
+    "La clé personnelle PostHog commence par phx_." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PostHog personal keys start with phx_."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La clé personnelle PostHog commence par phx_."
+          }
         }
       }
     },
@@ -787,6 +1804,76 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Start live"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lancer le direct"
+          }
+        }
+      }
+    },
+    "Le dernier propriétaire ne peut pas quitter le projet." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The last owner can't leave the project."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le dernier propriétaire ne peut pas quitter le projet."
+          }
+        }
+      }
+    },
+    "Le paiement n'est pas disponible pour le moment." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Payment isn't available right now."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le paiement n'est pas disponible pour le moment."
+          }
+        }
+      }
+    },
+    "Le plan gratuit inclut 1 business. MoneyMaker Pro les débloque tous." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The free plan includes 1 business. MoneyMaker Pro unlocks them all."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le plan gratuit inclut 1 business. MoneyMaker Pro les débloque tous."
+          }
+        }
+      }
+    },
+    "Les notifications ne sont pas encore disponibles." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notifications aren't available yet."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les notifications ne sont pas encore disponibles."
           }
         }
       }
@@ -798,12 +1885,104 @@
             "state" : "translated",
             "value" : "Countries where you sell light up, with your top 3."
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les pays où tu vends s'allument, avec ton top 3."
+          }
+        }
+      }
+    },
+    "Mode démo : cette action est désactivée." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Demo mode: this action is turned off."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode démo : cette action est désactivée."
+          }
+        }
+      }
+    },
+    "Mois dernier" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last month"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mois dernier"
+          }
+        }
+      }
+    },
+    "Mon app" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My app"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mon app"
+          }
+        }
+      }
+    },
+    "MoneyMaker" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MoneyMaker"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MoneyMaker"
+          }
+        }
+      }
+    },
+    "monthly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "monthly"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "monthly"
+          }
         }
       }
     },
     "MRR" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MRR"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "MRR"
@@ -818,6 +1997,12 @@
             "state" : "translated",
             "value" : "MRR %@"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MRR %@"
+          }
         }
       }
     },
@@ -827,6 +2012,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "MRR, revenue, paying users, downloads, and last sale — only what matters for your model."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MRR, revenu, utilisateurs payants, téléchargements et dernière vente — seulement ce qui compte pour ton offre."
           }
         }
       }
@@ -838,35 +2029,11 @@
             "state" : "translated",
             "value" : "MRR, revenue, and subscribers — all your businesses or just one, with your goal."
           }
-        }
-      }
-    },
-    "Mois dernier" : {
-      "localizations" : {
-        "en" : {
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Last month"
-          }
-        }
-      }
-    },
-    "Mon app" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "My app"
-          }
-        }
-      }
-    },
-    "MoneyMaker" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MoneyMaker"
+            "value" : "MRR, revenus et abonnés — tous tes business ou un seul, avec ton objectif."
           }
         }
       }
@@ -874,6 +2041,12 @@
     "NEW" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NEW"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "NEW"
@@ -888,12 +2061,40 @@
             "state" : "translated",
             "value" : "New Customers"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Customers"
+          }
+        }
+      }
+    },
+    "NEW SUB" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NEW SUB"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NEW SUB"
+          }
         }
       }
     },
     "No transactions yet" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No transactions yet"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "No transactions yet"
@@ -908,6 +2109,12 @@
             "state" : "translated",
             "value" : "New country"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nouveau pays"
+          }
         }
       }
     },
@@ -917,6 +2124,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "New customers"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nouveaux clients"
           }
         }
       }
@@ -928,6 +2141,28 @@
             "state" : "translated",
             "value" : "New subscriber"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nouvel abonné"
+          }
+        }
+      }
+    },
+    "now" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "now"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "now"
+          }
         }
       }
     },
@@ -938,15 +2173,43 @@
             "state" : "translated",
             "value" : "Number 1"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Numéro 1"
+          }
         }
       }
     },
-    "ONE TIME" : {
+    "obj." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ONE TIME"
+            "value" : "goal"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "obj."
+          }
+        }
+      }
+    },
+    "objectif" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "goal"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "objectif"
           }
         }
       }
@@ -958,6 +2221,12 @@
             "state" : "translated",
             "value" : "Goal %@"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Objectif %@"
+          }
         }
       }
     },
@@ -967,6 +2236,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Goal %@ · %lld%%"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Objectif %@ · %lld %%"
           }
         }
       }
@@ -978,6 +2253,44 @@
             "state" : "translated",
             "value" : "MRR goal"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Objectif de MRR"
+          }
+        }
+      }
+    },
+    "ONE TIME" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ONE TIME"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ONE TIME"
+          }
+        }
+      }
+    },
+    "one-time" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "one-time"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "one-time"
+          }
         }
       }
     },
@@ -987,6 +2300,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Open MoneyMaker to sign in"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvre MoneyMaker pour te connecter"
           }
         }
       }
@@ -998,12 +2317,24 @@
             "state" : "translated",
             "value" : "Open today's revenue in one tap."
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvre tes revenus du jour en un geste."
+          }
         }
       }
     },
     "Overview" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Overview"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Overview"
@@ -1018,6 +2349,12 @@
             "state" : "translated",
             "value" : "Payment recovered"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paiement récupéré"
+          }
         }
       }
     },
@@ -1027,6 +2364,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "By business · 28 days"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Par business · 28 jours"
+          }
+        }
+      }
+    },
+    "PAUSED" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PAUSED"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PAUSED"
           }
         }
       }
@@ -1038,6 +2397,12 @@
             "state" : "translated",
             "value" : "Paid"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Payantes"
+          }
         }
       }
     },
@@ -1047,6 +2412,78 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Paying"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Payants"
+          }
+        }
+      }
+    },
+    "pays" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "countries"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pays"
+          }
+        }
+      }
+    },
+    "pays (1)" : {
+      "comment" : "Unité après « 1 » dans le widget Ventes · monde : singulier anglais, identique en français.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "country"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pays"
+          }
+        }
+      }
+    },
+    "PLAN CHANGE" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PLAN CHANGE"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PLAN CHANGE"
+          }
+        }
+      }
+    },
+    "PostHog ne répond pas, réessaie." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PostHog isn't responding, try again."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PostHog ne répond pas, réessaie."
           }
         }
       }
@@ -1058,6 +2495,12 @@
             "state" : "translated",
             "value" : "Billing issue"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Problème de paiement"
+          }
         }
       }
     },
@@ -1067,6 +2510,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Month projection"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Projection du mois"
           }
         }
       }
@@ -1078,35 +2527,75 @@
             "state" : "translated",
             "value" : "Projection · %@"
           }
-        }
-      }
-    },
-    "RECORD DU JOUR" : {
-      "localizations" : {
-        "en" : {
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TODAY'S RECORD"
+            "value" : "Projection · %@"
           }
         }
       }
     },
-    "RENEWAL" : {
+    "Projet PostHog introuvable." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "RENEWAL"
+            "value" : "PostHog project not found."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Projet PostHog introuvable."
           }
         }
       }
     },
-    "REVENUS DU JOUR" : {
+    "PROMO" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TODAY'S REVENUE"
+            "value" : "PROMO"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PROMO"
+          }
+        }
+      }
+    },
+    "quarterly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "quarterly"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "quarterly"
+          }
+        }
+      }
+    },
+    "REACTIVATED" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REACTIVATED"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REACTIVATED"
           }
         }
       }
@@ -1118,6 +2607,28 @@
             "state" : "translated",
             "value" : "Record"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Record"
+          }
+        }
+      }
+    },
+    "RECORD DU JOUR" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TODAY'S RECORD"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RECORD DU JOUR"
+          }
         }
       }
     },
@@ -1127,6 +2638,44 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Today's record"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Record du jour"
+          }
+        }
+      }
+    },
+    "RECOVERED" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RECOVERED"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RECOVERED"
+          }
+        }
+      }
+    },
+    "REFUND" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REFUND"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REFUND"
           }
         }
       }
@@ -1138,6 +2687,44 @@
             "state" : "translated",
             "value" : "Refund"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remboursement"
+          }
+        }
+      }
+    },
+    "RENEWAL" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RENEWAL"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RENEWAL"
+          }
+        }
+      }
+    },
+    "renouv." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "renewals"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "renouv."
+          }
         }
       }
     },
@@ -1147,6 +2734,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Renewal"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Renouvellement"
           }
         }
       }
@@ -1158,6 +2751,12 @@
             "state" : "translated",
             "value" : "Back in the top 100"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retour dans le top 100"
+          }
         }
       }
     },
@@ -1167,6 +2766,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Revenue"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revenu"
           }
         }
       }
@@ -1178,6 +2783,12 @@
             "state" : "translated",
             "value" : "28d revenue"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revenu 28 j"
+          }
         }
       }
     },
@@ -1187,6 +2798,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Revenue · 28 days"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revenu · 28 jours"
           }
         }
       }
@@ -1198,12 +2815,24 @@
             "state" : "translated",
             "value" : "Revenue, MRR, paying users and last sale. In large size, switch the chart with a tap."
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revenu, MRR, payants et dernière vente. En grand, choisis le graphique d'un geste."
+          }
         }
       }
     },
     "Revenue" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revenue"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Revenue"
@@ -1218,6 +2847,28 @@
             "state" : "translated",
             "value" : "Revenue"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revenus"
+          }
+        }
+      }
+    },
+    "REVENUS DU JOUR" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TODAY'S REVENUE"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REVENUS DU JOUR"
+          }
         }
       }
     },
@@ -1227,6 +2878,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Today's revenue"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revenus du jour"
           }
         }
       }
@@ -1238,6 +2895,12 @@
             "state" : "translated",
             "value" : "Today's revenue, live, updated with every sale."
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revenus du jour en direct, mis à jour à chaque vente."
+          }
         }
       }
     },
@@ -1247,6 +2910,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pace / day"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rythme / jour"
           }
         }
       }
@@ -1258,6 +2927,12 @@
             "state" : "translated",
             "value" : "Reactivation"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réactivation"
+          }
         }
       }
     },
@@ -1267,6 +2942,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Actual"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réel"
           }
         }
       }
@@ -1278,6 +2959,28 @@
             "state" : "translated",
             "value" : "Revoked"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Révoqué"
+          }
+        }
+      }
+    },
+    "Serveur PostHog invalide." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid PostHog server."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Serveur PostHog invalide."
+          }
         }
       }
     },
@@ -1288,12 +2991,24 @@
             "state" : "translated",
             "value" : "Dropped out of the charts"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sortie du classement"
+          }
         }
       }
     },
     "Subscriptions" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subscriptions"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Subscriptions"
@@ -1308,6 +3023,12 @@
             "state" : "translated",
             "value" : "STREAK"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SÉRIE"
+          }
         }
       }
     },
@@ -1317,6 +3038,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Streak"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Série"
           }
         }
       }
@@ -1328,15 +3055,11 @@
             "state" : "translated",
             "value" : "Sales streak"
           }
-        }
-      }
-    },
-    "TOP PAYS · 28 J" : {
-      "localizations" : {
-        "en" : {
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TOP COUNTRIES · 28 D"
+            "value" : "Série de ventes"
           }
         }
       }
@@ -1348,6 +3071,12 @@
             "state" : "translated",
             "value" : "Your next sale will show up here."
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ta prochaine vente apparaîtra ici."
+          }
         }
       }
     },
@@ -1357,6 +3086,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dashboard"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tableau de bord"
           }
         }
       }
@@ -1368,6 +3103,12 @@
             "state" : "translated",
             "value" : "Your last 3 sales."
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tes 3 dernières ventes."
+          }
         }
       }
     },
@@ -1377,6 +3118,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Your latest ranking wins, country by country."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tes dernières victoires dans les classements, pays par pays."
           }
         }
       }
@@ -1388,6 +3135,12 @@
             "state" : "translated",
             "value" : "Your MRR, big."
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton MRR, en grand."
+          }
         }
       }
     },
@@ -1397,6 +3150,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Your MRR, for all your businesses or just one, with a goal."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton MRR, pour tous tes business ou un seul, avec un objectif."
           }
         }
       }
@@ -1408,6 +3167,28 @@
             "state" : "translated",
             "value" : "Your revenue this month and where it will land at the current pace."
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton revenu du mois et où il finira au rythme actuel."
+          }
+        }
+      }
+    },
+    "Ton rôle ne permet pas cette action." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your role doesn't allow this action."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton rôle ne permet pas cette action."
+          }
         }
       }
     },
@@ -1417,6 +3198,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Top 10"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Top 10"
+          }
+        }
+      }
+    },
+    "TOP PAYS · 28 J" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TOP COUNTRIES · 28D"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TOP PAYS · 28 J"
           }
         }
       }
@@ -1428,6 +3231,12 @@
             "state" : "translated",
             "value" : "All"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tous"
+          }
         }
       }
     },
@@ -1437,6 +3246,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "All businesses"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tous les business"
+          }
+        }
+      }
+    },
+    "Transaction App Store invalide." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid App Store transaction."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transaction App Store invalide."
           }
         }
       }
@@ -1448,6 +3279,44 @@
             "state" : "translated",
             "value" : "Transactions"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transactions"
+          }
+        }
+      }
+    },
+    "TRIAL" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TRIAL"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TRIAL"
+          }
+        }
+      }
+    },
+    "Trop de requêtes, réessaie dans une minute." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Too many requests, try again in a minute."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trop de requêtes, réessaie dans une minute."
+          }
         }
       }
     },
@@ -1457,6 +3326,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Downloads"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Téléchargements"
           }
         }
       }
@@ -1468,216 +3343,11 @@
             "state" : "translated",
             "value" : "Paying users"
           }
-        }
-      }
-    },
-    "VENTES" : {
-      "localizations" : {
-        "en" : {
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "SALES"
-          }
-        }
-      }
-    },
-    "Valeur" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Value"
-          }
-        }
-      }
-    },
-    "Ventes dans le monde" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sales worldwide"
-          }
-        }
-      }
-    },
-    "Ventes en direct" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Live sales"
-          }
-        }
-      }
-    },
-    "Ventes · monde" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sales · world"
-          }
-        }
-      }
-    },
-    "avec au moins une vente" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "with at least one sale"
-          }
-        }
-      }
-    },
-    "déjà" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "so far"
-          }
-        }
-      }
-    },
-    "en attente de la vente du jour" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "waiting for today's sale"
-          }
-        }
-      }
-    },
-    "essais" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "trials"
-          }
-        }
-      }
-    },
-    "j" : {
-      "comment" : "Abréviation de jour (1j 5h)",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "d"
-          }
-        }
-      }
-    },
-    "jour" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "day"
-          }
-        }
-      }
-    },
-    "jour %lld/%lld" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "day %1$lld/%2$lld"
-          }
-        }
-      }
-    },
-    "jours" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "days"
-          }
-        }
-      }
-    },
-    "monthly" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "monthly"
-          }
-        }
-      }
-    },
-    "now" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "now"
-          }
-        }
-      }
-    },
-    "obj." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "goal"
-          }
-        }
-      }
-    },
-    "objectif" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "goal"
-          }
-        }
-      }
-    },
-    "one-time" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "one-time"
-          }
-        }
-      }
-    },
-    "pays" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "countries"
-          }
-        }
-      }
-    },
-    "quarterly" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "quarterly"
-          }
-        }
-      }
-    },
-    "renouv." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "renewals"
+            "value" : "Users payants"
           }
         }
       }
@@ -1689,6 +3359,60 @@
             "state" : "translated",
             "value" : "v"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "v"
+          }
+        }
+      }
+    },
+    "Valeur" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Value"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valeur"
+          }
+        }
+      }
+    },
+    "vente" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "sale"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "vente"
+          }
+        }
+      }
+    },
+    "VENTES" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SALES"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VENTES"
+          }
         }
       }
     },
@@ -1698,6 +3422,60 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "sales"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ventes"
+          }
+        }
+      }
+    },
+    "Ventes dans le monde" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sales worldwide"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ventes dans le monde"
+          }
+        }
+      }
+    },
+    "Ventes en direct" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live sales"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ventes en direct"
+          }
+        }
+      }
+    },
+    "Ventes · monde" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sales · world"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ventes · monde"
           }
         }
       }
@@ -1709,12 +3487,24 @@
             "state" : "translated",
             "value" : "vs last month"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "vs mois dernier"
+          }
         }
       }
     },
     "yearly" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "yearly"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "yearly"
@@ -1729,12 +3519,40 @@
             "state" : "translated",
             "value" : "· %@%@"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "· %@%@"
+          }
+        }
+      }
+    },
+    "À l'instant" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Now"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "À l'instant"
+          }
         }
       }
     },
     "—" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "—"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "—"
@@ -1749,12 +3567,24 @@
             "state" : "translated",
             "value" : "↑%lld"
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "↑%lld"
+          }
         }
       }
     },
     "↓%lld" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "↓%lld"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "↓%lld"
@@ -1769,195 +3599,11 @@
             "state" : "translated",
             "value" : "🏆 %@ · record"
           }
-        }
-      }
-    },
-    "TRIAL" : {
-      "localizations" : {
-        "en" : {
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TRIAL"
-          }
-        }
-      }
-    },
-    "NEW SUB" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "NEW SUB"
-          }
-        }
-      }
-    },
-    "REACTIVATED" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "REACTIVATED"
-          }
-        }
-      }
-    },
-    "RECOVERED" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RECOVERED"
-          }
-        }
-      }
-    },
-    "PLAN CHANGE" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PLAN CHANGE"
-          }
-        }
-      }
-    },
-    "CANCELLED" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CANCELLED"
-          }
-        }
-      }
-    },
-    "BILLING ISSUE" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "BILLING ISSUE"
-          }
-        }
-      }
-    },
-    "PAUSED" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PAUSED"
-          }
-        }
-      }
-    },
-    "EXPIRED" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EXPIRED"
-          }
-        }
-      }
-    },
-    "REFUND" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "REFUND"
-          }
-        }
-      }
-    },
-    "PROMO" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PROMO"
-          }
-        }
-      }
-    },
-    "Essais actifs" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Active trials"
-          }
-        }
-      }
-    },
-    "Abonnements" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Subscriptions"
-          }
-        }
-      }
-    },
-    "Clients actifs" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Active customers"
-          }
-        }
-      }
-    },
-    "À l'instant" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Now"
-          }
-        }
-      }
-    },
-    "Aucune vente pour l'instant" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No sales yet"
-          }
-        }
-      }
-    },
-    "Changer de courbe" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Change chart"
-          }
-        }
-      }
-    },
-    "Donnée" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Metric"
-          }
-        }
-      }
-    },
-    "il y a %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ ago"
+            "value" : "🏆 %@ · record"
           }
         }
       }

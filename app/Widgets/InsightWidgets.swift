@@ -238,11 +238,11 @@ struct GlobeWidgetView: View {
             let spark = todayCC.flatMap { WGlobeData.centroids[$0.uppercased()] }.map { WGlobe.cell(lat: $0.0, lng: $0.1) }
             if family == .systemSmall {
                 VStack(alignment: .leading, spacing: 0) {
-                    WHeader(trailing: "28 j")
+                    WHeader(trailing: String(localized: "28 j"))
                     WGlobeView(lit: lit, spark: spark).frame(maxHeight: .infinity).padding(.vertical, 6)
                     HStack(spacing: 4) {
                         Text("\(byCountry.count)").foregroundStyle(MMColor.ink2)
-                        Text("pays").foregroundStyle(MMColor.ink3)
+                        Text(byCountry.count == 1 ? "pays (1)" : "pays").foregroundStyle(MMColor.ink3)
                         Spacer(minLength: 2)
                         if let f = top.first { Text(flagEmoji(f.key)) }
                     }
@@ -320,7 +320,7 @@ struct StreakWidgetView: View {
                 VStack(spacing: 0) {
                     Image(systemName: "flame.fill").font(.system(size: 12, weight: .semibold)).widgetAccentable()
                     Text("\(s.current)").font(.system(size: 18, weight: .semibold)).minimumScaleFactor(0.6)
-                    Text("jours").font(.system(size: 8)).foregroundStyle(.secondary)
+                    Text(s.current == 1 ? "jour" : "jours").font(.system(size: 8)).foregroundStyle(.secondary)
                 }
                 .padding(4)
                 .background(AccessoryWidgetBackground().clipShape(Circle()))

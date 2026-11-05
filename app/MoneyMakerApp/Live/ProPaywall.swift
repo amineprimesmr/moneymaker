@@ -20,6 +20,13 @@ final class ProPaywall: ObservableObject {
     @Published private(set) var status: BillingStatus?
     /// Produit de l'App Store : son prix local s'affiche sur le paywall.
     @Published private(set) var product: Product?
+    /// Prix local de l'App Store. Le simulateur est sur la boutique américaine : les captures françaises affichent le prix français.
+    var priceText: String {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["MM_SHOTS"] != nil, Locale.current.language.languageCode?.identifier == "fr" { return "29 €" }
+        #endif
+        return product?.displayPrice ?? "29 €"
+    }
     private var updates: Task<Void, Never>?
     private static let cacheKey = "mm.billingStatus"
 
@@ -150,6 +157,7 @@ struct ProPaywallView: View {
                     }
                     .padding(.top, geo.safeAreaInsets.top + 4)
                     .padding(.bottom, max(geo.safeAreaInsets.bottom, 16) + 6)
+                    .frame(maxWidth: MMAdaptive.formWidth)
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom, alignment: .top)
                 }
@@ -236,7 +244,7 @@ struct ProPaywallView: View {
 
     private var status: BillingStatus? { paywall.status }
     /// Prix local de l'App Store (29 € en France), affiché avant même le chargement du produit.
-    private var price: String { paywall.product?.displayPrice ?? "29 €" }
+    private var price: String { paywall.priceText }
 
     private var subtitle: String {
         let free = status?.freeProjects ?? 1
@@ -272,7 +280,7 @@ struct ProPaywallView: View {
             .buttonStyle(.plain)
 
             if status != nil, status?.pro != true, !AppStore.canMakePayments {
-                Text("Les achats intégrés sont désactivés sur cet iPhone.")
+                Text("Les achats intégrés sont désactivés sur cet appareil.")
                     .font(MMFont.system(12, .medium))
                     .foregroundStyle(MMColor.red.opacity(0.85))
                     .multilineTextAlignment(.center)

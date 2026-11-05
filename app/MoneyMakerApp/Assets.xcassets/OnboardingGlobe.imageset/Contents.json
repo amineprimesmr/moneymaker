@@ -1,1 +1,21 @@
-{"images": [{"filename": "OnboardingGlobe.jpg", "idiom": "universal"}], "info": {"author": "xcode", "version": 1}}
+{
+  "images": [
+    {
+      "filename": "OnboardingGlobe-en.jpg",
+      "idiom": "universal",
+      "locale": "en"
+    },
+    {
+      "filename": "OnboardingGlobe.jpg",
+      "idiom": "universal",
+      "locale": "fr"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  },
+  "properties": {
+    "localizable": true
+  }
+}

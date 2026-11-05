@@ -183,6 +183,7 @@ export const SETUP_EN: Record<string, { group: string; title: string; help: stri
 // Écrits en français dans le code ; renvoyés en anglais sauf si le client demande le français.
 
 const ERROR_EN: Record<string, string> = {
+  "value = taille de la cohorte ; pK = part encore abonnée K mois après le premier paiement.": "value = cohort size; pK = share still subscribed K months after the first payment.",
   "Clé d'idempotence déjà utilisée pour une autre opération": "Idempotency key already used for another operation",
   // Notes des graphiques
   "Expansion/contraction non suivies : un changement de produit est compté comme churn + nouveau.": "Expansion/contraction not tracked: a product change counts as churn + new.",

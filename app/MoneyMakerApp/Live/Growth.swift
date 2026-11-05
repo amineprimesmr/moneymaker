@@ -131,11 +131,11 @@ extension MoneyMakerClient {
     }
 
     func chart(projectId: String, name: String, days: Int, resolution: String) async throws -> ChartData {
-        try await cached("projects/\(projectId)/charts/\(name)?days=\(days)&resolution=\(resolution)")
+        try await cached("projects/\(projectId)/charts/\(name)?days=\(days)&resolution=\(resolution)" + (MoneyMakerClient.displayCurrency.map { "&currency=\($0)" } ?? ""))
     }
 
     func ltvPrediction(projectId: String) async throws -> LTVPrediction {
-        try await cached("projects/\(projectId)/ltv-prediction?groupBy=product", ttl: 600)
+        try await cached("projects/\(projectId)/ltv-prediction?groupBy=product" + (MoneyMakerClient.displayCurrency.map { "&currency=\($0)" } ?? ""), ttl: 600)
     }
 
     func anomalies(projectId: String) async throws -> [AnomalyItem] {
@@ -245,6 +245,7 @@ struct ChartsScreen: View {
             .padding(.horizontal, 16)
         }
         .scrollIndicators(.hidden)
+        .mmRail()
         .padding(.horizontal, -16)
         .sensoryFeedback(.selection, trigger: chart)
     }
@@ -446,6 +447,7 @@ private struct RetentionGrid: View {
                         }
                     }
                     .scrollIndicators(.hidden)
+                    .mmRail()
                 }
             }
         }

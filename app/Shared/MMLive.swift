@@ -192,8 +192,7 @@ extension MoneyMakerClient {
         }
         let (data, res) = try await URLSession.shared.data(for: req)
         guard let http = res as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            let msg = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
-            throw APIError(message: msg ?? String(localized: "Erreur \((res as? HTTPURLResponse)?.statusCode ?? 0)"), status: (res as? HTTPURLResponse)?.statusCode ?? 0)
+            throw APIError.server(data, status: (res as? HTTPURLResponse)?.statusCode ?? 0)
         }
         return try JSONDecoder().decode(T.self, from: data)
     }

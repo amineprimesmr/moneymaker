@@ -112,7 +112,7 @@ extension Overview {
         let days = DayKeys.last(28)
         let shape: [Double] = [3, 4, 3, 5, 4, 6, 5, 4, 6, 7, 6, 8, 7, 6, 9, 8, 10, 9, 8, 11, 10, 12, 11, 13, 12, 14, 13, 16]
         let byDay = Dictionary(uniqueKeysWithValues: days.enumerated().map { ($0.element.0, Int(shape[$0.offset] * 9_000_000)) })
-        let names = ["Mon app", "Studio", "Pro"]
+        let names = [String(localized: "Mon app"), "Studio", "Pro"]
         let projects = names.enumerated().map { i, n in
             ProjectSummary(projectId: "p\(i)", name: n, currency: "EUR", mrrMicros: [110, 38, 13][i] * 1_000_000, netRevenueMicros: [1_740, 610, 264][i] * 1_000_000,
                            activeSubscriptions: [12, 5, 2][i], activeTrials: 0, newCustomers: 0, trialConversionRate: nil, churnRate: nil, billingIssues: 0,

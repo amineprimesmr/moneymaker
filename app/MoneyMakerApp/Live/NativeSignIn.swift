@@ -70,6 +70,7 @@ enum NativeSignIn {
         }
         var req = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
         req.httpMethod = "POST"
+        req.timeoutInterval = 20
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         var form = URLComponents()
         form.queryItems = [.init(name: "code", value: code), .init(name: "client_id", value: googleClientID),
@@ -99,6 +100,7 @@ enum NativeSignIn {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue(Bundle.main.bundleIdentifier, forHTTPHeaderField: "X-Ios-Bundle-Identifier")
+        req.timeoutInterval = 20
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, res) = try await URLSession.shared.data(for: req)
         if (res as? HTTPURLResponse)?.statusCode != 200 {
@@ -109,7 +111,7 @@ enum NativeSignIn {
 
     private static func message(for code: String) -> String {
         switch code.components(separatedBy: " ").first ?? code {
-        case "INVALID_LOGIN_CREDENTIALS", "INVALID_PASSWORD", "EMAIL_NOT_FOUND": String(localized: "E-mail ou mot de passe incorrect.")
+        case "INVALID_LOGIN_CREDENTIALS", "INVALID_PASSWORD", "EMAIL_NOT_FOUND": String(localized: "E-mail ou mot de passe incorrect. Pas encore de compte ? Continue avec Apple ou Google.")
         case "EMAIL_EXISTS": String(localized: "Un compte existe déjà avec cet e-mail : connecte-toi.")
         case "WEAK_PASSWORD": String(localized: "Mot de passe trop court (8 caractères minimum).")
         case "INVALID_EMAIL": String(localized: "Cette adresse e-mail n'est pas valide.")
@@ -125,9 +127,10 @@ enum NativeSignIn {
         }
         var req = URLRequest(url: MM.baseURL.appendingPathComponent("tokens"))
         req.httpMethod = "POST"
+        req.timeoutInterval = 20
         req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["label": "iPhone"])
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["label": await UIDevice.current.model])
         struct R: Decodable { let token: String? }
         let (data, _) = try await URLSession.shared.data(for: req)
         guard let token = (try? JSONDecoder().decode(R.self, from: data))?.token, token.hasPrefix("mm_pat_") else {
@@ -144,14 +147,21 @@ private final class GoogleSheet: NSObject, ASWebAuthenticationPresentationContex
 
     func open(_ url: URL, scheme: String) async throws -> URL? {
         try await withCheckedThrowingContinuation { cont in
+            var finished = false
+            let finish: (Result<URL?, Error>) -> Void = { result in
+                guard !finished else { return }
+                finished = true
+                cont.resume(with: result)
+            }
             let s = ASWebAuthenticationSession(url: url, callbackURLScheme: scheme) { callback, error in
-                if let e = error as? ASWebAuthenticationSessionError, e.code == .canceledLogin { cont.resume(returning: nil) }
-                else if let error { cont.resume(throwing: error) }
-                else { cont.resume(returning: callback) }
+                if let e = error as? ASWebAuthenticationSessionError, e.code == .canceledLogin { finish(.success(nil)) }
+                else if let error { finish(.failure(error)) }
+                else { finish(.success(callback)) }
             }
             s.presentationContextProvider = self
             session = s
-            s.start()
+            // Fenêtre refusée par le système : sans cela, le bouton resterait bloqué sans réponse.
+            if !s.start() { finish(.failure(URLError(.cannotConnectToHost))) }
         }
     }
 
@@ -182,38 +192,36 @@ struct NativeSignInButtons: View {
 
     private var buttons: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                // Le bouton natif reçoit le toucher ; son texte, de taille imposée, est recouvert pour égaler Google.
-                ZStack {
-                    SignInWithAppleButton(.continue) { req in
-                        appleNonce = NativeSignIn.randomString()
-                        req.requestedScopes = [.email, .fullName]
-                        req.nonce = NativeSignIn.sha256(appleNonce)
-                    } onCompletion: { result in
-                        switch result {
-                        case .success(let auth):
-                            guard let c = auth.credential as? ASAuthorizationAppleIDCredential else { return }
-                            run { try await NativeSignIn.apple(c, nonce: appleNonce) }
-                        case .failure(let e):
-                            if (e as? ASAuthorizationError)?.code != .canceled { error = e.localizedDescription }
-                        }
+            // Bouton natif sans rien par-dessus : il suit la langue de l'appareil et reste sûr de recevoir le toucher.
+            SignInWithAppleButton(.continue) { req in
+                appleNonce = NativeSignIn.randomString()
+                req.requestedScopes = [.email, .fullName]
+                req.nonce = NativeSignIn.sha256(appleNonce)
+            } onCompletion: { result in
+                switch result {
+                case .success(let auth):
+                    guard let c = auth.credential as? ASAuthorizationAppleIDCredential else {
+                        error = String(localized: "Connexion interrompue, réessaie.")
+                        return
                     }
-                    .signInWithAppleButtonStyle(.white)
-                    providerLabel("Apple") {
-                        Image(systemName: "apple.logo").font(.system(size: 18, weight: .medium))
-                    }
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+                    run { try await NativeSignIn.apple(c, nonce: appleNonce) }
+                case .failure(let e):
+                    // Sans compte Apple sur l'appareil, le système répond aussi « annulé » : toujours dire quelque chose.
+                    Analytics.capture("sign_in_failed", ["domain": (e as NSError).domain, "code": (e as NSError).code])
+                    error = (e as? ASAuthorizationError)?.code == .canceled
+                        ? String(localized: "Connexion Apple annulée. Réessaie ou essaie la démo.")
+                        : e.localizedDescription
                 }
-                .frame(height: 52).clipShape(Capsule())
-
-                Button { run { try await NativeSignIn.google() } } label: {
-                    providerLabel("Google") {
-                        Image("GoogleG").resizable().scaledToFit().frame(width: 18, height: 18)
-                    }
-                }
-                .buttonStyle(MMPressStyle())
             }
+            .signInWithAppleButtonStyle(.white)
+            .frame(height: 52).clipShape(Capsule())
+
+            Button { run { try await NativeSignIn.google() } } label: {
+                providerLabel("Continuer avec Google") {
+                    Image("GoogleG").resizable().scaledToFit().frame(width: 18, height: 18)
+                }
+            }
+            .buttonStyle(MMPressStyle())
 
             Button { emailMode = true } label: {
                 Label("Continuer avec un e-mail", systemImage: "envelope.fill")
@@ -221,9 +229,12 @@ struct NativeSignInButtons: View {
                     .frame(maxWidth: .infinity).frame(height: 52).mmGlass(in: Capsule())
             }
             .buttonStyle(MMPressStyle())
+
+            DemoButton()
         }
-        .disabled(busy || store.loading)
+        .disabled(busy)
         .opacity(busy ? 0.6 : 1)
+        .overlay { if busy { ProgressView().controlSize(.large).tint(MMColor.ink) } }
     }
 
     private func providerLabel<Icon: View>(_ title: LocalizedStringKey, @ViewBuilder icon: () -> Icon) -> some View {
@@ -236,12 +247,30 @@ struct NativeSignInButtons: View {
     }
 
     private func run(_ work: @escaping () async throws -> String?) {
-        busy = true; error = nil
+        busy = true; error = nil; store.error = nil
         Task {
             defer { busy = false }
             do { if let token = try await work() { await store.signIn(token) } }
-            catch { self.error = error.localizedDescription }
+            catch {
+                self.error = error.localizedDescription
+                Analytics.capture("sign_in_failed", ["domain": (error as NSError).domain, "code": (error as NSError).code])
+            }
         }
+    }
+}
+
+/// La démo en un toucher : aucun compte ni lien à ouvrir. Données d'exemple en lecture seule.
+struct DemoButton: View {
+    @EnvironmentObject var store: Store
+
+    var body: some View {
+        Button { Task { await store.signIn("mm_demo") } } label: {
+            Text("Essayer la démo")
+                .font(MMFont.system(15, .semibold)).foregroundStyle(MMColor.ink)
+                .frame(maxWidth: .infinity).frame(minHeight: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(MMPressStyle())
     }
 }
 
@@ -274,6 +303,7 @@ private struct EmailSignInForm: View {
                 .disabled(busy || email.isEmpty || password.isEmpty)
             Button("Mot de passe oublié ?", action: reset)
                 .font(MMFont.system(13, .medium)).foregroundStyle(MMColor.ink3)
+                .disabled(busy)
         }
         .task {
             // Le clavier arrive une fois la transition finie, pour qu'elle reste fluide.
@@ -294,13 +324,18 @@ private struct EmailSignInForm: View {
         Task {
             defer { busy = false }
             do { done(try await NativeSignIn.email(trimmed, password: password, create: false)) }
-            catch { message = error.localizedDescription }
+            catch {
+                message = error.localizedDescription
+                Analytics.capture("sign_in_failed", ["domain": (error as NSError).domain, "code": (error as NSError).code])
+            }
         }
     }
 
     private func reset() {
         guard !trimmed.isEmpty else { message = String(localized: "Entre ton e-mail d'abord."); focus = .email; return }
+        busy = true; message = nil
         Task {
+            defer { busy = false }
             do { try await NativeSignIn.sendPasswordReset(trimmed); message = String(localized: "E-mail de réinitialisation envoyé.") }
             catch { message = error.localizedDescription }
         }

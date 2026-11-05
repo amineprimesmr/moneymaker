@@ -23,6 +23,32 @@ struct AgentSetupView: View {
     @State private var resetCopied: Task<Void, Never>?
 
     var body: some View {
+        // Petite fenêtre (iPad redimensionné) : on défile, et les boutons du bas restent visibles.
+        GeometryReader { geo in
+            if geo.size.height < 600 {
+                ScrollView {
+                    column.padding(.top, 16)
+                        .frame(maxWidth: .infinity)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .safeAreaInset(edge: .bottom, spacing: 0) { accountButtons }
+            } else {
+                column
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .bottom) { accountButtons }
+            }
+        }
+        .sensoryFeedback(.success, trigger: copies)
+        .task {
+            for i in 0...message.count {
+                typed = i
+                try? await Task.sleep(for: .milliseconds(18))
+                if Task.isCancelled { return }
+            }
+        }
+    }
+
+    private var column: some View {
         VStack(spacing: 0) {
             agentLogo.padding(.bottom, 20).mmAppear(0)
 
@@ -39,21 +65,22 @@ struct AgentSetupView: View {
             copyButton.padding(.top, 14).mmAppear(2)
         }
         .padding(.horizontal, 24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .bottom) {
-            Button("J'ai créé mon compte", action: onHasAccount)
-                .font(MMFont.system(15, .semibold)).foregroundStyle(MMColor.ink)
-                .padding(.vertical, 8).padding(.bottom, 20)
-                .mmAppear(3)
-        }
-        .sensoryFeedback(.success, trigger: copies)
-        .task {
-            for i in 0...message.count {
-                typed = i
-                try? await Task.sleep(for: .milliseconds(18))
-                if Task.isCancelled { return }
+        .frame(maxWidth: MMAdaptive.formWidth)
+    }
+
+    private var accountButtons: some View {
+        VStack(spacing: 0) {
+            DemoButton()
+            Button(action: onHasAccount) {
+                Text("J'ai déjà un compte")
+                    .font(MMFont.system(15, .semibold)).foregroundStyle(MMColor.ink)
+                    .frame(maxWidth: .infinity).frame(minHeight: 44)
+                    .contentShape(.rect)
             }
+            .buttonStyle(MMPressStyle())
         }
+        .padding(.bottom, 12)
+        .mmAppear(3)
     }
 
     /// Les agents défilent : le logo sortant s'efface et rétrécit pendant que le suivant arrive.

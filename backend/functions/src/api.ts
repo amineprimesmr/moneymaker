@@ -1201,10 +1201,11 @@ route("GET", "/v1/leaderboard", async (req, res) => {
   const sort = LEADERBOARD_SORTS.find(s => s === req.query.sort) ?? "mrr";
   const limit = Math.min(500, Math.max(1, Number(req.query.limit ?? 100)));
   const { entries, updatedAt } = await leaderboard(PUBLIC_BASE);
+  const currency = typeof req.query.currency === "string" && /^[A-Z]{3}$/.test(req.query.currency) ? req.query.currency : LEADERBOARD_CURRENCY;
   res.set("Cache-Control", "public, max-age=0, s-maxage=30");
   return {
-    currency: LEADERBOARD_CURRENCY, sort, updatedAt, total: entries.length,
-    entries: sortEntries(entries, sort).slice(0, limit).map((e, i) => publicEntry(e, i + 1)),
+    currency, sort, updatedAt, total: entries.length,
+    entries: sortEntries(entries, sort).slice(0, limit).map((e, i) => publicEntry(e, i + 1, currency)),
   };
 });
 
@@ -1215,7 +1216,8 @@ route("GET", "/v1/leaderboard/:pid", async (req, res, [pid]) => {
   const i = ranked.findIndex(e => e.projectId === cleanId(pid));
   if (i < 0) throw new HttpError(404, "not_listed");
   res.set("Cache-Control", "public, max-age=0, s-maxage=30");
-  return { currency: LEADERBOARD_CURRENCY, updatedAt, total: ranked.length, entry: publicEntry(ranked[i], i + 1) };
+  const currency = typeof req.query.currency === "string" && /^[A-Z]{3}$/.test(req.query.currency) ? req.query.currency : LEADERBOARD_CURRENCY;
+  return { currency, updatedAt, total: ranked.length, entry: publicEntry(ranked[i], i + 1, currency) };
 });
 
 /** Signalement d'un business du classement (App Store 1.2) : un seul par compte et par business, traité à la main. */
@@ -1572,7 +1574,8 @@ route("GET", "/v1/projects/:pid/experiments/:eid/results", async (req, _res, [pi
 // ── Prédiction de LTV (ltv.ts) ─────────────────────────────────────────────
 route("GET", "/v1/projects/:pid/ltv-prediction", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid);
-  return projectLtv(project, String(req.query.groupBy ?? "product"));
+  const cur = typeof req.query.currency === "string" && /^[A-Z]{3}$/.test(req.query.currency) ? req.query.currency : undefined;
+  return projectLtv(project, String(req.query.groupBy ?? "product"), Date.now(), cur);
 });
 
 // ── Audiences (audiences.ts) ───────────────────────────────────────────────

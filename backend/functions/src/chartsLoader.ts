@@ -1,5 +1,5 @@
 import { Project, db } from "./store";
-import { computeChart, ChartData, ChartFilters, Resolution, CHART_NAMES } from "./charts";
+import { computeChart, chartInCurrency, ChartData, ChartFilters, ChartResult, Resolution, CHART_NAMES } from "./charts";
 import { HttpError, Purchase } from "./engine";
 
 const DAY = 86400000;
@@ -7,9 +7,12 @@ const LOOKBACK = 400 * DAY; // first-payment / prior-churn context before the wi
 
 /** Loads the collections a chart needs and runs the pure computation (charts.ts). */
 export async function projectChart(project: Project, name: string, q: Record<string, unknown>) {
+  // Calcul dans la devise du projet, puis conversion vers la devise d'affichage demandée par l'app.
+  const to = typeof q.currency === "string" && /^[A-Z]{3}$/.test(q.currency) ? q.currency : project.config.currency;
+  const shown = <T extends ChartResult>(r: T): T => chartInCurrency(r, to);
   // Graphiques publicitaires (ads.ts) : agrégats adDaily, pas de reconstruction depuis les achats.
   const { AD_CHART_NAMES, projectAdChart } = await import("./ads");
-  if ((AD_CHART_NAMES as readonly string[]).includes(name)) return projectAdChart(project, name, q);
+  if ((AD_CHART_NAMES as readonly string[]).includes(name)) return shown(await projectAdChart(project, name, q) as any);
   if (!(CHART_NAMES as readonly string[]).includes(name)) throw new HttpError(404, "unknown_chart", `Graphiques : ${[...CHART_NAMES, ...AD_CHART_NAMES].join(", ")}`);
   const now = Date.now();
   const days = Math.min(1095, Math.max(1, Number(q.days ?? 30) || 30));
@@ -40,11 +43,11 @@ export async function projectChart(project: Project, name: string, q: Record<str
   };
   try {
     return {
-      ...computeChart(name, data, {
+      ...shown(computeChart(name, data, {
         start, end, now, resolution, currency: project.config.currency, filters,
         conversionDays: q.conversionDays !== undefined ? Number(q.conversionDays) : undefined,
         retentionPeriods: q.periods !== undefined ? Number(q.periods) : undefined,
-      }),
+      })),
       days, filters,
     };
   } catch (e) { throw new HttpError(400, (e as Error).message); }

@@ -38,7 +38,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .light: return String(localized: "L'apparence claire reste active, jour et nuit.")
         case .dark: return String(localized: "L'apparence sombre reste active, jour et nuit.")
-        case .system: return String(localized: "Suit les réglages de ton iPhone, jour et nuit.")
+        case .system: return String(localized: "Suit les réglages de ton appareil, jour et nuit.")
         }
     }
 

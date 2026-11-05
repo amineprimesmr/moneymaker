@@ -25,6 +25,8 @@ struct MMTabBar: View {
     @Binding var selection: Int
     let items: [Item]
     var onReselect: (Int) -> Void = { _ in }
+    /// Vrai pour la barre de l'app : ses onglets sont repérés par le tutoriel de l'accueil.
+    var showsTutorialTargets = false
 
     @Namespace private var pillNamespace
 
@@ -72,6 +74,7 @@ struct MMTabBar: View {
         .buttonStyle(.plain)
         .accessibilityLabel(item.title)
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .homeTutorialTarget(showsTutorialTargets ? HomeTutorialTarget(tabTag: item.tag) : nil)
     }
 }
 

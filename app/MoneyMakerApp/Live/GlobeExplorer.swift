@@ -126,6 +126,7 @@ struct GlobeExplorer: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    @State private var pageHeight: CGFloat = 800
     @State private var cam = GlobeExplorerCamera()
     @State private var haptics = GlobeHaptics()
     @State private var heat = GlobeHeat()
@@ -174,12 +175,14 @@ struct GlobeExplorer: View {
                 zoomControls
                     .opacity(selected == nil ? 1 : 0)
                     .allowsHitTesting(selected == nil)
-                bottom(spots: spots, total: total, maxHeight: UIScreen.main.bounds.height * 0.6)
+                bottom(spots: spots, total: total, maxHeight: pageHeight * 0.6)
                     .frame(maxWidth: .infinity)
             }
             .padding(.bottom, 8)
             .animation(.spring(response: 0.5, dampingFraction: 0.86), value: selected)
         }
+        // Mesurée autour de la fiche, qu'elle ne fait donc pas varier.
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { pageHeight = $0 }
         .mmPage(stars: true)
         .toolbar(.hidden, for: .navigationBar)
         .igHidesTabBar()
@@ -412,6 +415,7 @@ struct GlobeExplorer: View {
                 .padding(.horizontal, 16)
             }
             .scrollIndicators(.hidden)
+            .mmRail()
             .onChange(of: selected) { _, cc in
                 guard let cc else { return }
                 withAnimation(.snappy) { proxy.scrollTo(cc, anchor: .center) }

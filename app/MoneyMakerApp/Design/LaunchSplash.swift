@@ -99,7 +99,7 @@ struct LaunchSplashView: View {
             return
         }
         // Attend que l'Accueil ait mesuré son en-tête (au plus 1,5 s : sinon, on s'efface sur place).
-        for _ in 0..<30 where coord.headerLogoFrame == nil && MoneyMakerClient.stored.token != nil { try? await Task.sleep(for: .milliseconds(50)) }
+        for _ in 0..<30 where coord.headerLogoFrame == nil && MoneyMakerClient.stored.token != nil && MoneyMakerClient.stored.token != "mm_demo" { try? await Task.sleep(for: .milliseconds(50)) }
         target = coord.headerLogoFrame
         let move: Animation = reduceMotion ? .easeOut(duration: 0.25) : .spring(response: 0.75, dampingFraction: 0.88)
         withAnimation(move, completionCriteria: .logicallyComplete) {

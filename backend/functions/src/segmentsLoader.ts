@@ -1,12 +1,12 @@
 // Chargement Firestore pour la prédiction de LTV (ltv.ts) et les audiences (audiences.ts).
 import { db, Project } from "./store";
-import { HttpError, Purchase } from "./engine";
+import { HttpError, Purchase, convertMicros } from "./engine";
 import { predictLtv, LtvPayment } from "./ltv";
 import { Audience, CustomerRow, matchAudience } from "./audiences";
 
 export const LTV_GROUPS = ["product", "country", "store"] as const;
 
-export async function projectLtv(project: Project, groupBy: string, now = Date.now()) {
+export async function projectLtv(project: Project, groupBy: string, now = Date.now(), displayCurrency?: string) {
   if (!(LTV_GROUPS as readonly string[]).includes(groupBy)) throw new HttpError(400, "invalid_group_by", `groupBy ∈ ${LTV_GROUPS.join(", ")}`);
   const snap = await db.collection(`projects/${project.id}/transactions`).orderBy("at", "desc").limit(100000)
     .select("appUserId", "productId", "store", "country", "amountMicrosProject", "periodMonths", "isSandbox", "at").get();
@@ -17,7 +17,14 @@ export async function projectLtv(project: Project, groupBy: string, now = Date.n
     const group = groupBy === "product" ? t.productId : groupBy === "store" ? t.store : (t.country ?? "??");
     payments.push({ customerId: String(t.appUserId), group: String(group ?? "??"), at: Number(t.at), amountMicros: Number(t.amountMicrosProject ?? 0), periodMonths: Number(t.periodMonths ?? 0) });
   }
-  return { currency: project.config.currency, groupBy, transactions: payments.length, truncated: snap.size >= 100000, groups: predictLtv(payments, now), generatedAt: now };
+  const from = project.config.currency, to = displayCurrency ?? from;
+  const groups = predictLtv(payments, now).map(g => to === from ? g : {
+    ...g,
+    arpuMonthMicros: convertMicros(g.arpuMonthMicros, from, to),
+    ltv12: convertMicros(g.ltv12, from, to),
+    ltv24: convertMicros(g.ltv24, from, to),
+  });
+  return { currency: to, groupBy, transactions: payments.length, truncated: snap.size >= 100000, groups, generatedAt: now };
 }
 
 export function audienceById(project: Project, aid: string): Audience {

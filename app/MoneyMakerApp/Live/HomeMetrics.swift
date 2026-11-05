@@ -558,6 +558,7 @@ struct HomeMetricDetail: View {
                 }
             }
             .scrollIndicators(.hidden)
+            .mmRail()
             .defaultScrollAnchor(.trailing)
             .frame(height: 64)
             .onAppear { if let last = pts.last { proxy.scrollTo(last.date, anchor: .trailing) } }
@@ -731,25 +732,42 @@ struct HomeTiles: View {
     let today: Today?
 
     private let columns = [GridItem(.flexible(), spacing: RecoveryTileTheme.gridSpacing), GridItem(.flexible())]
+    /// Sur un écran large, toutes les cartes tiennent dans une seule grille à deux colonnes, sans trou.
+    private let wideColumns = [GridItem(.flexible(), spacing: RecoveryTileTheme.gridSpacing), GridItem(.flexible())]
+    @State private var isWide = false
 
     var body: some View {
         let metrics = HomeMetric.visible(o, today: today)
         let big = metrics.filter(\.isBigTile)
         let mini = metrics.filter { !$0.isBigTile }
         VStack(spacing: RecoveryTileTheme.gridSpacing) {
-            VStack(spacing: RecoveryTileTheme.gridSpacing) {
-                ForEach(Array(big.enumerated()), id: \.element) { i, m in
-                    NavigationLink(value: m) { HomeTile(metric: m, o: o, today: today).equatable().modifier(ZoomSource(id: m)) }
-                        .buttonStyle(MMPressStyle(scale: 0.97))
-                        .recoveryTileEntrance(i)
+            if isWide {
+                LazyVGrid(columns: wideColumns, spacing: RecoveryTileTheme.gridSpacing) {
+                    ForEach(Array(metrics.enumerated()), id: \.element) { i, m in
+                        NavigationLink(value: m) { HomeTile(metric: m, o: o, today: today).equatable().modifier(ZoomSource(id: m)) }
+                            .buttonStyle(MMPressStyle(scale: 0.97))
+                            .recoveryTileEntrance(i)
+                    }
                 }
-            }
-            VStack(spacing: RecoveryTileTheme.gridSpacing) {
-                ForEach(Array(mini.enumerated()), id: \.element) { i, m in
-                    NavigationLink(value: m) { HomeTile(metric: m, o: o, today: today).equatable().modifier(ZoomSource(id: m)) }
-                        .buttonStyle(MMPressStyle(scale: 0.97))
-                        .recoveryTileEntrance(big.count + i)
+            } else {
+                VStack(spacing: RecoveryTileTheme.gridSpacing) {
+                    ForEach(Array(big.enumerated()), id: \.element) { i, m in
+                        NavigationLink(value: m) { HomeTile(metric: m, o: o, today: today).equatable().modifier(ZoomSource(id: m)) }
+                            .buttonStyle(MMPressStyle(scale: 0.97))
+                            .recoveryTileEntrance(i)
+                            .homeTutorialTarget(i == 0 ? .firstTile : nil)
+                    }
                 }
+                .homeTutorialTarget(.revenue)
+                VStack(spacing: RecoveryTileTheme.gridSpacing) {
+                    ForEach(Array(mini.enumerated()), id: \.element) { i, m in
+                        NavigationLink(value: m) { HomeTile(metric: m, o: o, today: today).equatable().modifier(ZoomSource(id: m)) }
+                            .buttonStyle(MMPressStyle(scale: 0.97))
+                            .recoveryTileEntrance(big.count + i)
+                    }
+                }
+                .id(HomeTutorialAnchor.more)
+                .homeTutorialTarget(mini.isEmpty ? nil : .moreTiles)
             }
             // PostHog : conversion du paywall et installation → payant, juste sous les cartes principales.
             if let p = posthog {
@@ -797,6 +815,7 @@ struct HomeTiles: View {
             .padding(.top, 4)
             .sensoryFeedback(.selection, trigger: showMore)
         }
+        .onGeometryChange(for: Bool.self) { $0.size.width >= 600 } action: { isWide = $0 }
     }
 
     @State private var showMore = false
@@ -908,7 +927,7 @@ extension HomeMetric {
             return String(localized: "+\(pct) % clients")
         default:
             guard let d = halfOverHalf(dailySeries(o.mergedRevenueByDay, days: 30)), [.paying, .newCustomers].contains(self) else { return nil }
-            return "\(d >= 0 ? "+" : "")\(Int((d * 100).rounded())) %"
+            return String(localized: "\(d >= 0 ? "+" : "")\(Int((d * 100).rounded())) %")
         }
     }
 }

@@ -145,14 +145,14 @@ struct TodayWidgetView: View {
                     WLine(values: curve, tone: .money, lineWidth: 1.8).padding(.vertical, 6)
                     HStack(spacing: 4) {
                         Text("\(t.transactions)").foregroundStyle(MMColor.ink2)
-                        Text("ventes").foregroundStyle(MMColor.ink3)
+                        Text(t.transactions == 1 ? "vente" : "ventes").foregroundStyle(MMColor.ink3)
                         Spacer(minLength: 2)
                         if let p = entry.goalProgress {
                             Text(min(9.99, p).formatted(.percent.precision(.fractionLength(0)))).foregroundStyle(p >= 1 ? WTone.gold : MMColor.ink2)
                             Text("obj.").foregroundStyle(MMColor.ink3)
                         } else {
                             Text("\(t.trials)").foregroundStyle(MMColor.ink2)
-                            Text("essais").foregroundStyle(MMColor.ink3)
+                            Text(t.trials == 1 ? "essai" : "essais").foregroundStyle(MMColor.ink3)
                         }
                     }
                     .font(MMFont.system(12, .medium)).lineLimit(1)

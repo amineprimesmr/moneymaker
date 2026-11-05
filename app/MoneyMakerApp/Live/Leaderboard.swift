@@ -72,6 +72,7 @@ extension MoneyMakerClient {
     /// Jamais de cache local ; `fresh` contourne aussi le cache du CDN (après une inscription).
     static func leaderboard(sort: LeaderboardSort, fresh: Bool = false) async throws -> LeaderboardResponse {
         var url = "\(MM.baseURL.absoluteString)/leaderboard?sort=\(sort.rawValue)&limit=200"
+        if let c = MoneyMakerClient.displayCurrency { url += "&currency=\(c)" }
         if fresh { url += "&t=\(Int(Date().timeIntervalSince1970))" }
         var req = URLRequest(url: URL(string: url)!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 25)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -1025,7 +1026,7 @@ private struct BusinessPublicSheet: View {
                 }
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.seal.fill").foregroundStyle(MMColor.accent)
-                    Text("Vérifié par \(entry.sources.map { ["appstore": String(localized: "l'App Store"), "googleplay": "Google Play", "stripe": "Stripe"][$0] ?? $0 }.joined(separator: ", "))").font(MMFont.system(13)).foregroundStyle(MMColor.ink2)
+                    Text("Vérifié par \(entry.sources.map { ["appstore": String(localized: "l'App Store"), "googleplay": String(localized: "un autre store"), "stripe": "Stripe"][$0] ?? $0 }.joined(separator: ", "))").font(MMFont.system(13)).foregroundStyle(MMColor.ink2)
                 }
                 if let w = entry.website, let url = URL(string: w) {
                     Link(destination: url) {

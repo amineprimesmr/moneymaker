@@ -177,7 +177,44 @@ struct EventItem: Codable, Identifiable, Hashable {
     let isSandbox: Bool?
 }
 
-struct APIError: LocalizedError { let message: String; var status: Int = 0; var errorDescription: String? { message } }
+struct APIError: LocalizedError {
+    let message: String; var status: Int = 0; var errorDescription: String? { message }
+
+    /// Le serveur écrit ses messages en français : l'app les affiche dans la langue de l'appareil, d'après leur code.
+    static func server(_ data: Data, status: Int) -> APIError {
+        let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let text = localized(code: body?["error"] as? String) ?? body?["message"] as? String
+        return APIError(message: text ?? String(localized: "Erreur \(status)"), status: status)
+    }
+
+    private static func localized(code: String?) -> String? {
+        switch code {
+        case "demo_read_only": return String(localized: "Mode démo : cette action est désactivée.")
+        case "pro_required": return String(localized: "Le plan gratuit inclut 1 business. MoneyMaker Pro les débloque tous.")
+        case "rate_limited": return String(localized: "Trop de requêtes, réessaie dans une minute.")
+        case "purchase_other_account": return String(localized: "Cet achat est rattaché à un autre compte MoneyMaker.")
+        case "invalid_transaction": return String(localized: "Transaction App Store invalide.")
+        case "billing_unavailable": return String(localized: "Le paiement n'est pas disponible pour le moment.")
+        case "apns_not_configured": return String(localized: "Les notifications ne sont pas encore disponibles.")
+        case "no_device": return String(localized: "Connecte-toi dans l'app et autorise les notifications.")
+        case "insufficient_role": return String(localized: "Ton rôle ne permet pas cette action.")
+        case "insufficient_scope": return String(localized: "Cette connexion est en lecture seule.")
+        case "missing_key": return String(localized: "Colle ta clé personnelle PostHog.")
+        case "invalid_key": return String(localized: "La clé personnelle PostHog commence par phx_.")
+        case "invalid_host": return String(localized: "Serveur PostHog invalide.")
+        case "invalid_project_id": return String(localized: "L'identifiant du projet PostHog est un nombre.")
+        case "posthog_unauthorized": return String(localized: "Clé PostHog refusée : il faut une clé personnelle avec le droit Query.")
+        case "posthog_project_not_found": return String(localized: "Projet PostHog introuvable.")
+        case "posthog_error": return String(localized: "PostHog ne répond pas, réessaie.")
+        case "invalid_website": return String(localized: "L'adresse doit commencer par https://.")
+        case "invalid_image": return String(localized: "Image introuvable ou illisible à cette adresse.")
+        case "invite_not_found": return String(localized: "Invitation introuvable ou déjà utilisée.")
+        case "invite_expired": return String(localized: "Invitation expirée.")
+        case "last_owner": return String(localized: "Le dernier propriétaire ne peut pas quitter le projet.")
+        default: return nil
+        }
+    }
+}
 
 struct MoneyMakerClient {
     var token: String?
@@ -212,8 +249,7 @@ struct MoneyMakerClient {
         req.timeoutInterval = 20
         let (data, res) = try await URLSession.shared.data(for: req)
         guard let http = res as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            let msg = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
-            throw APIError(message: msg ?? String(localized: "Erreur \((res as? HTTPURLResponse)?.statusCode ?? 0)"), status: (res as? HTTPURLResponse)?.statusCode ?? 0)
+            throw APIError.server(data, status: (res as? HTTPURLResponse)?.statusCode ?? 0)
         }
         return try JSONDecoder().decode(T.self, from: data)
     }

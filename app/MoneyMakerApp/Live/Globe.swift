@@ -733,6 +733,7 @@ struct ProjectPicker: View {
                     .padding(.horizontal, 2).padding(.vertical, 4)
                 }
                 .scrollIndicators(.hidden)
+                .mmRail()
                 .scrollClipDisabled()
                 if let id = selected {
                     Group {
@@ -769,7 +770,7 @@ struct StoreBadges: View {
                     switch s {
                     case "app_store": Image(systemName: "apple.logo"); Text("App Store")
                     case "stripe": Text("S").font(.system(size: size, weight: .heavy)).foregroundStyle(Color(red: 0.39, green: 0.36, blue: 1)); Text("Stripe")
-                    case "play_store": Image(systemName: "play.fill").foregroundStyle(MMColor.accent); Text("Google Play")
+                    case "play_store": Image(systemName: "storefront.fill").foregroundStyle(MMColor.accent); Text("Autre store")
                     default: Image(systemName: "link"); Text(s.replacingOccurrences(of: "_", with: " ").capitalized)
                     }
                 }

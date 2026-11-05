@@ -14,6 +14,7 @@
 		0D0CC3F6E9FC91FECA924EBF /* GlobeExplorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51041CC235D80D28C955E179 /* GlobeExplorer.swift */; };
 		0E0DF9F55F63CCCFC43BAF97 /* Finance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9CEEAB6A0F6F975061B40D2 /* Finance.swift */; };
 		0EFF26F53F425A37EC4BB766 /* Rewards.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF399933038A0DE2E6CAE08 /* Rewards.swift */; };
+		0FADADDC3B5A411C31088744 /* HomeTutorial.swift in Sources */ = {isa = PBXBuildFile; fileRef = B57142CA682EBBA72099EEB2 /* HomeTutorial.swift */; };
 		13FA1D42D0AB7EBB09392963 /* MMInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = 451D713AE517F26284C13278 /* MMInsights.swift */; };
 		19BDD03E12EDAD86DDEBBDE9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1097FC8E56F8174FC341976B /* Assets.xcassets */; };
 		1C2792EE75B9DB6DD146553E /* ProLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54CD905EF7FAA79055ECAA90 /* ProLock.swift */; };
@@ -85,6 +86,7 @@
 		DD055D734B50B18D7BDBA8A8 /* CachedImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98A641DEF15038E8304BEEE0 /* CachedImage.swift */; };
 		E41FCBB3965C52B9646B6A79 /* ProjectInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3A1E8C932527F499BEE1567 /* ProjectInsights.swift */; };
 		E5E80CE0A65E938DADAFA9D4 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 6DE8E73C1CFBA597DB41064A /* PrivacyInfo.xcprivacy */; };
+		E76C91F1E4F1A93873A41498 /* AdaptiveLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC97D26693EDB0CA8221A74 /* AdaptiveLayout.swift */; };
 		ED2ECE641415901FA314EA93 /* DashboardWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 911E11FF37AB7E13CD4D68BF /* DashboardWidget.swift */; };
 		EDE35245B27EBBFD0BB59F83 /* AppsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26A2CBF5C8FBEBB912567FC6 /* AppsScreen.swift */; };
 		F30CF2AE63540FA201FF523B /* WidgetGlobeData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC7F69770847ED8FCED312B /* WidgetGlobeData.swift */; };
@@ -129,6 +131,7 @@
 		02FF224E83BFAEB191053A5C /* NativeSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSignIn.swift; sourceTree = "<group>"; };
 		07F6EC84619636688C1DCB35 /* WidgetShots.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = WidgetShots.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		085353DA18F77BB99F763AD1 /* OnboardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingTests.swift; sourceTree = "<group>"; };
+		0CC97D26693EDB0CA8221A74 /* AdaptiveLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveLayout.swift; sourceTree = "<group>"; };
 		0F6E5914B597705EB1396EB8 /* PerfProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerfProbe.swift; sourceTree = "<group>"; };
 		0FEFF0FBF7420753D830CBF3 /* SyncBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncBanner.swift; sourceTree = "<group>"; };
 		1097FC8E56F8174FC341976B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -174,6 +177,7 @@
 		AD9FF9FB850F74B6132F8088 /* SideMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideMenu.swift; sourceTree = "<group>"; };
 		B07F7A04E06DA4EA8BE3552E /* ProPaywall.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProPaywall.swift; sourceTree = "<group>"; };
 		B4D0A47CF847D152078B53C9 /* WidgetIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetIcons.swift; sourceTree = "<group>"; };
+		B57142CA682EBBA72099EEB2 /* HomeTutorial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTutorial.swift; sourceTree = "<group>"; };
 		BBA09701125F0A0CDA5831EE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		C21C1B609F5745CA0CD1EC26 /* Leaderboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Leaderboard.swift; sourceTree = "<group>"; };
 		C73C4CE142E8383DF54EED22 /* MoneyMaker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MoneyMaker.entitlements; sourceTree = "<group>"; };
@@ -321,8 +325,10 @@
 		D80749C58DA4B8FAB7CE44D2 /* Design */ = {
 			isa = PBXGroup;
 			children = (
+				0CC97D26693EDB0CA8221A74 /* AdaptiveLayout.swift */,
 				CEF2C55340E1A6229E1A78CE /* AutoTour.swift */,
 				98A641DEF15038E8304BEEE0 /* CachedImage.swift */,
+				B57142CA682EBBA72099EEB2 /* HomeTutorial.swift */,
 				6FEDDB5B290C751F9B01CBDA /* IGShell.swift */,
 				F4144027ADBE57BF8FB2AC8F /* LaunchSplash.swift */,
 				383FDA69C9F3FCE44ED59A32 /* MetricCards.swift */,
@@ -534,6 +540,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E76C91F1E4F1A93873A41498 /* AdaptiveLayout.swift in Sources */,
 				C5577EBD0336F73B0E14A7CD /* AgentSetup.swift in Sources */,
 				2397B63C9E9B3545F93A3E6D /* Analytics.swift in Sources */,
 				EDE35245B27EBBFD0BB59F83 /* AppsScreen.swift in Sources */,
@@ -545,6 +552,7 @@
 				0D0CC3F6E9FC91FECA924EBF /* GlobeExplorer.swift in Sources */,
 				524AAF5826767D1D2CB7D926 /* Growth.swift in Sources */,
 				2A578099AE70D450B3FA695A /* HomeMetrics.swift in Sources */,
+				0FADADDC3B5A411C31088744 /* HomeTutorial.swift in Sources */,
 				CFF1C47E4F810548E456301E /* IGShell.swift in Sources */,
 				37B9651D3011145AAE87823A /* LaunchSplash.swift in Sources */,
 				F96F2ACCCAAC127BB1C54F40 /* Leaderboard.swift in Sources */,
@@ -683,7 +691,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = F2CJGJ69XU;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -705,13 +713,14 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
 		27F6D7DD600B6F5C87EA6CC1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				DEVELOPMENT_LANGUAGE = en;
 				APS_ENVIRONMENT = production;
 				CODE_SIGN_ENTITLEMENTS = Widgets/Widgets.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Distribution";
@@ -727,7 +736,7 @@
 				PRODUCT_NAME = MoneyMakerWidgets;
 				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Widgets AppStore 20261009";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -744,7 +753,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.moneymaker.app.uitests;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = MoneyMaker;
 			};
 			name = Release;
@@ -777,12 +786,14 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = MoneyMakerApp/MoneyMaker.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Distribution";
+				DEVELOPMENT_LANGUAGE = en;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MoneyMakerApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MoneyMaker;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -791,7 +802,7 @@
 				PRODUCT_NAME = MoneyMaker;
 				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker AppStore 20261102";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -808,7 +819,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.moneymaker.app.uitests;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = MoneyMaker;
 			};
 			name = Debug;
@@ -836,6 +847,7 @@
 		F7F44DF69D389F6494DE9CAD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				DEVELOPMENT_LANGUAGE = en;
 				APS_ENVIRONMENT = development;
 				CODE_SIGN_ENTITLEMENTS = Widgets/Widgets.entitlements;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -850,7 +862,7 @@
 				PRODUCT_NAME = MoneyMakerWidgets;
 				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Widgets Dev 20261102";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -862,12 +874,14 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = MoneyMakerApp/MoneyMaker.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_LANGUAGE = en;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MoneyMakerApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MoneyMaker;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -876,7 +890,7 @@
 				PRODUCT_NAME = MoneyMaker;
 				PROVISIONING_PROFILE_SPECIFIER = "MoneyMaker Dev 20261102b";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -917,7 +931,7 @@
 				CODE_SIGN_STYLE = Manual;
 				COMPILER_INDEX_STORE_ENABLE = NO;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = F2CJGJ69XU;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -947,7 +961,7 @@
 				SWIFT_COMPILATION_MODE = singlefile;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};

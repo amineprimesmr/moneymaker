@@ -143,3 +143,18 @@ test("every chart computes on empty data; csv; unknown chart throws", () => {
   assert.equal(csv.split("\n")[0], "date,value,revenue,refunds,net,transactions");
   assert.equal(csv.split("\n")[1], "2026-01-01,5,5,0,5,1");
 });
+
+test("chartInCurrency : montants convertis, comptes intacts", () => {
+  const { chartInCurrency } = require("../lib/charts");
+  const money = { unit: "micros", currency: "EUR", series: [{ date: "d", value: 100e6, revenue: 100e6, refunds: 10e6, net: 90e6, transactions: 7 }], summary: { value: 100e6, transactions: 7 } };
+  const usd = chartInCurrency(money, "USD");
+  assert.equal(usd.currency, "USD");
+  assert.ok(usd.series[0].value > 100e6);
+  assert.equal(usd.series[0].transactions, 7);
+  assert.equal(usd.summary.transactions, 7);
+  const count = { unit: "count", currency: "EUR", series: [{ date: "d", value: 5, net: 2, new: 3, amount: 50e6 }], summary: { value: 5, net: 2, amount: 50e6 } };
+  const c = chartInCurrency(count, "USD");
+  assert.deepEqual([c.series[0].value, c.series[0].net, c.series[0].new], [5, 2, 3]);
+  assert.ok(c.series[0].amount > 50e6);
+  assert.equal(chartInCurrency(money, "EUR"), money);
+});

@@ -180,8 +180,11 @@ struct BusinessSideBar: View, Equatable {
     var open: (ProjectSummary) -> Void
     var openSettings: () -> Void
     /// Menu inversé par rapport à l'app : papier clair en mode sombre, ardoise en mode clair.
+    /// Épinglé sur grand écran, il reste affiché : il suit alors l'apparence de l'app.
     @Environment(\.colorScheme) private var appScheme
-    private var ink: Color { appScheme == .light ? .white : .black }
+    @Environment(\.mmPinnedSidebar) private var pinned
+    private var panelScheme: ColorScheme { pinned ? appScheme : (appScheme == .light ? .dark : .light) }
+    private var ink: Color { panelScheme == .dark ? .white : .black }
 
     static func == (a: Self, b: Self) -> Bool {
         a.activeIds == b.activeIds
@@ -195,6 +198,7 @@ struct BusinessSideBar: View, Equatable {
                 .padding(.bottom, 18)
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 6) {
                     ForEach(projects) { p in
                         Button { toggle(p.projectId) } label: { row(p) }
                             .buttonStyle(MMPressStyle(scale: 0.97))
@@ -205,7 +209,10 @@ struct BusinessSideBar: View, Equatable {
                     if projects.isEmpty {
                         Text("Aucun business pour l'instant.").font(MMFont.system(14)).foregroundStyle(ink.opacity(0.4))
                     }
+                    }
+                    .homeTutorialTarget(.businesses)
                     Rectangle().fill(ink.opacity(0.08)).frame(height: 1).padding(.vertical, 12)
+                    VStack(alignment: .leading, spacing: 6) {
                     menuButton("plus.circle.fill", "Nouveau business") {
                         // Au-delà du business gratuit : le paywall Pro ; sinon le dashboard web.
                         Task { await ProPaywall.shared.newBusiness(client: client) }
@@ -214,6 +221,8 @@ struct BusinessSideBar: View, Equatable {
                     menuButton("safari.fill", "Dashboard web") {
                         UIApplication.shared.open(URL(string: "https://usemoneymaker.com")!)
                     }
+                    }
+                    .homeTutorialTarget(.menuActions)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 12)
@@ -226,7 +235,7 @@ struct BusinessSideBar: View, Equatable {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding([.horizontal, .top], 18)
-        .environment(\.colorScheme, appScheme == .light ? .dark : .light)
+        .environment(\.colorScheme, panelScheme)
         .task(id: projects.map(\.projectId)) { await setup.load(projects, client: client) }
         // Rafraîchi après l'animation d'ouverture (pas pendant : chaque réponse redessinait le menu
         // et faisait sauter le glissé). Écoute sans redessiner le panneau.
@@ -299,9 +308,10 @@ struct SideBarBackdrop: View {
     /// Seulement « menu visible ou non » : observer la progression redessinait ce fond à chaque image du glissement.
     @ObservedObject private var menu = IGMenuVisibility.shared
     @Environment(\.colorScheme) private var appScheme
+    @Environment(\.mmPinnedSidebar) private var pinned
 
     var body: some View {
-        let inverted = appScheme == .light
+        let inverted = pinned ? appScheme == .dark : appScheme == .light
         ZStack {
             // Blanc cassé en mode sombre, ardoise profonde en mode clair (le menu inverse l'app).
             LinearGradient(colors: inverted ? [Color(white: 0.14), Color(white: 0.07)] : [Color(white: 0.93), Color(white: 0.86)],

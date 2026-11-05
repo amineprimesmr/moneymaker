@@ -44,8 +44,9 @@ final class Router: ObservableObject {
         switch url.host {
         case "auth":
             // moneymaker://auth?token=mm_pat_… : connexion directe (lien depuis le dashboard, tests UI).
+            // Un jeton invalide passe aussi par Store.signIn, qui affiche le motif du refus.
             // moneymaker://auth?token=mm_demo : accès en lecture seule donné au testeur App Review dans les notes.
-            if let t = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "token" })?.value, t.hasPrefix("mm_pat_") || t == "mm_demo" {
+            if let t = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "token" })?.value, !t.isEmpty {
                 pendingToken = t
             }
         case "project": if let id = url.pathComponents.dropFirst().first { pending = .project(id) }

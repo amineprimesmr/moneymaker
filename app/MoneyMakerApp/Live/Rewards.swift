@@ -198,6 +198,7 @@ struct RewardsView: View {
                 .padding(.horizontal, SettingsTheme.horizontalPadding)
             }
             .scrollIndicators(.hidden)
+            .mmRail()
             .padding(.top, 18)
             .sensoryFeedback(.selection, trigger: family)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible())], spacing: 10) {

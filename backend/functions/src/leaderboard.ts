@@ -3,7 +3,7 @@
 // Le classement est recalculé une fois par heure et mis en cache dans Firestore :
 // chaque calcul lit des milliers de documents, le faire plus souvent coûte plus qu'il n'apporte.
 
-import { HttpError } from "./engine";
+import { HttpError, convertMicros } from "./engine";
 import { db, getProject } from "./store";
 import { projectMetrics } from "./metrics";
 import { DEMO_UID } from "./demo";
@@ -59,15 +59,19 @@ export function sanitizeListing(body: any, prev?: PublicListing): PublicListing 
   return out;
 }
 
-/** Tranche affichée quand le business masque ses montants : « 1 k – 5 k € ». */
-export function amountBucket(micros: number): string {
+/** Tranche affichée quand le business masque ses montants : « 1 k – 5 k € », ou « $1k – $5k » hors euro. */
+export function amountBucket(micros: number, currency = LEADERBOARD_CURRENCY): string {
   const v = micros / 1_000_000;
   const steps = [0, 100, 500, 1_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 1_000_000];
-  const fmt = (n: number) => (n >= 1_000_000 ? `${n / 1_000_000} M` : n >= 1000 ? `${n / 1000} k` : `${n}`);
+  const eur = currency === "EUR";
+  const fmt = (n: number) => (n >= 1_000_000 ? `${n / 1_000_000}${eur ? " " : ""}M` : n >= 1000 ? `${n / 1000}${eur ? " " : ""}k` : `${n}`);
+  const sym = ({ USD: "$", GBP: "£", CAD: "CA$", AUD: "A$", JPY: "¥", CHF: "CHF " } as Record<string, string>)[currency] ?? `${currency} `;
+  const one = (n: number) => (eur ? fmt(n) : `${sym}${fmt(n)}`);
+  const unit = eur ? " €" : "";
   for (let i = steps.length - 1; i >= 0; i--) {
-    if (v >= steps[i]) return i === steps.length - 1 ? `${fmt(steps[i])} € +` : `${fmt(steps[i])} – ${fmt(steps[i + 1])} €`;
+    if (v >= steps[i]) return i === steps.length - 1 ? `${one(steps[i])}${unit} +` : `${one(steps[i])} – ${one(steps[i + 1])}${unit}`;
   }
-  return "0 €";
+  return eur ? "0 €" : `${sym}0`;
 }
 
 export function sortEntries(entries: LeaderboardEntry[], sort: LeaderboardSort): LeaderboardEntry[] {
@@ -80,12 +84,13 @@ export function sortEntries(entries: LeaderboardEntry[], sort: LeaderboardSort):
   return [...entries].sort((a, b) => key[sort](b) - key[sort](a) || b.mrrMicros - a.mrrMicros || a.listedAt - b.listedAt);
 }
 
-/** Ce que voit le public : montants exacts, ou tranches si le business les masque. */
-export function publicEntry(e: LeaderboardEntry, rank: number) {
+/** Ce que voit le public : montants exacts, ou tranches si le business les masque. `currency` : devise d'affichage. */
+export function publicEntry(e: LeaderboardEntry, rank: number, currency = LEADERBOARD_CURRENCY) {
   const { hideAmounts, ...rest } = e;
+  const mrr = convertMicros(e.mrrMicros, LEADERBOARD_CURRENCY, currency), revenue = convertMicros(e.revenue30dMicros, LEADERBOARD_CURRENCY, currency);
   return hideAmounts
-    ? { ...rest, rank, mrrMicros: null, revenue30dMicros: null, mrrRange: amountBucket(e.mrrMicros), revenueRange: amountBucket(e.revenue30dMicros) }
-    : { ...rest, rank };
+    ? { ...rest, rank, mrrMicros: null, revenue30dMicros: null, mrrRange: amountBucket(mrr, currency), revenueRange: amountBucket(revenue, currency) }
+    : { ...rest, rank, mrrMicros: mrr, revenue30dMicros: revenue };
 }
 
 /** Ce que le système sait déjà du business : lien App Store / Google Play / site Stripe et catégorie.

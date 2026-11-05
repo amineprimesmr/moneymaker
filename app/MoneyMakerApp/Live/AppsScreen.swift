@@ -20,7 +20,7 @@ private struct StoreInfo: Codable, Hashable {
 
     static func fetch(_ appId: String) async -> StoreInfo? {
         struct R: Decodable { let results: [StoreInfo] }
-        for country in ["fr", "us"] {
+        for country in MMLang.isFrench ? ["fr", "us"] : ["us", "fr"] {
             guard let url = URL(string: "https://itunes.apple.com/lookup?id=\(appId)&country=\(country)"),
                   let (data, _) = try? await URLSession.shared.data(from: url),
                   let info = try? JSONDecoder().decode(R.self, from: data).results.first else { continue }
@@ -33,7 +33,7 @@ private struct StoreInfo: Codable, Hashable {
         struct R: Decodable { let results: [StoreInfo] }
         var q = URLComponents(string: "https://itunes.apple.com/search")!
         q.queryItems = [.init(name: "term", value: term), .init(name: "entity", value: "software"),
-                        .init(name: "country", value: "fr"), .init(name: "limit", value: "25")]
+                        .init(name: "country", value: MMLang.isFrench ? "fr" : "us"), .init(name: "limit", value: "25")]
         guard let url = q.url, let (data, _) = try? await URLSession.shared.data(from: url) else { return [] }
         return (try? JSONDecoder().decode(R.self, from: data).results) ?? []
     }
@@ -119,7 +119,7 @@ struct AppsScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Mes apps").font(MMFont.system(34, .bold)).tracking(-0.8).padding(.top, 8).mmAppear(0)
-                searchBar.mmAppear(0)
+                searchBar.mmAppear(0).homeTutorialTarget(.appsSearch)
                 if !trimmed.isEmpty {
                     if searching && results.isEmpty {
                         ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
@@ -621,6 +621,7 @@ private struct AppReviewsView: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                .mmRail()
                 if shown.isEmpty {
                     MMCard { Text("Aucun avis pour l'instant.").font(MMFont.system(14)).foregroundStyle(MMColor.ink2) }
                 }

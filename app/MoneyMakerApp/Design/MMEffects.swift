@@ -25,6 +25,12 @@ extension View {
             .contentMargins(.bottom, MMTabBarMetrics.clearance, for: .scrollContent)
     }
 
+    /// Rail horizontal dans une page : la marge du bas de `mmPage`, prévue pour le défilement
+    /// vertical, décalerait son contenu de moitié vers le haut.
+    func mmRail() -> some View {
+        contentMargins(.bottom, 0, for: .scrollContent)
+    }
+
     /// Glass natif iOS 26, matériau sinon.
     @ViewBuilder
     func mmGlass<S: Shape>(in shape: S, interactive: Bool = false) -> some View {

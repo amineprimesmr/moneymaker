@@ -20,10 +20,12 @@ final class IntroModel: ObservableObject {
     @Published private(set) var holdsSplash = false
     /// Apparition du dashboard : 0 logo seul au centre, 1 logo en haut et en-tête, 2 tuiles, 3 barre d'onglets.
     @Published private(set) var revealStep = 0
+    /// Largeur réelle de la fenêtre : le dézoom part d'un téléphone qui la remplit.
+    @Published var viewportWidth: CGFloat = 402
 
     private let dezoomAtSale = 4
     private let totalSales = 12
-    private let amounts = ["29,00 €", "59,00 €", "9,99 €", "34,99 €", "99,00 €", "19,99 €"]
+    private let amounts = [29.0, 59.0, 9.99, 34.99, 99.0, 19.99].map { $0.formatted(.currency(code: "EUR")) }
     private var sold = 0
     private var players: [AVAudioPlayer] = []
     private var nextPlayer = 0
@@ -31,6 +33,8 @@ final class IntroModel: ObservableObject {
 
     /// Joue toute la séquence ; `onDezoom` part avec le logo encore au centre. S'arrête si la tâche est annulée.
     func play(onDezoom: () -> Void) async {
+        // Onboarding retiré en pleine intro (connexion par lien) : le noir du lancement ne doit pas rester.
+        defer { if Task.isCancelled { finishNow() } }
         prepareSound()
         haptic.prepare()
         // Pas d'attente de la fin du lancement : la première notification apparaît par-dessus le logo.
@@ -177,7 +181,7 @@ struct IntroDashboard: View {
         GeometryReader { g in
             let centered = model.revealStep == 0
             Image("Logo").resizable().scaledToFit()
-                .frame(width: centered ? 250 * 402 / UIScreen.main.bounds.width : 40 * 720 / 249)
+                .frame(width: centered ? 250 * 402 / model.viewportWidth : 40 * 720 / 249)
                 .shadow(color: .white.opacity(centered ? 0.28 : 0.18), radius: centered ? 16 : 10)
                 .position(x: g.size.width / 2, y: centered ? g.size.height / 2 : 82)
         }

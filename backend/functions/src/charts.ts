@@ -126,6 +126,19 @@ function sumSummary(series: ChartPoint[], keys: string[]) {
 }
 const last = (series: ChartPoint[]) => (series.length ? series[series.length - 1].value : null);
 
+/** Convertit un graphique déjà calculé vers une devise d'affichage. `net`, `new`, `reactivated` et `churned` ne sont
+ *  des montants que dans un graphique en micros : ailleurs ce sont des comptes (abonnés gagnés, perdus). */
+export function chartInCurrency<T extends { unit: string; currency: string; series: any[]; summary: Record<string, any> }>(r: T, to: string): T {
+  if (r.currency === to) return r;
+  const keys = ["revenue", "refunds", "amount", ...(r.unit === "micros" ? ["value", "net", "new", "reactivated", "churned"] : [])];
+  const conv = <P extends Record<string, any>>(p: P): P => {
+    const out: Record<string, any> = { ...p };
+    for (const k of keys) if (typeof out[k] === "number") out[k] = convertMicros(out[k], r.currency, to);
+    return out as P;
+  };
+  return { ...r, currency: to, series: r.series.map(conv), summary: conv(r.summary) };
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 export function computeChart(name: string, data: ChartData, o: ChartOptions): ChartResult {
   if (!(CHART_NAMES as readonly string[]).includes(name)) throw new Error("unknown_chart");

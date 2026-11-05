@@ -113,21 +113,23 @@ struct EnableAlertsCard: View {
     var body: some View {
         if push.status == .notDetermined {
             MMCard(padding: 18, radius: 24) {
-                HStack(spacing: 14) {
-                    Image(systemName: "bell.badge.fill").font(.system(size: 18)).foregroundStyle(MMColor.accent)
-                        .frame(width: 42, height: 42).background(MMColor.accent.opacity(0.12), in: Circle())
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Sois prévenu à chaque vente").font(MMFont.system(15, .medium))
-                        Text("Notification « cha-ching », revenus du jour sur l'écran verrouillé.").font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 14) {
+                        Image(systemName: "bell.badge.fill").font(.system(size: 18)).foregroundStyle(MMColor.accent)
+                            .frame(width: 42, height: 42).background(MMColor.accent.opacity(0.12), in: Circle())
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Sois prévenu à chaque vente").font(MMFont.system(15, .medium))
+                            Text("Notification « cha-ching », revenus du jour sur l'écran verrouillé.").font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
+                        }
+                        Spacer(minLength: 0)
                     }
-                    Spacer(minLength: 0)
+                    Button("Activer") { NotificationPrompt.shared.show() }
+                        .font(MMFont.system(14, .medium)).foregroundStyle(.black)
+                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                        .background(MMColor.accent, in: Capsule())
+                        .buttonStyle(MMPressStyle())
+                        .padding(.top, 12)
                 }
-                Button("Activer") { NotificationPrompt.shared.show() }
-                    .font(MMFont.system(14, .medium)).foregroundStyle(.black)
-                    .frame(maxWidth: .infinity).padding(.vertical, 12)
-                    .background(MMColor.accent, in: Capsule())
-                    .buttonStyle(MMPressStyle())
-                    .padding(.top, 12)
             }
             .transition(.opacity.combined(with: .scale(scale: 0.96)))
         }
@@ -252,6 +254,7 @@ struct FeedScreen: View {
                     }
                     .mmScrollReveal()
                     .mmAppear(1 + min(gi, 6))
+                    .homeTutorialTarget(gi == 0 ? .feedList : nil)
                 }
             }
             .padding(.horizontal, 16).padding(.bottom, 40)
@@ -455,7 +458,7 @@ struct NotificationSettingsPage: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text((on ? "Notifications actives" : denied ? "Notifications bloquées" : "Notifications éteintes") as LocalizedStringKey)
                         .font(MMFont.system(16, .semibold))
-                    Text((on ? "Chaque vente, en direct." : denied ? "À réactiver dans Réglages iOS." : "Active-les pour chaque vente.") as LocalizedStringKey)
+                    Text((on ? "Chaque vente, en direct." : denied ? "À réactiver dans Réglages." : "Active-les pour chaque vente.") as LocalizedStringKey)
                         .font(MMFont.system(12)).foregroundStyle(MMColor.ink3)
                 }
                 Spacer(minLength: 8)
@@ -948,7 +951,7 @@ extension FeedEvent {
         switch s {
         case "app_store": "App Store"
         case "stripe": "Stripe"
-        case "play_store": "Google Play"
+        case "play_store": String(localized: "Autre store")
         case "amazon": "Amazon"
         case "promotional": String(localized: "Promo")
         case .some(let s): s.capitalized
@@ -1098,6 +1101,10 @@ struct LiveSettingsView: View {
 
                 SettingsSectionTitle(title: String(localized: "Assistance"))
                 SettingsCard {
+                    if HomeTutorial.shared.isAvailable {
+                        Button { dismiss(); HomeTutorial.shared.requestReplay() } label: { SettingsRow(icon: "hand.tap.fill", title: String(localized: "Revoir le tutoriel")) }.settingsRowButton()
+                        SettingsRowDivider()
+                    }
                     link("Envoyer un avis…", "exclamationmark.bubble.fill", "mailto:amine.ennasri.pro@gmail.com?subject=MoneyMaker%20-%20avis")
                     SettingsRowDivider()
                     Button { requestReview() } label: { SettingsRow(icon: "star.fill", title: String(localized: "Noter l'app"), trailing: .external) }.settingsRowButton()
@@ -1239,7 +1246,7 @@ struct ProSettingsSection: View {
 
     var body: some View {
         if let status = paywall.status, status.tester == true {
-            SettingsSectionTitle(title: "Mode test")
+            SettingsSectionTitle(title: String(localized: "Mode test"))
             SettingsCard {
                 Toggle(isOn: Binding(get: { status.pro }, set: { v in paywall.setTesterPro(v, client: store.client) })) {
                     HStack(spacing: 14) {
@@ -1260,12 +1267,12 @@ struct ProSettingsSection: View {
                 } else {
                     Button { showPaywall = true } label: {
                         SettingsRow(icon: "crown.fill", title: String(localized: "Business illimités"),
-                                    trailing: .badge(String(localized: "\(paywall.product?.displayPrice ?? "29 €") À VIE"), ProPaywallTheme.violetBright))
+                                    trailing: .badge(String(localized: "\(paywall.priceText) À VIE"), ProPaywallTheme.violetBright))
                     }.settingsRowButton()
                 }
             }
             SettingsFootnote(text: status.pro
-                ? String(localized: "Pro est lié à ton compte MoneyMaker : tous tes business sont débloqués, pour toujours, sur iPhone comme sur le web.")
+                ? String(localized: "Pro est lié à ton compte MoneyMaker : tous tes business sont débloqués, pour toujours, dans l'app comme sur le web.")
                 : String(localized: "Le plan gratuit inclut \(status.freeProjects) business. Paiement unique, sans abonnement."))
         }
         Color.clear.frame(height: 0)

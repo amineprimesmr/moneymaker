@@ -139,7 +139,7 @@ enum RCMetric: String, CaseIterable {
         struct R: Decodable { let series: [P] }
         var total: [Double] = []
         for p in o.projects {
-            guard let r: R = try? await client.get("projects/\(p.projectId)/charts/\(name)?days=28") else { continue }
+            guard let r: R = try? await client.get("projects/\(p.projectId)/charts/\(name)?days=28" + (MoneyMakerClient.displayCurrency.map { "&currency=\($0)" } ?? "")) else { continue }
             let v = r.series.map { $0.value ?? 0 }
             if total.isEmpty { total = v } else { for i in 0..<min(total.count, v.count) { total[i] += v[i] } }
         }
