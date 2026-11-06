@@ -9,7 +9,7 @@
 
 ## Nom
 
-MoneyMaker : Revenus d'apps
+MoneyMaker : revenus des apps
 
 ## Sous-titre
 
