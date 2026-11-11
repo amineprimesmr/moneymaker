@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert");
-const { proSources, proState, withSource, proFields, testerOverride } = require("../lib/proEntitlement");
+const { proSources, proState, withSource, proFields, testerOverride, normalizeGiftCode, isFullDiscount, giftAttempts } = require("../lib/proEntitlement");
 
 const web = { since: 1, ref: "pi_1" }, ios = { since: 2, ref: "2000000123", environment: "Production" };
 
@@ -38,4 +38,27 @@ test("tester switch overrides the display without touching purchases", () => {
   // Old switch wrote pro directly.
   assert.equal(testerOverride({ pro: true, proTestToggledAt: 1 }), true);
   assert.deepEqual(proState({ pro: false, proTestToggledAt: 1 }), { pro: false, sources: [] });
+});
+
+test("a gift code is compared without spaces and in upper case", () => {
+  assert.equal(normalizeGiftCode(" process 9961274f66 "), "PROCESS9961274F66");
+  assert.equal(normalizeGiftCode("AB-12_cd"), "AB-12_CD");
+  for (const bad of [undefined, 42, "", "abc", "x".repeat(41), "code/../x", "-LEADING"]) assert.equal(normalizeGiftCode(bad), null);
+});
+
+test("only a valid 100 % coupon gives Pro", () => {
+  assert.equal(isFullDiscount({ percent_off: 100, valid: true }), true);
+  assert.equal(isFullDiscount({ percent_off: 100 }), true);
+  for (const c of [null, undefined, { percent_off: 50 }, { amount_off: 2900 }, { percent_off: 100, valid: false }]) assert.equal(isFullDiscount(c), false);
+});
+
+test("a redeemed gift code is a Pro source that survives a web refund", () => {
+  const gifted = proFields(withSource({ proSources: { stripe: web } }, "granted", { since: 3, ref: "code:PROCESS1" }));
+  assert.deepEqual(proState(proFields(withSource(gifted, "stripe", null))), { pro: true, sources: ["granted"] });
+});
+
+test("failed gift attempts are counted per day", () => {
+  assert.equal(giftAttempts(undefined, "2026-11-11"), 0);
+  assert.equal(giftAttempts({ giftAttempts: { day: "2026-11-11", n: 4 } }, "2026-11-11"), 4);
+  assert.equal(giftAttempts({ giftAttempts: { day: "2026-11-10", n: 9 } }, "2026-11-11"), 0);
 });

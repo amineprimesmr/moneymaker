@@ -17,7 +17,7 @@ import { APPLE_ROOT_CERTIFICATES } from "./appleRootCertificates";
 import { HttpError } from "./engine";
 import { db } from "./store";
 import { DEMO_UID } from "./demo";
-import { ProGrant, ProSource, proFields, proSources, proState, testerOverride, withSource } from "./proEntitlement";
+import { GIFT_ATTEMPTS_PER_DAY, ProGrant, ProSource, giftAttempts, isFullDiscount, normalizeGiftCode, proFields, proSources, proState, testerOverride, withSource } from "./proEntitlement";
 
 export const FREE_PROJECTS = 1;
 export const PRO_PRICE = { amount: 29, currency: "EUR" };
@@ -125,6 +125,46 @@ export async function assertCanCreateProject(uid: string) {
   if (await ownedProjects(uid) >= FREE_PROJECTS) {
     throw new HttpError(402, "pro_required", `Le plan gratuit inclut ${FREE_PROJECTS} business. MoneyMaker Pro (achat unique) les débloque tous.`);
   }
+}
+
+// ── Code cadeau : Pro offert, sans paiement ────────────────────────────────
+//
+// Un code est valable s'il figure dans system/billing.giftCodes (liste de codes en majuscules) ou s'il
+// est, dans le compte Stripe de MoneyMaker, un code promo actif à 100 %. Il ajoute la source « granted »
+// au compte : le droit tient donc que le paiement soit ouvert ou non (FREE_LAUNCH), sur le web comme
+// sur l'iPhone. Les essais ratés sont comptés par compte et par jour.
+
+async function giftCodeIsValid(code: string): Promise<boolean> {
+  const listed = (await db.doc("system/billing").get()).get("giftCodes");
+  if (Array.isArray(listed) && listed.some(c => typeof c === "string" && c.toUpperCase() === code)) return true;
+  const cfg = await config();
+  if (!cfg) return false;
+  try {
+    const found = (await new Stripe(cfg.secretKey).promotionCodes.list({ code, active: true, limit: 1 })).data[0];
+    // Selon la version de l'API Stripe, le coupon est sur le code ou sous `promotion`.
+    const coupon = (found as any)?.coupon ?? (found as any)?.promotion?.coupon;
+    return isFullDiscount(typeof coupon === "object" ? coupon : null);
+  } catch { return false; }
+}
+
+export async function redeemGiftCode(uid: string, raw: unknown) {
+  const code = normalizeGiftCode(raw);
+  if (!code) throw new HttpError(400, "invalid_code", "Ce code n'a pas la bonne forme.");
+  const ref = db.doc(`users/${uid}`);
+  const before = (await ref.get()).data();
+  // Déjà offert : rien à refaire, on répond comme un succès (un agent peut rappeler l'outil sans risque).
+  if (proSources(before).granted) return { ...(await billingStatus(uid)), redeemed: false, alreadyActive: true };
+  const day = new Date().toISOString().slice(0, 10);
+  if (giftAttempts(before, day) >= GIFT_ATTEMPTS_PER_DAY) throw new HttpError(429, "too_many_attempts", "Trop d'essais aujourd'hui. Réessaie demain.");
+  if (!(await giftCodeIsValid(code))) {
+    await ref.set({ giftAttempts: { day, n: giftAttempts(before, day) + 1 } }, { merge: true });
+    throw new HttpError(404, "unknown_code", "Code inconnu ou expiré.");
+  }
+  await db.runTransaction(async tx => {
+    await setProSource(uid, "granted", { since: Date.now(), ref: `code:${code}` }, tx);
+    tx.set(db.doc(`giftRedemptions/${uid}`), { uid, code, at: Date.now() });
+  });
+  return { ...(await billingStatus(uid)), redeemed: true, alreadyActive: false };
 }
 
 const RETURN_HOSTS = new Set(["usemoneymaker.com", "www.usemoneymaker.com", "moneymaker-io.web.app", "localhost"]);

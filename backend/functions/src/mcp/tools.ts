@@ -266,6 +266,12 @@ export const TOOLS: Tool[] = [
       if (a.days === 0 && a.confirm !== true) return needsConfirm(`Retirer l'accès « ${a.entitlement} » au client ${a.customerId}`);
       return call("POST", `${P(a)}/customers/${enc(a.customerId)}/grant`, { body: { entitlement: a.entitlement, ...(a.days !== undefined ? { days: Number(a.days) } : {}) } });
     } },
+  { name: "get_pro_status", title: "Statut MoneyMaker Pro", description: "Dit si le compte connecté a MoneyMaker Pro (business illimités), d'où vient ce droit, et si un paiement est proposé.",
+    run: (_a, call) => call("GET", "/v1/billing") },
+  { name: "redeem_code", title: "Activer un code cadeau", write: true,
+    description: "Active un code d'accès à vie MoneyMaker Pro (code cadeau) sur le compte connecté, sans paiement. Sans danger à rappeler : un compte déjà activé répond alreadyActive.",
+    props: { code: { type: "string", description: "Le code tel que l'utilisateur l'a reçu" } }, required: ["code"],
+    run: (a, call) => call("POST", "/v1/billing/redeem", { body: { code: String(a.code ?? "") } }) },
   { name: "send_test_webhook", title: "Tester les webhooks", write: true, description: "Envoie un événement TEST aux webhooks et intégrations configurés.",
     props: { projectId }, required: ["projectId"], run: (a, call) => call("POST", `${P(a)}/webhooks/test`) },
   { name: "update_public_listing", title: "Modifier la fiche publique", write: true, description: "Inscription au classement public : affiché ou non, accroche, site, montants masqués (rôle admin).",

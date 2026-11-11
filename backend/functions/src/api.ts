@@ -42,7 +42,7 @@ import { projectLtv, audienceById, audienceCustomers, loadCustomerRows } from ".
 import { isMcpPath, handleMcp } from "./mcp/server";
 import { resolveAccessToken } from "./mcp/oauth";
 import { ACCESS_PREFIX } from "./mcp/policy";
-import { assertCanCreateProject, billingStatus, createCheckout as createProCheckout, handleBillingWebhook, safeReturnUrl, setTesterPro, redeemAppStorePurchase } from "./billing";
+import { assertCanCreateProject, billingStatus, createCheckout as createProCheckout, handleBillingWebhook, safeReturnUrl, setTesterPro, redeemAppStorePurchase, redeemGiftCode } from "./billing";
 import { verifyStripeAppSignature, stripeAppPayload, parseGrantDays, isStripeCustomerId, STRIPE_APP_GRANT_DAYS } from "./stripeApp";
 
 /** Public base URL used in store webhook endpoints (stable, behind Firebase Hosting). */
@@ -521,6 +521,8 @@ route("GET", "/v1/billing", async req => billingStatus(requireUser(await authent
 route("POST", "/v1/billing/tester-pro", async req => setTesterPro(requireUser(await authenticate(req)), req.body?.pro));
 route("POST", "/v1/billing/appstore", async req =>
   redeemAppStorePurchase(requireUser(await authenticate(req)), req.body?.signedTransaction));
+// Code cadeau : ajoute Pro « offert » au compte, sans paiement.
+route("POST", "/v1/billing/redeem", async req => redeemGiftCode(requireUser(await authenticate(req)), req.body?.code));
 route("POST", "/v1/billing/checkout", async req => {
   const caller = await authenticate(req);
   const uid = requireUser(caller);

@@ -46,3 +46,23 @@ export function proFields(sources: ProSources, override: boolean | undefined, no
   if (override !== undefined) fields.proTesterOverride = override;
   return fields;
 }
+
+// ── Code cadeau (accès Pro offert) ─────────────────────────────────────────
+
+/** Code tel qu'on le compare : sans espaces, en majuscules. null si la forme est impossible. */
+export function normalizeGiftCode(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const code = raw.replace(/\s+/g, "").toUpperCase();
+  return /^[A-Z0-9][A-Z0-9_-]{5,39}$/.test(code) ? code : null;
+}
+
+/** Un coupon n'offre Pro que s'il retire 100 % du prix. */
+export function isFullDiscount(coupon: { percent_off?: number | null; valid?: boolean } | null | undefined): boolean {
+  return !!coupon && coupon.valid !== false && coupon.percent_off === 100;
+}
+
+export const GIFT_ATTEMPTS_PER_DAY = 10;
+/** Compteur d'essais ratés du jour (users/{uid}.giftAttempts), pour empêcher de deviner un code. */
+export function giftAttempts(u: UserDoc, day: string): number {
+  return u?.giftAttempts?.day === day && typeof u.giftAttempts.n === "number" ? u.giftAttempts.n : 0;
+}
