@@ -64,8 +64,9 @@ struct Waterfall: Codable, Hashable {
 }
 
 extension MoneyMakerClient {
-    func finance(days: Int, projectIds: [String]?) async throws -> Waterfall {
-        try await get("finance?days=\(days)" + (projectIds.map { "&projectIds=\($0.joined(separator: ","))" } ?? ""))
+    func finance(days: Int, projectIds: [String]?, since: Date? = nil) async throws -> Waterfall {
+        try await get("finance?days=\(days)" + (projectIds.map { "&projectIds=\($0.joined(separator: ","))" } ?? "")
+                      + (since.map { "&since=\(Int($0.timeIntervalSince1970 * 1000))" } ?? ""))
     }
     func saveFinance(_ changes: [String: Any]) async throws -> FinanceSettings {
         struct R: Decodable { let settings: FinanceSettings }
@@ -82,12 +83,13 @@ final class FinanceModel: ObservableObject {
     private var key = ""
 
     func load(_ store: Store, force: Bool = false) async {
-        let days = store.period == 0 ? 1 : store.period
-        let k = "\(days)|\(store.scopeIds ?? [])"
+        let days = store.period == 0 ? 1 : store.periodDays
+        let since: Date? = store.monthMode ? CalendarMonth.start : nil
+        let k = "\(days)|\(since?.timeIntervalSince1970 ?? 0)|\(store.scopeIds ?? [])"
         guard force || k != key || waterfall == nil else { return }
         key = k
         loading = true; defer { loading = false }
-        if let w = try? await store.client.finance(days: days, projectIds: store.scopeIds) {
+        if let w = try? await store.client.finance(days: days, projectIds: store.scopeIds, since: since) {
             withAnimation(.smooth(duration: 0.5)) { waterfall = w }
         }
     }
@@ -103,24 +105,25 @@ struct NetCard: View {
         Group {
             // Contenu équatable : les changements du Store sans rapport (flux, synchro…) ne
             // redessinent plus la carte, seulement un nouveau calcul ou un changement de période.
-            if let w = model.waterfall, (w.settings.showNet == true || w.settings.deductAffiliates == true) { NetCardContent(w: w, today: store.period == 0).equatable() }
+            if let w = model.waterfall, (w.settings.showNet == true || w.settings.deductAffiliates == true) { NetCardContent(w: w, today: store.period == 0, monthMode: store.monthMode).equatable() }
         }
-        .task(id: "\(store.period)|\(store.scopeIds ?? [])|\(store.overview?.generatedAt ?? 0)") { await model.load(store) }
+        .task(id: "\(store.period)|\(store.monthMode)|\(store.scopeIds ?? [])|\(store.overview?.generatedAt ?? 0)") { await model.load(store) }
     }
 }
 
 private struct NetCardContent: View, Equatable {
     let w: Waterfall
     let today: Bool
+    var monthMode = false
     @State private var expanded = false
 
-    static func == (a: Self, b: Self) -> Bool { a.today == b.today && a.w == b.w }
+    static func == (a: Self, b: Self) -> Bool { a.today == b.today && a.monthMode == b.monthMode && a.w == b.w }
 
     var body: some View {
         MMCard(padding: 20) {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
-                        MMLabel(text: String(localized: "Net en poche"), trailing: today ? String(localized: "aujourd'hui") : String(localized: "\(w.days) j"))
+                        MMLabel(text: String(localized: "Net en poche"), trailing: today ? String(localized: "aujourd'hui") : (monthMode ? CalendarMonth.name : String(localized: "\(w.days) j")))
                     }
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text(w.pocketMicros.money(w.currency))

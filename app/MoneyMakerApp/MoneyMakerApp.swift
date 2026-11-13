@@ -200,7 +200,7 @@ final class Store: ObservableObject {
                                     activeSubscriptions: ps.reduce(0) { $0 + $1.activeSubscriptions }, activeTrials: ps.reduce(0) { $0 + $1.activeTrials },
                                     newCustomers: ps.reduce(0) { $0 + $1.newCustomers }, projects: ps, generatedAt: o.generatedAt,
                                     payingCustomers: ps.reduce(0) { $0 + ($1.payingCustomers ?? 0) },
-                                    downloads: dl.isEmpty ? nil : dl.reduce(0, +), hasTrials: ps.contains { $0.hasTrials ?? ($0.activeTrials > 0) })
+                                    downloads: dl.isEmpty ? nil : dl.reduce(0, +), hasTrials: ps.contains { $0.hasTrials ?? ($0.activeTrials > 0) }, periodStart: o.periodStart)
             }
         }
         // Seulement nos apps : les concurrents suivis (ex. Whoop) n'apparaissent jamais dans l'Accueil.
@@ -250,6 +250,15 @@ final class Store: ObservableObject {
         Task { await refreshLive() }
     }
 
+    /// Réglage : « 28 J » = mois calendaire (depuis le 1er) au lieu de 28 jours glissants.
+    @Published var calendarMonth = CalendarMonth.enabled {
+        didSet { CalendarMonth.enabled = calendarMonth; memoValid = false; Task { await refresh() } }
+    }
+    /// La période affichée est le mois en cours.
+    var monthMode: Bool { calendarMonth && period == 28 }
+    /// Jours réellement couverts par la période affichée.
+    var periodDays: Int { monthMode ? CalendarMonth.days : period }
+
     func setPeriod(_ p: Int) {
         guard p != period else { return }
         withAnimation(.smooth(duration: 0.5)) { period = p }
@@ -284,9 +293,11 @@ final class Store: ObservableObject {
         loading = true; defer { loading = false }
         let c = client
         let d = days
+        let since: Date? = calendarMonth && d == 28 ? CalendarMonth.start : nil
+        let qd = since == nil ? d : CalendarMonth.days
         // Une nouvelle tentative sur les erreurs passagères (réseau, annulation) avant d'afficher un échec.
         async let o = Result.capture {
-            do { return try await c.overview(days: d) } catch { try await Task.sleep(for: .milliseconds(600)); return try await c.overview(days: d) }
+            do { return try await c.overview(days: qd, since: since) } catch { try await Task.sleep(for: .milliseconds(600)); return try await c.overview(days: qd, since: since) }
         }
         async let a = try? c.alerts()
         let ids = scopeIds

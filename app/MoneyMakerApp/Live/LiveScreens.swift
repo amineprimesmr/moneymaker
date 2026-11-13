@@ -20,13 +20,15 @@ struct RevenueCard: View {
     @State private var selected: Date?
     @State private var pulse = false
 
-    private let periods: [(Int, String)] = [(0, String(localized: "AUJ.")), (7, String(localized: "7 J")), (28, String(localized: "28 J")), (90, String(localized: "90 J")), (365, String(localized: "1 AN"))]
+    private var periods: [(Int, String)] {
+        [(0, String(localized: "AUJ.")), (7, String(localized: "7 J")), (28, store.calendarMonth ? String(localized: "MOIS") : String(localized: "28 J")), (90, String(localized: "90 J")), (365, String(localized: "1 AN"))]
+    }
 
     var body: some View {
         let o = store.scoped
         let cur = o?.currency ?? store.today?.currency ?? "EUR"
         let isToday = store.period == 0
-        let pts = isToday ? todayPoints(store.today) : dailySeries(o?.revenueByDay ?? [:], days: store.period)
+        let pts = isToday ? todayPoints(store.today) : dailySeries(o?.revenueByDay ?? [:], days: store.periodDays)
         let point = selected.flatMap { d in pts.min { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) } }
         let total: Int? = isToday ? store.today?.netMicros : o?.revenueMicros
         MMCard(padding: 20, glow: MMColor.accent) {
@@ -1067,8 +1069,12 @@ struct LiveSettingsView: View {
                     SettingsMenuRow(icon: "eurosign.circle", title: String(localized: "Devise d'affichage"), options: AppPrefs.currencies, selection: $currency)
                     SettingsRowDivider()
                     SettingsMenuRow(icon: "clock", title: String(localized: "Heures en"), options: [(false, String(localized: "Heure locale"), nil), (true, "UTC", nil)], selection: $utc)
+                    SettingsRowDivider()
+                    SettingsMenuRow(icon: "calendar", title: String(localized: "Période du mois"),
+                                    options: [(false, String(localized: "28 derniers jours"), nil), (true, String(localized: "Mois calendaire"), nil)],
+                                    selection: Binding(get: { store.calendarMonth }, set: { store.calendarMonth = $0 }))
                 }
-                SettingsFootnote(text: String(localized: "La devise sert à afficher tous les montants. Les heures en UTC correspondent au dashboard web ; les jours restent groupés dans ton fuseau."))
+                SettingsFootnote(text: String(localized: "La devise sert à afficher tous les montants. Les heures en UTC correspondent au dashboard web ; les jours restent groupés dans ton fuseau.") + " " + (store.calendarMonth ? String(localized: "Mois calendaire : l'onglet MOIS compte depuis le 1er du mois, comparé au mois précédent à la même date.") : String(localized: "28 derniers jours : la période glisse chaque jour.")))
 
                 SettingsSectionTitle(title: String(localized: "Transactions"))
                 SettingsCard {

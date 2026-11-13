@@ -57,9 +57,17 @@ export function summarizeWindow(txs: Tx[], events: Ev[], currency: string, campa
   };
 }
 
-export async function projectMetrics(project: Project, days = 30) {
+/** `sinceAt` : début de période imposé (mois calendaire, depuis le 1er à minuit chez l'utilisateur).
+ *  La période précédente est alors le mois d'avant, jusqu'au même jour. */
+export async function projectMetrics(project: Project, days = 30, sinceAt?: number) {
   const now = Date.now();
-  const since = now - days * DAY, prevSince = now - 2 * days * DAY;
+  let since = now - days * DAY, prevSince = now - 2 * days * DAY;
+  if (sinceAt && sinceAt < now && now - sinceAt <= 31 * DAY) {
+    since = sinceAt;
+    days = Math.max(1, Math.ceil((now - since) / DAY));
+    const prevStart = new Date(since); prevStart.setUTCMonth(prevStart.getUTCMonth() - 1);
+    prevSince = prevStart.getTime();
+  }
   const pid = project.id;
   const [purchasesSnap, lifetime, txSnap, eventsSnap, newCustomers, newCustomersPrev, totalCustomers, dailySnap] = await Promise.all([
     db.collectionGroup("purchases").where("projectId", "==", pid).where("expiresAt", ">", now - 60 * DAY).get(),

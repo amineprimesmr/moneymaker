@@ -569,11 +569,13 @@ route("DELETE", "/v1/account", async req => {
 route("GET", "/v1/overview", async req => {
   const uid = requireUser(await authenticate(req));
   return widgetCached(req.headers["user-agent"], `overview|${uid}|${req.originalUrl}`, async () => {
-  const days = Math.min(365, Math.max(1, Number(req.query.days ?? 30)));
+  const sinceAt = Number(req.query.since) || undefined;
+  let days = Math.min(365, Math.max(1, Number(req.query.days ?? 30)));
+  if (sinceAt && sinceAt < Date.now() && Date.now() - sinceAt <= 31 * 86400000) days = Math.max(1, Math.ceil((Date.now() - sinceAt) / 86400000));
   const snap = await db.collection("projects").where("members", "array-contains", uid).get();
   const projects = await Promise.all(snap.docs.map(async d => {
     const pr = await getProject(d.id);
-    const m = await projectMetrics(pr, days);
+    const m = await projectMetrics(pr, days, sinceAt);
     // Logo hébergé par MoneyMaker (icons.ts) : toujours un PNG 256 px lisible par l'app, versionné.
     const v = d.get("iconVersion") as number | null | undefined;
     return { ...m, iconUrl: v ? `${PUBLIC_BASE}/v1/icons/${d.id}?v=${v}` : null, stores: Object.keys((d.get("connections") as Record<string, unknown> | undefined) ?? {}) };
@@ -582,7 +584,7 @@ route("GET", "/v1/overview", async req => {
   const { convertMicros } = await import("./engine");
   const sum = (f: (p: typeof projects[number]) => number) => projects.reduce((a, p) => a + convertMicros(f(p), p.currency, currency), 0);
   return {
-    currency, periodDays: days,
+    currency, periodDays: days, periodStart: sinceAt ?? null,
     mrrMicros: sum(p => p.mrrMicros), revenueMicros: sum(p => p.netRevenueMicros),
     adRevenueMicros: sum(p => p.adRevenueMicros ?? 0), revenueInclAdsMicros: sum(p => p.revenueInclAdsMicros ?? p.netRevenueMicros),
     activeSubscriptions: projects.reduce((a, p) => a + p.activeSubscriptions, 0),
@@ -1402,8 +1404,10 @@ route("GET", "/v1/finance", async req => {
   const uid = requireUser(await authenticate(req));
   const { waterfallFor, PRESETS } = await import("./finance");
   const { PRESET_EN } = await import("./i18n");
-  const days = Math.min(365, Math.max(1, Number(req.query.days ?? 28)));
-  const w = await waterfallFor(uid, days, projectIdsParam(req));
+  const sinceAt = Number(req.query.since) || undefined;
+  let days = Math.min(365, Math.max(1, Number(req.query.days ?? 28)));
+  if (sinceAt && sinceAt < Date.now() && Date.now() - sinceAt <= 31 * 86400000) days = Math.max(1, Math.ceil((Date.now() - sinceAt) / 86400000));
+  const w = await waterfallFor(uid, days, projectIdsParam(req), undefined, sinceAt);
   return { ...w, presets: Object.fromEntries(Object.entries(PRESETS).map(([k, v]) => [k, { label: v.label, note: v.note, labelEn: PRESET_EN[k]?.label ?? v.label, noteEn: PRESET_EN[k]?.note ?? v.note }])) };
 });
 

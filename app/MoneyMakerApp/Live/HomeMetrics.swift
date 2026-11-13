@@ -26,7 +26,7 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
         switch self {
         case .today: String(localized: "Aujourd'hui")
         case .mrr: "MRR"
-        case .revenue: String(localized: "Revenu \(o.periodDays) j")
+        case .revenue: o.periodStart != nil ? String(localized: "Revenu de \(CalendarMonth.name)") : String(localized: "Revenu \(o.periodDays) j")
         case .subscriptions: String(localized: "Abonnés actifs")
         case .paying: String(localized: "Utilisateurs payants")
         case .trials: String(localized: "Essais en cours")
@@ -89,8 +89,8 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
         case .subscriptions: String(localized: "\(o.activeTrials) essais en plus")
         case .paying: String(localized: "\(o.projects.count) business")
         case .trials: conversion(o).map { String(localized: "Conversion \(Int(($0 * 100).rounded()))%") }
-        case .downloads: String(localized: "\(o.periodDays) derniers jours")
-        case .newCustomers: String(localized: "\(o.periodDays) derniers jours")
+        case .downloads: o.periodStart != nil ? String(localized: "Depuis le 1er \(CalendarMonth.name)") : String(localized: "\(o.periodDays) derniers jours")
+        case .newCustomers: o.periodStart != nil ? String(localized: "Depuis le 1er \(CalendarMonth.name)") : String(localized: "\(o.periodDays) derniers jours")
         }
     }
 

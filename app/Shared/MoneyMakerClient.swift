@@ -51,6 +51,20 @@ struct ProjectSummary: Codable, Identifiable, Hashable {
     var id: String { projectId }
 }
 
+/// Mois calendaire : la période « 28 J » devient « depuis le 1er du mois » (réglage, mémorisé).
+enum CalendarMonth {
+    static var enabled: Bool {
+        get { UserDefaults.standard.bool(forKey: "mm.calendarMonth") }
+        set { UserDefaults.standard.set(newValue, forKey: "mm.calendarMonth") }
+    }
+    /// 1er du mois en cours, à minuit dans le fuseau de l'utilisateur.
+    static var start: Date { Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date() }
+    /// Nombre de jours écoulés, aujourd'hui compris (le 13 → 13).
+    static var days: Int { Calendar.current.component(.day, from: Date()) }
+    /// « novembre », dans la langue de l'app.
+    static var name: String { Date().formatted(.dateTime.month(.wide)) }
+}
+
 struct Overview: Codable, Hashable {
     let currency: String
     let periodDays: Int
@@ -64,6 +78,8 @@ struct Overview: Codable, Hashable {
     var payingCustomers: Int? = nil
     var downloads: Int? = nil
     var hasTrials: Bool? = nil
+    /// Début imposé de la période (mois calendaire), en ms ; nil = N derniers jours glissants.
+    var periodStart: Double? = nil
 
     static let placeholder = Overview(currency: "EUR", periodDays: 30, mrrMicros: 4_280_000_000, revenueMicros: 4_910_000_000,
         activeSubscriptions: 612, activeTrials: 48, newCustomers: 1_204, projects: [], generatedAt: Date().timeIntervalSince1970 * 1000)
@@ -272,11 +288,13 @@ struct MoneyMakerClient {
         return ["EUR", "USD", "GBP", "CHF", "CAD", "AUD", "JPY"].contains(c) ? c : "USD"
     }
 
-    func overview(days: Int = 28) async throws -> Overview {
+    func overview(days: Int = 28, since: Date? = nil) async throws -> Overview {
         // Devise d'affichage choisie dans les Réglages (sinon celle du compte).
         let cur = MoneyMakerClient.displayCurrency.map { "&currency=\($0)" } ?? ""
-        let o: Overview = try await get("overview?days=\(days)\(cur)")
-        if days == 28, let data = try? JSONEncoder().encode(o) {
+        let start = since.map { "&since=\(Int($0.timeIntervalSince1970 * 1000))" } ?? ""
+        let o: Overview = try await get("overview?days=\(days)\(cur)\(start)")
+        // Le cache des widgets reste sur 28 jours glissants.
+        if days == 28, since == nil, let data = try? JSONEncoder().encode(o) {
             MM.write("overview", data)
             // Un widget charge aussi cet aperçu : s'il relançait les widgets, ils se relanceraient sans fin.
             if !Bundle.main.bundlePath.hasSuffix(".appex") { WidgetCenter.shared.reloadAllTimelines() }

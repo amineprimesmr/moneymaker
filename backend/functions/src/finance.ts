@@ -181,11 +181,11 @@ export async function financeSettings(uid: string): Promise<FinanceSettings> {
   return s;
 }
 
-export async function waterfallFor(uid: string, days: number, projectIds?: string[], currency?: string) {
+export async function waterfallFor(uid: string, days: number, projectIds?: string[], currency?: string, sinceAt?: number) {
   const snap = await db.collection("projects").where("members", "array-contains", uid).select("config.currency").get();
   const docs = projectIds?.length ? snap.docs.filter(d => projectIds.includes(d.id)) : snap.docs;
   const cur = currency ?? docs[0]?.get("config.currency") ?? "EUR";
-  const since = Date.now() - days * 86400000;
+  const since = sinceAt ?? Date.now() - days * 86400000;
   const txs = (await Promise.all(docs.map(async p =>
     (await db.collection(`projects/${p.id}/transactions`).where("at", ">=", since)
       .select("store", "amountMicros", "currency", "country", "kind", "isSandbox", "at", "periodMonths", "affiliate").get()).docs.map(d => d.data() as Tx)))).flat();
