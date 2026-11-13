@@ -30,6 +30,8 @@ struct FinanceSettings: Codable, Hashable {
     var corporateRate: Double
     var payoutShare: Double
     var dividendTaxRate: Double
+    var deductAffiliates: Bool?
+    var affiliateRate: Double?
 }
 
 struct Waterfall: Codable, Hashable {
@@ -47,6 +49,8 @@ struct Waterfall: Codable, Hashable {
     let storeFeesMicros: Int
     let paymentFeesMicros: Int
     let refundsMicros: Int
+    var affiliateMicros: Int? = nil
+    var affiliateSales: Int? = nil
     let netRevenueMicros: Int
     let expensesMicros: Int
     let socialMicros: Int
@@ -99,7 +103,7 @@ struct NetCard: View {
         Group {
             // Contenu équatable : les changements du Store sans rapport (flux, synchro…) ne
             // redessinent plus la carte, seulement un nouveau calcul ou un changement de période.
-            if let w = model.waterfall, w.settings.showNet == true { NetCardContent(w: w, today: store.period == 0).equatable() }
+            if let w = model.waterfall, (w.settings.showNet == true || w.settings.deductAffiliates == true) { NetCardContent(w: w, today: store.period == 0).equatable() }
         }
         .task(id: "\(store.period)|\(store.scopeIds ?? [])|\(store.overview?.generatedAt ?? 0)") { await model.load(store) }
     }
@@ -157,6 +161,8 @@ private struct NetCardContent: View, Equatable {
                        : String(localized: "TVA comprise dans tes prix : collectée par les stores, à reverser toi-même pour Stripe.")),
             (String(localized: "Commission des stores"), -w.storeFeesMicros, MMColor.orange, true, String(localized: "15 % (Small Business Program) ou 30 %.")),
             (String(localized: "Frais de paiement Stripe"), -w.paymentFeesMicros, MMColor.orange, true, String(localized: "≈ 1,5 % + 0,25 € par paiement (carte européenne).")),
+            (String(localized: "Commissions d'affiliation"), -(w.affiliateMicros ?? 0), MMColor.orange, true,
+             String(localized: "\(Int(((w.settings.affiliateRate ?? 0.4) * 100).rounded())) % du montant HT reversés aux affiliés, sur \(w.affiliateSales ?? 0) vente(s) apportée(s).")),
             (String(localized: "CA net encaissé"), w.netRevenueMicros, MMColor.blue, false, micro ? String(localized: "Base de calcul de tes cotisations URSSAF.") : String(localized: "Ce qui arrive réellement sur ton compte, hors TVA.")),
             (String(localized: "Charges"), -w.expensesMicros, MMColor.ink3, true, String(localized: "Estimation en % de tes charges.")),
             (micro ? String(localized: "Cotisations URSSAF") : String(localized: "Cotisations"), -w.socialMicros, MMColor.red, true,
@@ -211,7 +217,7 @@ private struct WaterfallBar: View {
             (Double(w.pocketMicros), MMColor.accent),
             (Double(w.dividendTaxMicros + w.corporateTaxMicros + w.socialMicros), MMColor.red),
             (Double(w.expensesMicros), MMColor.fg(0.25)),
-            (Double(w.storeFeesMicros + w.paymentFeesMicros), MMColor.orange),
+            (Double(w.storeFeesMicros + w.paymentFeesMicros + (w.affiliateMicros ?? 0)), MMColor.orange),
             (Double(w.vatMicros), MMColor.fg(0.15)),
         ]
         GeometryReader { g in
@@ -251,6 +257,18 @@ struct FinanceSettingsSection: View {
                             }
                         }
                         .padding(.horizontal, 16).padding(.vertical, 12)
+                        divider
+                        Toggle(isOn: Binding(get: { s.deductAffiliates == true }, set: { save(["deductAffiliates": $0]) })) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Déduire les commissions d'affiliation").font(MMFont.system(15))
+                                Text("Le vrai argent de chaque vente apportée par un affilié, commission retirée. Ventes repérées par leur code de parrainage Stripe.")
+                                    .font(MMFont.system(11)).foregroundStyle(MMColor.ink3)
+                            }
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 12)
+                        if s.deductAffiliates == true {
+                            percent("Commission versée à l'affilié", "affiliateRate", s.affiliateRate ?? 0.4, step: 0.05)
+                        }
                         if s.showNet == true {
                             divider
                             Button { showProfile = true } label: {

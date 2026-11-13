@@ -22,6 +22,7 @@ export interface Purchase {
   billingIssue: boolean;
   updatedAt: number;
   country?: string | null;   // ISO alpha-2 of the storefront / billing address
+  affiliate?: boolean;       // vente apportée par un affilié (code de parrainage dans les métadonnées Stripe)
 }
 
 export type EventType =

@@ -52,6 +52,10 @@ export interface FinanceSettings {
   corporateReducedRate: number; corporateReducedCap: number; corporateRate: number;
   /** Part du bénéfice distribuée en dividendes, et impôt dessus (PFU en France). */
   payoutShare: number; dividendTaxRate: number;
+  /** Retirer les commissions versées aux affiliés des ventes qu'ils ont apportées. */
+  deductAffiliates?: boolean;
+  /** Part du montant HT reversée à l'affilié (Process : 40 %). */
+  affiliateRate?: number;
 }
 
 export const PRESETS: Record<FinanceSettings["structure"], Partial<FinanceSettings> & { label: string; note: string }> = {
@@ -76,6 +80,7 @@ export const DEFAULT_FINANCE: FinanceSettings = {
   showNet: false, companyName: "", country: "FR", processors: { appStore: true, googlePlay: false, stripe: true },
   structure: "sasu_is", appleSmallBusiness: true, googleRate: 0.15, stripePercent: 0.015, stripeFixed: 0.25, stripePricesIncludeVat: true, vatFranchise: false,
   socialRate: 0, incomeTaxRate: 0, expensesRate: 0.05, corporateReducedRate: 0.15, corporateReducedCap: 42500, corporateRate: 0.25, payoutShare: 1, dividendTaxRate: 0.314,
+  deductAffiliates: false, affiliateRate: 0.4,
 };
 
 /** Valide les réglages envoyés (taux entre 0 et 1). Pure — unit-tested. */
@@ -91,9 +96,9 @@ export function sanitizeFinance(input: any, current: FinanceSettings = DEFAULT_F
     if (!Number.isFinite(v) || v < 0 || v > max) throw new Error(`invalid_${String(k)}`);
     (next as any)[k] = v;
   };
-  for (const k of ["googleRate", "stripePercent", "socialRate", "incomeTaxRate", "expensesRate", "corporateReducedRate", "corporateRate", "payoutShare", "dividendTaxRate"] as const) rate(k);
+  for (const k of ["googleRate", "stripePercent", "socialRate", "incomeTaxRate", "expensesRate", "corporateReducedRate", "corporateRate", "payoutShare", "dividendTaxRate", "affiliateRate"] as const) rate(k);
   rate("stripeFixed", 10); rate("corporateReducedCap", 10_000_000);
-  for (const k of ["appleSmallBusiness", "stripePricesIncludeVat", "vatFranchise", "showNet"] as const) if (typeof input?.[k] === "boolean") (next as any)[k] = input[k];
+  for (const k of ["appleSmallBusiness", "stripePricesIncludeVat", "vatFranchise", "showNet", "deductAffiliates"] as const) if (typeof input?.[k] === "boolean") (next as any)[k] = input[k];
   if (typeof input?.companyName === "string") next.companyName = input.companyName.trim().slice(0, 80);
   if (typeof input?.country === "string" && /^[A-Z]{2}$/.test(input.country)) next.country = input.country;
   if (input?.processors && typeof input.processors === "object") {
@@ -103,11 +108,13 @@ export function sanitizeFinance(input: any, current: FinanceSettings = DEFAULT_F
   return next;
 }
 
-export interface Tx { store: string; amountMicros: number; currency: string; country?: string | null; kind: string; isSandbox?: boolean; at: number; periodMonths?: number }
+export interface Tx { store: string; amountMicros: number; currency: string; country?: string | null; kind: string; isSandbox?: boolean; at: number; periodMonths?: number; affiliate?: boolean }
 
 export interface Waterfall {
   currency: string; days: number;
   grossMicros: number; vatMicros: number; storeFeesMicros: number; paymentFeesMicros: number; refundsMicros: number;
+  /** Commissions d'affiliation (seulement si deductAffiliates). */
+  affiliateMicros: number; affiliateSales: number;
   netRevenueMicros: number;   // CA net HT encaissé
   expensesMicros: number; socialMicros: number; corporateTaxMicros: number; dividendTaxMicros: number;
   pocketMicros: number;       // net en poche
@@ -119,7 +126,7 @@ export interface Waterfall {
 /** Pure : cascade brut → en poche sur une liste de transactions — unit-tested. */
 export function computeWaterfall(txs: Tx[], s: FinanceSettings, currency: string, days: number): Waterfall {
   const w: Waterfall = {
-    currency, days, grossMicros: 0, vatMicros: 0, storeFeesMicros: 0, paymentFeesMicros: 0, refundsMicros: 0, netRevenueMicros: 0,
+    currency, days, grossMicros: 0, vatMicros: 0, storeFeesMicros: 0, paymentFeesMicros: 0, refundsMicros: 0, affiliateMicros: 0, affiliateSales: 0, netRevenueMicros: 0,
     expensesMicros: 0, socialMicros: 0, corporateTaxMicros: 0, dividendTaxMicros: 0, pocketMicros: 0, byStore: {},
     annualized: { netRevenueMicros: 0, pocketMicros: 0 }, settings: s,
   };
@@ -136,12 +143,16 @@ export function computeWaterfall(txs: Tx[], s: FinanceSettings, currency: string
     if (t.store === "app_store") fee = ht * (s.appleSmallBusiness ? 0.15 : 0.30);
     else if (t.store === "play_store") fee = ht * s.googleRate;
     else if (t.store === "stripe" && gross > 0) pay = gross * s.stripePercent + s.stripeFixed * 1e6;
+    // Commission d'affiliation : part du montant HT de la vente apportée (un remboursement la reprend).
+    const aff = s.deductAffiliates && t.affiliate ? ht * (s.affiliateRate ?? 0.4) : 0;
+    if (aff > 0) w.affiliateSales++;
     const b = (w.byStore[t.store] ??= { grossMicros: 0, vatMicros: 0, feesMicros: 0, netMicros: 0 });
-    b.grossMicros += gross; b.vatMicros += vat; b.feesMicros += fee + pay; b.netMicros += ht - fee - pay;
+    b.grossMicros += gross; b.vatMicros += vat; b.feesMicros += fee + pay + aff; b.netMicros += ht - fee - pay - aff;
+    w.affiliateMicros += aff;
     if (gross < 0) w.refundsMicros += -gross;
     w.grossMicros += gross; w.vatMicros += vat; w.storeFeesMicros += fee; w.paymentFeesMicros += pay;
   }
-  w.netRevenueMicros = w.grossMicros - w.vatMicros - w.storeFeesMicros - w.paymentFeesMicros;
+  w.netRevenueMicros = w.grossMicros - w.vatMicros - w.storeFeesMicros - w.paymentFeesMicros - w.affiliateMicros;
   const net = Math.max(0, w.netRevenueMicros);
   // Micro : prélèvements sur le CA encaissé. Société : IS sur le bénéfice (barème annualisé, ramené à la période).
   w.socialMicros = net * (s.socialRate + s.incomeTaxRate);
@@ -156,7 +167,7 @@ export function computeWaterfall(txs: Tx[], s: FinanceSettings, currency: string
   w.dividendTaxMicros = distributable * s.payoutShare * s.dividendTaxRate;
   w.pocketMicros = distributable * s.payoutShare - w.dividendTaxMicros;
   // Arrondis : tout en micros entiers.
-  for (const k of ["grossMicros", "vatMicros", "storeFeesMicros", "paymentFeesMicros", "refundsMicros", "netRevenueMicros", "expensesMicros", "socialMicros", "corporateTaxMicros", "dividendTaxMicros", "pocketMicros"] as const) (w as any)[k] = Math.round((w as any)[k]);
+  for (const k of ["grossMicros", "vatMicros", "storeFeesMicros", "paymentFeesMicros", "refundsMicros", "affiliateMicros", "netRevenueMicros", "expensesMicros", "socialMicros", "corporateTaxMicros", "dividendTaxMicros", "pocketMicros"] as const) (w as any)[k] = Math.round((w as any)[k]);
   for (const b of Object.values(w.byStore)) for (const k of Object.keys(b) as (keyof typeof b)[]) b[k] = Math.round(b[k]);
   w.annualized = { netRevenueMicros: Math.round(w.netRevenueMicros * yearFactor), pocketMicros: Math.round(w.pocketMicros * yearFactor) };
   return w;
@@ -177,6 +188,6 @@ export async function waterfallFor(uid: string, days: number, projectIds?: strin
   const since = Date.now() - days * 86400000;
   const txs = (await Promise.all(docs.map(async p =>
     (await db.collection(`projects/${p.id}/transactions`).where("at", ">=", since)
-      .select("store", "amountMicros", "currency", "country", "kind", "isSandbox", "at", "periodMonths").get()).docs.map(d => d.data() as Tx)))).flat();
+      .select("store", "amountMicros", "currency", "country", "kind", "isSandbox", "at", "periodMonths", "affiliate").get()).docs.map(d => d.data() as Tx)))).flat();
   return computeWaterfall(txs, await financeSettings(uid), cur, days);
 }

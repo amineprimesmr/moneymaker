@@ -41,10 +41,25 @@ export function stripeSubscriptionPurchase(s: Stripe.Subscription, now = Date.no
     billingIssue: status === "billing_retry",
     updatedAt: now,
     country: toAlpha2((s.customer as any)?.address?.country ?? s.metadata?.country),
+    affiliate: isAffiliateSale(s.metadata),
   };
 }
 
 /** Metadata keys apps commonly use to store their own user id on Stripe objects. */
+/** Métadonnées qui signalent une vente apportée par un affilié (Process : sk_ref ; Rewardful, Tolt, FirstPromoter…). */
+export const AFFILIATE_METADATA_KEYS = ["sk_ref", "ref", "referral", "referral_code", "affiliate", "affiliate_id", "affiliate_code", "rewardful_referral", "tolt_referral", "fp_ref", "promotekit_referral"];
+export const isAffiliateSale = (...sources: (Stripe.Metadata | null | undefined)[]) =>
+  sources.some(m => AFFILIATE_METADATA_KEYS.some(k => !!m?.[k]));
+
+/** Une charge ne reprend pas les métadonnées de son PaymentIntent (là où Checkout les range) : on les relit. */
+export async function chargeIsAffiliate(stripe: Stripe | undefined, ch: Stripe.Charge) {
+  if (isAffiliateSale(ch.metadata)) return true;
+  const pi = typeof ch.payment_intent === "string" ? ch.payment_intent : ch.payment_intent?.id;
+  if (!stripe || !pi) return false;
+  const intent = await stripe.paymentIntents.retrieve(pi).catch(() => null);
+  return isAffiliateSale(intent?.metadata);
+}
+
 export const USER_ID_METADATA_KEYS = ["app_user_id", "appUserId", "firebaseUID", "firebase_uid", "firebaseUid", "user_id", "userId", "uid", "supabase_user_id", "clerk_user_id"];
 
 export function appUserIdFrom(...sources: (Stripe.Metadata | null | undefined)[]) {
@@ -70,6 +85,7 @@ export function stripeOneTimePurchase(ch: Stripe.Charge, now = Date.now(), produ
     expiresAt: null, willRenew: false, isTrial: false, isSandbox: !ch.livemode, priceMicros: Math.max(0, net) * 10000,
     currency: ch.currency.toUpperCase(), periodMonths: 0, billingIssue: false, updatedAt: now,
     country: toAlpha2(ch.billing_details?.address?.country ?? (ch.payment_method_details as any)?.card?.country),
+    affiliate: isAffiliateSale(ch.metadata, typeof ch.payment_intent === "object" ? (ch.payment_intent as any)?.metadata : null),
   };
 }
 
@@ -168,7 +184,7 @@ export async function ingestStripeWebhook(project: Project, rawBody: Buffer, sig
           purchasedAt: s.created * 1000, latestPurchaseAt: s.created * 1000, expiresAt: null, willRenew: false,
           isTrial: false, isSandbox: !s.livemode, priceMicros: (s.amount_total ?? 0) * 10000,
           currency: (s.currency ?? "eur").toUpperCase(), periodMonths: 0, billingIssue: false, updatedAt: Date.now(),
-          country: toAlpha2(s.customer_details?.address?.country),
+          country: toAlpha2(s.customer_details?.address?.country), affiliate: isAffiliateSale(s.metadata),
         }, [`stripe:${s.payment_intent ?? s.id}`, ...(s.customer ? [`stripe_cus:${s.customer}`] : [])]);
       } else if (s.subscription && stripe) {
         const sub = await stripe.subscriptions.retrieve(String(s.subscription));
@@ -182,7 +198,7 @@ export async function ingestStripeWebhook(project: Project, rawBody: Buffer, sig
       if (!ch.paid || await isSubscriptionCharge(stripe, ch)) break; // subscription invoices are handled through the subscription
       const owner = await oneTimeOwner(project, ch);
       const name = ch.metadata?.product_id ? null : await checkoutProductName(stripe, ch.payment_intent);
-      result = await upsertPurchase(project, owner, stripeOneTimePurchase(ch, Date.now(), name), [`stripe:${ch.payment_intent ?? ch.id}`, ...(ch.customer ? [`stripe_cus:${ch.customer}`] : [])]);
+      result = await upsertPurchase(project, owner, { ...stripeOneTimePurchase(ch, Date.now(), name), affiliate: await chargeIsAffiliate(stripe, ch) }, [`stripe:${ch.payment_intent ?? ch.id}`, ...(ch.customer ? [`stripe_cus:${ch.customer}`] : [])]);
       break;
     }
     case "charge.refunded": {

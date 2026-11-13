@@ -5,7 +5,7 @@ import { JWT } from "google-auth-library";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpError } from "./engine";
 import { Project, ProjectConfig, db, getCredentials, sha256, upsertPurchase } from "./store";
-import { storeSubscription, stripeOneTimePurchase, oneTimeOwner, isSubscriptionCharge, invoiceSubscription } from "./stripe";
+import { storeSubscription, stripeOneTimePurchase, oneTimeOwner, isSubscriptionCharge, invoiceSubscription, isAffiliateSale, chargeIsAffiliate } from "./stripe";
 import { toAlpha2 } from "./countries";
 import { convertMicros } from "./engine";
 import { syncTrackers } from "./appstore";
@@ -71,6 +71,7 @@ export async function importStripeHistory(project: Project, stripe: Stripe) {
       purchaseId: subId, kind: inv.billing_reason === "subscription_cycle" ? "renewal" : "purchase",
       amountMicros: amount, currency, amountMicrosProject: convertMicros(amount, currency, project.config.currency),
       isSandbox: !inv.livemode, country: toAlpha2(inv.customer_address?.country), at: inv.created * 1000, imported: true,
+      affiliate: isAffiliateSale((inv as any).parent?.subscription_details?.metadata, (inv as any).subscription_details?.metadata, inv.metadata),
     }, { merge: true });
     invoices++;
     if (++pending >= 400) { await batch.commit(); batch = db.batch(); pending = 0; }
@@ -81,13 +82,13 @@ export async function importStripeHistory(project: Project, stripe: Stripe) {
   for await (const ch of stripe.charges.list({ created: { gte: since }, limit: 100 })) {
     if (!ch.paid || ch.status !== "succeeded" || await isSubscriptionCharge(stripe, ch)) continue;
     const owner = await oneTimeOwner(project, ch);
-    const purchase = stripeOneTimePurchase(ch);
+    const purchase = { ...stripeOneTimePurchase(ch), affiliate: await chargeIsAffiliate(stripe, ch) };
     await upsertPurchase(project, owner, purchase, [`stripe:${ch.payment_intent ?? ch.id}`, ...(ch.customer ? [`stripe_cus:${ch.customer}`] : [])], { silent: true });
     if (purchase.priceMicros > 0) {
       await db.doc(`projects/${project.id}/transactions/stripe_ch_${ch.id}`).set({
         appUserId: owner, store: "stripe", productId: purchase.productId, purchaseId: purchase.id, kind: "purchase",
         amountMicros: purchase.priceMicros, currency: purchase.currency, amountMicrosProject: convertMicros(purchase.priceMicros, purchase.currency, project.config.currency),
-        isSandbox: purchase.isSandbox, country: purchase.country ?? null, periodMonths: 0, at: purchase.purchasedAt, imported: true,
+        isSandbox: purchase.isSandbox, country: purchase.country ?? null, periodMonths: 0, at: purchase.purchasedAt, imported: true, affiliate: !!purchase.affiliate,
       }, { merge: true });
     }
     payments++;

@@ -196,6 +196,7 @@ export async function upsertPurchase(
           kind: type === "REFUND" ? "refund" : type === "RENEWAL" ? "renewal" : "purchase",
           amountMicros: sign * purchase.priceMicros, currency: purchase.currency, amountMicrosProject: amountProject,
           isSandbox: purchase.isSandbox, country: purchase.country ?? null, periodMonths: purchase.periodMonths, at: type === "REFUND" ? now : purchase.latestPurchaseAt,
+          affiliate: !!purchase.affiliate,
         });
         if (!purchase.isSandbox) spent += amountProject;
       }
