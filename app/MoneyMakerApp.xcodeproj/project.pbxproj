@@ -24,6 +24,7 @@
 		2AFD4C6B033F517E98B4102C /* NotificationPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1438563ECD8EDE22D4DDA467 /* NotificationPermissionView.swift */; };
 		2CEF7A7C6571C771B1C867E5 /* NativeSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02FF224E83BFAEB191053A5C /* NativeSignIn.swift */; };
 		2CF983620AD73848582EF209 /* AutoTour.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF2C55340E1A6229E1A78CE /* AutoTour.swift */; };
+		B0117EE10000000000000001 /* BuildReel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0117EE10000000000000002 /* BuildReel.swift */; };
 		2F13A1B4CC19D980D0A815C3 /* MoneyMakerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4C830002B2BC4B3D96025D8 /* MoneyMakerApp.swift */; };
 		32490C4FFF847939B5F0CA38 /* WidgetIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D0A47CF847D152078B53C9 /* WidgetIcons.swift */; };
 		33D08D31BAA7DF6527DC7A6B /* MMTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B41F707AED2D8405F6A5A /* MMTheme.swift */; };
@@ -183,6 +184,7 @@
 		C73C4CE142E8383DF54EED22 /* MoneyMaker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MoneyMaker.entitlements; sourceTree = "<group>"; };
 		C7D2D93D296848814FDB457A /* MoneyMakerUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MoneyMakerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CEF2C55340E1A6229E1A78CE /* AutoTour.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoTour.swift; sourceTree = "<group>"; };
+		B0117EE10000000000000002 /* BuildReel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildReel.swift; sourceTree = "<group>"; };
 		CF4DA20AAFA948BD458F8224 /* AgentSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSetup.swift; sourceTree = "<group>"; };
 		D388B48B0EC4821BE9AE43EB /* levelup.caf */ = {isa = PBXFileReference; path = levelup.caf; sourceTree = "<group>"; };
 		DDD82E7144DFCD2E9CEB2649 /* MMTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MMTabBar.swift; sourceTree = "<group>"; };
@@ -327,6 +329,7 @@
 			children = (
 				0CC97D26693EDB0CA8221A74 /* AdaptiveLayout.swift */,
 				CEF2C55340E1A6229E1A78CE /* AutoTour.swift */,
+				B0117EE10000000000000002 /* BuildReel.swift */,
 				98A641DEF15038E8304BEEE0 /* CachedImage.swift */,
 				B57142CA682EBBA72099EEB2 /* HomeTutorial.swift */,
 				6FEDDB5B290C751F9B01CBDA /* IGShell.swift */,
@@ -545,6 +548,7 @@
 				2397B63C9E9B3545F93A3E6D /* Analytics.swift in Sources */,
 				EDE35245B27EBBFD0BB59F83 /* AppsScreen.swift in Sources */,
 				2CF983620AD73848582EF209 /* AutoTour.swift in Sources */,
+				B0117EE10000000000000001 /* BuildReel.swift in Sources */,
 				AF79FEB78C3C31BD156BF1D8 /* BusinessSideBar.swift in Sources */,
 				DD055D734B50B18D7BDBA8A8 /* CachedImage.swift in Sources */,
 				0E0DF9F55F63CCCFC43BAF97 /* Finance.swift in Sources */,
