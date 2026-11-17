@@ -8,10 +8,6 @@ struct MoneyMakerApp: App {
     init() { Analytics.start() }
     var body: some Scene {
         WindowGroup {
-            if UserDefaults.standard.bool(forKey: "mmBuildReel") {
-                // Animation « l'app se construit en direct » (lancer avec `-mmBuildReel YES`).
-                BuildReelView()
-            } else {
             RootView()
                 // La synchro descend de la Dynamic Island par-dessus toute l'app (comme V2).
                 .overlay(alignment: .top) { IslandRefreshBanner(state: .home).ignoresSafeArea() }
@@ -21,7 +17,6 @@ struct MoneyMakerApp: App {
                 .mmAppTheme()
                 .tint(MMColor.accent)
                 .onAppear { PerfProbe.start() }
-            }
         }
     }
 }
