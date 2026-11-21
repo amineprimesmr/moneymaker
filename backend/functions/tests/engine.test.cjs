@@ -286,3 +286,27 @@ test("installs: merged ids count once (RevenueCat rule), reinstall of an existin
   // Sans installation anonyme : seule la cohorte change.
   assert.deepEqual(cohortAfterMerge({ firstSeenAt: 5 }, { firstSeenAt: 10 }), { firstSeenAt: 5, installAt: undefined, dropInstall: false });
 });
+
+test("MRR actif : un abonnement résilié sort du MRR tout de suite, mais reste un abonné actif jusqu'à la fin", () => {
+  const cancelled = { ...base, id: "c", willRenew: false };
+  assert.equal(mrrMicros(cancelled, "EUR", now), 0);
+  const m = computeMetrics([base, cancelled], p => p.id, "EUR", now);
+  assert.equal(m.mrrMicros, 9_990_000);
+  assert.equal(m.activeSubscriptions, 2);
+  assert.equal(m.willNotRenew, 1);
+});
+
+test("mouvements de MRR : résiliation = perte le jour même, expiration ensuite non recomptée, réactivation rendue", () => {
+  const { mrrMovements } = require("../lib/engine");
+  const ev = (type, at, extra = {}) => ({ type, appUserId: "u", productId: "monthly", periodMonths: 1, at, ...extra });
+  const a = mrrMovements([ev("INITIAL_PURCHASE", 1), ev("CANCELLATION", 2), ev("EXPIRATION", 3)]);
+  assert.equal(a.starts.length, 1); assert.equal(a.churns.length, 1); assert.equal(a.churns[0].type, "CANCELLATION");
+  const b = mrrMovements([ev("CANCELLATION", 2), ev("UNCANCELLATION", 3)]);
+  assert.equal(b.churns.length, 1); assert.equal(b.starts.length, 1); assert.equal(b.starts[0].reactivation, true);
+  // Échec de paiement sans résiliation : la perte compte à l'expiration.
+  assert.equal(mrrMovements([ev("EXPIRATION", 3, { wasRenewing: true })]).churns.length, 1);
+  // Résiliée avant la fenêtre : l'événement d'expiration le dit, pas de double perte.
+  assert.equal(mrrMovements([ev("EXPIRATION", 3, { wasRenewing: false })]).churns.length, 0);
+  // Les essais ne comptent pas.
+  assert.equal(mrrMovements([ev("CANCELLATION", 2, { isTrial: true })]).churns.length, 0);
+});

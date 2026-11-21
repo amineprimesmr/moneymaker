@@ -629,6 +629,7 @@ route("GET", "/v1/overview", async req => {
     mrrMicros: sum(p => p.mrrMicros), revenueMicros: sum(p => p.revenueMicros), refundsMicros: sum(p => p.refundsMicros), netRevenueMicros: sum(p => p.netRevenueMicros),
     adRevenueMicros: sum(p => p.adRevenueMicros ?? 0), revenueInclAdsMicros: sum(p => p.revenueMicros + (p.adRevenueMicros ?? 0)),
     activeSubscriptions: projects.reduce((a, p) => a + p.activeSubscriptions, 0),
+    renewingSubscriptions: projects.reduce((a, p) => a + (p.renewingSubscriptions ?? 0), 0),
     activeTrials: projects.reduce((a, p) => a + p.activeTrials, 0),
     newCustomers: projects.reduce((a, p) => a + p.newCustomers, 0),
     payingCustomers: projects.reduce((a, p) => a + p.payingCustomers, 0),

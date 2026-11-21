@@ -1,4 +1,4 @@
-import { computeMetrics, convertMicros, Purchase } from "./engine";
+import { computeMetrics, convertMicros, mrrMovements, Purchase } from "./engine";
 import { Project, db } from "./store";
 import { downloadsFor } from "./downloads";
 import { installsFor } from "./store";
@@ -26,7 +26,7 @@ const monthKey = (t: number) => new Date(t).toISOString().slice(0, 7);
 const ratio = (a: number, b: number) => (b ? a / b : null);
 
 interface Tx { appUserId: string; store: string; productId: string; kind: string; amountMicrosProject: number; isSandbox?: boolean; country?: string | null; periodMonths?: number; at: number }
-interface Ev { type: string; appUserId: string; productId: string; store: string; priceMicros?: number; currency?: string; periodMonths?: number; isSandbox?: boolean; isTrial?: boolean; country?: string | null; at: number }
+interface Ev { type: string; appUserId: string; productId: string; store: string; priceMicros?: number; currency?: string; periodMonths?: number; isSandbox?: boolean; isTrial?: boolean; wasRenewing?: boolean | null; country?: string | null; at: number }
 
 /** Pure aggregation over one window of transactions/events — unit-tested. */
 export function summarizeWindow(txs: Tx[], events: Ev[], currency: string, campaignOf: Record<string, string> = {}) {
@@ -63,10 +63,11 @@ export function summarizeWindow(txs: Tx[], events: Ev[], currency: string, campa
       trialsByProduct[e.productId] ??= { started: 0, converted: 0 };
       trialsByProduct[e.productId][e.type === "TRIAL_STARTED" ? "started" : "converted"]++;
     }
-    if (e.type === "INITIAL_PURCHASE" || e.type === "TRIAL_CONVERTED" || e.type === "UNCANCELLATION") newMrr += monthly(e);
-    if ((e.type === "EXPIRATION" || e.type === "REFUND" || e.type === "REVOKED") && !e.isTrial) churnedMrr += monthly(e);
     if (e.type === "EXPIRATION" && !e.isTrial) paidExpirations++;
   }
+  const moves = mrrMovements(events.filter(e => !e.isSandbox));
+  for (const { e } of moves.starts) newMrr += monthly(e);
+  for (const e of moves.churns) churnedMrr += monthly(e);
   return {
     revenueMicros: revenue, refundsMicros: refunds, netRevenueMicros: revenue - refunds,
     newRevenueMicros: newRevenue, renewalRevenueMicros: renewalRevenue,
@@ -131,7 +132,7 @@ export async function projectMetrics(project: Project, days = 30, sinceAt?: numb
   const base = current.activeSubscriptions + churned;
   const churnRate = ratio(churned, base);
   const monthlyChurn = churnRate === null ? null : 1 - Math.pow(1 - churnRate, 30 / days);
-  const arpsMonthly = current.activeSubscriptions ? current.mrrMicros / current.activeSubscriptions : 0;
+  const arpsMonthly = current.renewingSubscriptions ? current.mrrMicros / current.renewingSubscriptions : 0; // MRR actif ÷ abonnés qui renouvellent
 
   return {
     projectId: pid,

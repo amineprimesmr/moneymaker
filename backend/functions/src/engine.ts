@@ -143,8 +143,10 @@ export function convertMicros(micros: number, from: string, to: string): number 
 }
 
 /** Monthly recurring revenue contributed by a purchase, in micro-units of `currency`. */
+/** MRR actif : un abonnement résilié (renouvellement coupé) sort du MRR dès la résiliation, même s'il reste
+ *  payé jusqu'à la fin de sa période. Il revient s'il est réactivé. */
 export function mrrMicros(p: Purchase, currency: string, now = Date.now()): number {
-  if (p.type !== "subscription" || p.isTrial || p.isSandbox || !isPurchaseActive(p, now) || !p.periodMonths) return 0;
+  if (p.type !== "subscription" || p.isTrial || p.isSandbox || !p.willRenew || !isPurchaseActive(p, now) || !p.periodMonths) return 0;
   return Math.round(convertMicros(p.priceMicros, p.currency, currency) / p.periodMonths);
 }
 
@@ -153,6 +155,8 @@ export interface Metrics {
   mrrMicros: number;
   arrMicros: number;
   activeSubscriptions: number;
+  /** Abonnés payants qui vont renouveler : ceux qui portent le MRR actif. */
+  renewingSubscriptions: number;
   activeTrials: number;
   activeCustomers: number;
   willNotRenew: number;
@@ -163,7 +167,7 @@ export interface Metrics {
 
 export function computeMetrics(purchases: Purchase[], customerOf: (p: Purchase) => string, currency: string, now = Date.now()): Metrics {
   const m: Metrics = {
-    currency, mrrMicros: 0, arrMicros: 0, activeSubscriptions: 0, activeTrials: 0, activeCustomers: 0,
+    currency, mrrMicros: 0, arrMicros: 0, activeSubscriptions: 0, renewingSubscriptions: 0, activeTrials: 0, activeCustomers: 0,
     willNotRenew: 0, billingIssues: 0, byStore: {}, byProduct: {},
   };
   const customers = new Set<string>();
@@ -172,7 +176,7 @@ export function computeMetrics(purchases: Purchase[], customerOf: (p: Purchase) 
     customers.add(customerOf(p));
     if (p.type !== "subscription") continue;
     const mrr = mrrMicros(p, currency, now);
-    if (p.isTrial) m.activeTrials++; else m.activeSubscriptions++;
+    if (p.isTrial) m.activeTrials++; else { m.activeSubscriptions++; if (p.willRenew) m.renewingSubscriptions++; }
     if (!p.willRenew) m.willNotRenew++;
     if (p.billingIssue) m.billingIssues++;
     m.mrrMicros += mrr;
@@ -185,6 +189,28 @@ export function computeMetrics(purchases: Purchase[], customerOf: (p: Purchase) 
   m.activeCustomers = customers.size;
   m.arrMicros = m.mrrMicros * 12;
   return m;
+}
+
+/** Mouvements de MRR (MRR actif) : la résiliation retire le MRR le jour même, la réactivation le rend, et la fin
+ *  de période d'un abonnement déjà résilié ne le retire pas une deuxième fois. Une expiration, un remboursement ou
+ *  une révocation sans résiliation préalable (échec de paiement, remboursement direct) retire le MRR à ce moment-là. */
+export interface MrrEv { type: string; appUserId: string; productId: string; isTrial?: boolean; periodMonths?: number; wasRenewing?: boolean | null; at: number }
+export function mrrMovements<E extends MrrEv>(events: E[]): { starts: { e: E; reactivation: boolean }[]; churns: E[] } {
+  const cancelled = new Set<string>(), churnedBefore = new Set<string>();
+  const starts: { e: E; reactivation: boolean }[] = [], churns: E[] = [];
+  for (const e of [...events].sort((a, b) => a.at - b.at)) {
+    if (e.isTrial || !((e.periodMonths ?? 0) > 0)) continue;
+    const k = `${e.appUserId}\u0000${e.productId}`;
+    if (e.type === "INITIAL_PURCHASE" || e.type === "TRIAL_CONVERTED") { cancelled.delete(k); starts.push({ e, reactivation: churnedBefore.has(e.appUserId) }); }
+    else if (e.type === "UNCANCELLATION") { if (cancelled.delete(k)) starts.push({ e, reactivation: true }); }
+    else if (e.type === "CANCELLATION") { if (!cancelled.has(k)) { cancelled.add(k); churnedBefore.add(e.appUserId); churns.push(e); } }
+    else if (e.type === "EXPIRATION" || e.type === "REFUND" || e.type === "REVOKED") {
+      const already = cancelled.has(k) || e.wasRenewing === false;
+      cancelled.delete(k);
+      if (!already) { churnedBefore.add(e.appUserId); churns.push(e); }
+    }
+  }
+  return { starts, churns };
 }
 
 /** ISO-8601 duration ("P1M", "P1Y", "P1W", "P3M", "P7D") to months. */

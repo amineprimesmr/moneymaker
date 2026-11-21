@@ -1,5 +1,5 @@
 // Pure chart computation (RevenueCat "Charts" parity). No Firestore here: unit-tested against lib/.
-import { convertMicros } from "./engine";
+import { convertMicros, mrrMovements } from "./engine";
 
 const DAY = 86400000;
 
@@ -13,7 +13,7 @@ export interface ChartPurchase {
   billingIssue?: boolean; updatedAt?: number; country?: string | null;
 }
 export interface ChartTx { appUserId: string; store: string; productId: string; kind: string; amountMicrosProject: number; isSandbox?: boolean; country?: string | null; periodMonths?: number; at: number }
-export interface ChartEvent { type: string; appUserId: string; productId: string; store: string; priceMicros?: number; currency?: string; periodMonths?: number; isSandbox?: boolean; isTrial?: boolean; country?: string | null; at: number }
+export interface ChartEvent { type: string; appUserId: string; productId: string; store: string; priceMicros?: number; currency?: string; periodMonths?: number; isSandbox?: boolean; isTrial?: boolean; wasRenewing?: boolean | null; country?: string | null; at: number }
 export interface ChartCustomer { id: string; firstSeenAt?: number; country?: string | null }
 export interface ChartDaily { date: string; mrrMicros?: number; activeSubscriptions?: number; activeTrials?: number }
 export interface ChartPaywallEvent { type: string; at: number; paywallId?: string; offeringId?: string; isSandbox?: boolean }
@@ -157,7 +157,15 @@ export function computeChart(name: string, data: ChartData, o: ChartOptions): Ch
   const subs = d.purchases.filter(p => isSub(p));
   const activeCount = (t: number) => subs.reduce((n, p) => n + (paidActiveAt(p, t) ? 1 : 0), 0);
   const trialCount = (t: number) => subs.reduce((n, p) => n + (trialActiveAt(p, t) ? 1 : 0), 0);
-  const mrrAt = (t: number) => Math.round(subs.reduce((n, p) => n + (paidActiveAt(p, t) ? monthlyMicros(p.priceMicros, p.currency, p.periodMonths, cur) : 0), 0));
+  // MRR actif : un abonnement résilié sort du MRR à sa résiliation (dernier événement CANCELLATION connu,
+  // sinon maintenant), pas à la fin de sa période payée.
+  const cancelAt = new Map<string, number>();
+  for (const e of d.events) if (e.type === "CANCELLATION") {
+    const k = `${e.appUserId}\u0000${e.productId}`; cancelAt.set(k, Math.max(cancelAt.get(k) ?? 0, e.at));
+  }
+  const mrrActiveAt = (p: ChartPurchase, t: number) => paidActiveAt(p, t) &&
+    (p.willRenew !== false || t < (cancelAt.get(`${p.appUserId}\u0000${p.productId}`) ?? o.now));
+  const mrrAt = (t: number) => Math.round(subs.reduce((n, p) => n + (mrrActiveAt(p, t) ? monthlyMicros(p.priceMicros, p.currency, p.periodMonths, cur) : 0), 0));
 
   switch (name as ChartName) {
     case "active_subscriptions": {
@@ -179,7 +187,7 @@ export function computeChart(name: string, data: ChartData, o: ChartOptions): Ch
       const mrr = name === "mrr_movement";
       const rows = empty().map(r => ({ ...r, new: 0, reactivated: 0, churned: 0 }));
       const amount = (e: ChartEvent) => (mrr ? monthlyMicros(e.priceMicros, e.currency, e.periodMonths, cur) : 1);
-      const { starts, churns } = subscriptionStarts(d.events);
+      const { starts, churns } = mrr ? mrrMovements(d.events) : subscriptionStarts(d.events);
       for (const { e, reactivation } of starts) { const i = indexOf(bs, e.at); if (i >= 0) rows[i][reactivation ? "reactivated" : "new"] += amount(e); }
       for (const e of churns) { const i = indexOf(bs, e.at); if (i >= 0) rows[i].churned -= amount(e); }
       const series = rows.map(r => {
@@ -189,7 +197,7 @@ export function computeChart(name: string, data: ChartData, o: ChartOptions): Ch
       });
       const s = sumSummary(series, ["new", "reactivated", "churned", "value"]);
       return res(mrr ? "micros" : "count", series, { ...s, net: s.value },
-        mrr ? "Expansion/contraction non suivies : un changement de produit est compté comme churn + nouveau." : undefined);
+        mrr ? "MRR actif : une résiliation compte comme perdue le jour même ; un changement de produit compte comme perte + nouveau." : undefined);
     }
     case "active_trials_movement": {
       const rows = empty().map(r => ({ ...r, new: 0, converted: 0, expired: 0, cancelled: 0 }));
