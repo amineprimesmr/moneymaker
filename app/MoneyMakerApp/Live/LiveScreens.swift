@@ -69,10 +69,6 @@ struct RevenueCard: View {
                 Text(subtitle(isToday: isToday, o: o))
                     .font(MMFont.system(13)).foregroundStyle(MMColor.ink2)
                     .contentTransition(.numericText())
-                // Remboursements à part, en petit : le chiffre principal reste les ventes.
-                if point == nil, let r = isToday ? store.today?.refundNote : o?.refundNote {
-                    Text(r).font(MMFont.system(12)).foregroundStyle(MMColor.ink3).transition(.opacity)
-                }
                 MMGlowChart(points: pts, selection: $selected, showsAxis: !isToday)
                     .frame(height: 140)
                     .sensoryFeedback(.selection, trigger: point?.date)

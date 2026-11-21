@@ -274,3 +274,15 @@ test("installs: platform from SDK headers, store-only ids are never installs", (
   assert.equal(isStoreOnlyId("$stripe:cus_1"), true); assert.equal(isStoreOnlyId("$apple:123"), true);
   assert.equal(isStoreOnlyId("$anon:abc"), false); assert.equal(isStoreOnlyId("user_42"), false);
 });
+
+test("installs: merged ids count once (RevenueCat rule), reinstall of an existing account is not a new download", () => {
+  const { cohortAfterMerge } = require("../lib/store");
+  // Nouveau compte créé à la connexion : l'installation anonyme passe au compte.
+  assert.deepEqual(cohortAfterMerge({ firstSeenAt: 100, installAt: 100 }, { firstSeenAt: 150 }), { firstSeenAt: 100, installAt: 100, dropInstall: false });
+  assert.deepEqual(cohortAfterMerge({ firstSeenAt: 100, installAt: 100 }, null), { firstSeenAt: 100, installAt: 100, dropInstall: false });
+  // Compte existant (réinstallation puis connexion) : on retire l'installation, cohorte = premier passage.
+  assert.deepEqual(cohortAfterMerge({ firstSeenAt: 500, installAt: 500 }, { firstSeenAt: 10, installAt: 10 }), { firstSeenAt: 10, installAt: 10, dropInstall: true });
+  assert.deepEqual(cohortAfterMerge({ firstSeenAt: 500, installAt: 500 }, { firstSeenAt: 10 }), { firstSeenAt: 10, installAt: undefined, dropInstall: true });
+  // Sans installation anonyme : seule la cohorte change.
+  assert.deepEqual(cohortAfterMerge({ firstSeenAt: 5 }, { firstSeenAt: 10 }), { firstSeenAt: 5, installAt: undefined, dropInstall: false });
+});

@@ -190,9 +190,6 @@ struct TodayWidgetView: View {
                                 if let g = entry.goalMicros { WStat(label: String(localized: "objectif"), value: g.money(t.currency, compact: true), size: 15) }
                                 else { WStat(label: String(localized: "essais"), value: "\(t.trials)", size: 15) }
                             }
-                            if let r = t.refundNote {
-                                Text(r).font(MMFont.system(11)).foregroundStyle(MMColor.ink3).lineLimit(1)
-                            }
                         }
                         .fixedSize()
                         WLine(values: curve, lineWidth: 1.8)

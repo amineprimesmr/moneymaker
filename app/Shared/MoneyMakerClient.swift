@@ -64,13 +64,6 @@ struct ProjectSummary: Codable, Identifiable, Hashable {
 
     /// Revenu affiché en titre : solde net (ventes − remboursements), négatif si les remboursements dépassent les ventes.
     var shownRevenueMicros: Int { netRevenueMicros }
-    var refundNote: String? { refundsNote(refundsMicros, currency) }
-}
-
-/// « −12 € remboursé » quand des remboursements existent sur la période.
-func refundsNote(_ micros: Int?, _ currency: String) -> String? {
-    guard let m = micros, m > 0 else { return nil }
-    return String(localized: "−\(m.money(currency)) remboursé")
 }
 
 /// Mois calendaire : la période « 28 J » devient « depuis le 1er du mois » (réglage, mémorisé).
@@ -117,7 +110,6 @@ struct Overview: Codable, Hashable {
     var mergedDownloadsByDay: [String: Int] {
         projects.reduce(into: [:]) { acc, p in for (d, n) in p.downloadsByDay ?? [:] { acc[d, default: 0] += n } }
     }
-    var refundNote: String? { refundsNote(refundsMicros, currency) }
 
     static let placeholder = Overview(currency: "EUR", periodDays: 30, mrrMicros: 4_280_000_000, revenueMicros: 4_910_000_000,
         activeSubscriptions: 612, activeTrials: 48, newCustomers: 1_204, projects: [], generatedAt: Date().timeIntervalSince1970 * 1000)

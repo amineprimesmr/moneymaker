@@ -542,7 +542,7 @@ struct HomeMetricDetail: View {
     private func subtitle(_ o: Overview?, pts: [MMPoint]) -> String {
         guard let o else { return "" }
         switch metric {
-        case .today: return [String(localized: "Cumul depuis minuit"), store.today?.refundNote].compactMap { $0 }.joined(separator: " · ")
+        case .today: return String(localized: "Cumul depuis minuit")
         case .mrr: return String(localized: "\(o.activeSubscriptions) abonnés actifs · ARR \((o.mrrMicros * 12).money(o.currency, compact: true))")
         case .paying, .subscriptions, .trials:
             let total = Int(pts.reduce(0) { $0 + $1.value } * 1e6).money(o.currency)
@@ -550,11 +550,10 @@ struct HomeMetricDetail: View {
         default:
             let mid = pts.count / 2
             let a = pts[..<mid].reduce(0) { $0 + $1.value }, b = pts[mid...].reduce(0) { $0 + $1.value }
-            let refund = metric == .revenue ? o.refundNote.map { " · " + $0 } ?? "" : ""
-            guard a > 0 else { return String(localized: "Sur \(range.days) jours") + refund }
+            guard a > 0 else { return String(localized: "Sur \(range.days) jours") }
             let d = Int(((b - a) / a * 100).rounded())
             let sign = d >= 0 ? "+" : ""
-            return String(localized: "\(sign)\(d) % sur la seconde moitié · \(range.days) jours") + refund
+            return String(localized: "\(sign)\(d) % sur la seconde moitié · \(range.days) jours")
         }
     }
 
@@ -984,7 +983,7 @@ struct HomeTile: View, Equatable {
             let perHour = h.enumerated().map { i, v in Double(v - (i > 0 ? h[i - 1] : 0)) }
             let buckets = stride(from: 0, to: perHour.count, by: 3).map { perHour[$0..<min($0 + 3, perHour.count)].reduce(0, +) }
             RecoveryWideTile(symbol: metric.symbol, title: title, value: value,
-                             footerLead: String(localized: "Ventes"), footerStrong: String(localized: "\(today?.transactions ?? 0) aujourd'hui"), note: today?.refundNote) {
+                             footerLead: String(localized: "Ventes"), footerStrong: String(localized: "\(today?.transactions ?? 0) aujourd'hui")) {
                 RecoveryVioletLine(values: h.map(Double.init), money: true)
             }
         case .mrr:
@@ -996,8 +995,7 @@ struct HomeTile: View, Equatable {
             let daily = dailySeries(o.mergedRevenueByDay, days: 14).map(\.value)
             let yesterday = daily.dropLast().last ?? 0
             RecoveryWideTile(symbol: metric.symbol, title: title, value: o.shownRevenueMicros.money(o.currency, compact: true),
-                             footerLead: String(localized: "Hier"), footerStrong: Int(yesterday * 1e6).money(o.currency, compact: true), dotsAnchor: .topTrailing,
-                             note: o.refundNote) {
+                             footerLead: String(localized: "Hier"), footerStrong: Int(yesterday * 1e6).money(o.currency, compact: true), dotsAnchor: .topTrailing) {
                 RecoveryVioletLine(values: daily, money: true)
             }
         case .subscriptions:

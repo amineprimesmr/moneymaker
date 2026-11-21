@@ -40,12 +40,8 @@ struct Today: Codable, Hashable {
 
     var netMicros: Int { revenueMicros - refundsMicros }
     /// Chiffre affiché en titre : solde net du jour (ventes − remboursements), négatif si les
-    /// remboursements dépassent les ventes. Le détail des remboursements reste sur une ligne à part.
+    /// remboursements dépassent les ventes.
     var shownMicros: Int { revenueMicros - refundsMicros }
-    /// « −12 € remboursé », seulement s'il y a eu des remboursements aujourd'hui.
-    var refundNote: String? {
-        refundsNote(refundsMicros, currency)
-    }
     var transactions: Int { sales + renewals }
     /// Données d'aujourd'hui (un cache d'hier ne doit pas passer pour la journée en cours).
     var isForToday: Bool { Calendar.current.isDateInToday(Date(timeIntervalSince1970: dayStart / 1000)) }

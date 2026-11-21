@@ -46,7 +46,6 @@ const mergedByDay = o => { const acc = {}; for (const p of o.projects) for (cons
 // Solde net (ventes − remboursements) : négatif si les remboursements dépassent les ventes.
 const gross = t => t ? (t.revenueMicros ?? 0) - (t.refundsMicros ?? 0) : 0;
 const netOf = o => (o.revenueMicros ?? 0) - (o.refundsMicros ?? 0);
-const refundLine = t => t?.refundsMicros > 0 ? `−${money(t.refundsMicros, t.currency)} remboursé` : "";
 const avg = xs => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
 
 async function refresh() {
@@ -182,9 +181,9 @@ function homeTile(k, o, t, i) {
   const m = METRICS[k], cur = o.currency, title = m.title(o), byDay = mergedByDay(o), href = `metric/${k}`;
   const base = { icon: m.icon, title, seed: m.seed, href, i };
   switch (k) {
-    case "today": return wideTile({ ...base, value: money(gross(t), t?.currency ?? cur), sub: refundLine(t), chart: vline((t?.hourly ?? [0, 0]).map(v => v / 1e6), { money: true }) });
+    case "today": return wideTile({ ...base, value: money(gross(t), t?.currency ?? cur), sub: "", chart: vline((t?.hourly ?? [0, 0]).map(v => v / 1e6), { money: true }) });
     case "mrr": { let run = 0; return wideTile({ ...base, anchor: "bottomTrailing", value: money(o.mrrMicros, cur, true), chart: vline(dailySeries(byDay, 30).map(d => (run += d.v)), { money: true }) }); }
-    case "revenue": return wideTile({ ...base, value: money(netOf(o), cur, true), sub: o.refundsMicros > 0 ? `−${money(o.refundsMicros, cur, true)} remboursé` : "", chart: vline(dailySeries(byDay, 14).map(d => d.v), { money: true }) });
+    case "revenue": return wideTile({ ...base, value: money(netOf(o), cur, true), sub: "", chart: vline(dailySeries(byDay, 14).map(d => d.v), { money: true }) });
     case "paying": return wideTile({ ...base, value: int(payingOf(o)), chart: vline(dailySeries(byDay, 30).map(d => d.v)) });
     default: return wideTile({ ...base, value: fmtMetric(k, metricTotal(k, o, t), cur), chart: sliderTrack(metricRatio(k, o)) });
   }
@@ -373,7 +372,7 @@ export async function renderMetric(main) {
     const total = pts.reduce((s, p) => s + p.v, 0);
     const headline = () => k === "revenue" ? money(total * 1e6, cur) : fmtMetric(k, metricTotal(k, o, t), cur);
     const subtitle = () => {
-      if (k === "today") return refundLine(t) ? `Cumul depuis minuit · ${refundLine(t)}` : "Cumul depuis minuit";
+      if (k === "today") return "Cumul depuis minuit";
       if (k === "downloads" && o.downloads == null) return DL_PENDING;
       if (k === "downloads" && o.downloadsLive) return `En direct · ${int(t?.installs ?? 0)} aujourd'hui`;
       if (k === "mrr") return `${int(o.activeSubscriptions)} abonnés actifs · ARR ${money(o.mrrMicros * 12, cur, true)}`;
@@ -494,7 +493,7 @@ export async function renderFeed(main) {
       const live = g.items.filter(e => !e.isSandbox);
       const sales = live.filter(isRevenueEvent).reduce((s, e) => s + (inCur(e, cur) ?? 0), 0);
       const refunds = live.filter(isRefundEvent).reduce((s, e) => s + Math.abs(inCur(e, cur) ?? 0), 0);
-      return `<div class="day-head"><span>${esc(dayTitle(g.at))}</span><b>${money(sales, cur)}${refunds > 0 ? `<i class="day-ref">−${money(refunds, cur)} remboursé</i>` : ""}</b></div><div class="card flush" style="overflow:hidden">${g.items.map(feedRow).join("")}</div>`;
+      return `<div class="day-head"><span>${esc(dayTitle(g.at))}</span><b>${money(sales - refunds, cur)}</b></div><div class="card flush" style="overflow:hidden">${g.items.map(feedRow).join("")}</div>`;
     }).join("");
     box.querySelectorAll("[data-event]").forEach(b => b.onclick = () => {
       const e = store.feed.find(x => x.id === b.dataset.event);
@@ -852,9 +851,9 @@ function deskCards(o, t) {
   for (const e of store.feed) if (ids.includes(e.projectId) && !e.isSandbox && (e.type === "INITIAL_PURCHASE" || e.type === "NON_RENEWING_PURCHASE")) { const k = new Date(e.at).toISOString().slice(0, 10); newByDay[k] = (newByDay[k] ?? 0) + 1e6; }
   let run = 0;
   const cards = [
-    { title: "Aujourd'hui", icon: "bolt", value: money(gross(t), t?.currency ?? cur), sub: refundLine(t) ? `Depuis minuit · ${refundLine(t)}` : "Depuis minuit", chart: vline((t?.hourly ?? [0, 0]).map(v => v / 1e6), { money: true }), href: "metric/today", seed: 0 },
+    { title: "Aujourd'hui", icon: "bolt", value: money(gross(t), t?.currency ?? cur), sub: "Depuis minuit", chart: vline((t?.hourly ?? [0, 0]).map(v => v / 1e6), { money: true }), href: "metric/today", seed: 0 },
     { title: "MRR", icon: "cycle", value: money(o.mrrMicros, cur), sub: "Revenu récurrent mensuel", chart: vline(dailySeries(byDay, 30).map(d => (run += d.v)), { money: true }), href: "metric/mrr", seed: 1, anchor: "bottomTrailing" },
-    { title: `Revenu ${days} j`, icon: "euro", value: money(netOf(o), cur), sub: o.refundsMicros > 0 ? `${days} derniers jours · −${money(o.refundsMicros, cur)} remboursé` : `${days} derniers jours`, chart: vline(dailySeries(byDay, days).map(d => d.v), { money: true }), href: "metric/revenue", seed: 2 },
+    { title: `Revenu ${days} j`, icon: "euro", value: money(netOf(o), cur), sub: `${days} derniers jours`, chart: vline(dailySeries(byDay, days).map(d => d.v), { money: true }), href: "metric/revenue", seed: 2 },
     { title: "Abonnés actifs", icon: "people", value: int(o.activeSubscriptions), sub: "En ce moment", chart: sliderTrack(metricRatio("subscriptions", o)), href: "metric/subscriptions", seed: 3 },
     { title: "Nouveaux clients", icon: "sparkles", value: int(o.newCustomers), sub: `${days} derniers jours`, chart: vline(dailySeries(newByDay, days).map(d => d.v)), seed: 4, anchor: "bottomLeading" },
     (o.hasTrials ?? o.activeTrials > 0)

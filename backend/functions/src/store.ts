@@ -181,7 +181,7 @@ export async function touchCustomer(pid: string, appUserId: string, ctx: { insta
   // Transaction : deux appels simultanés au premier lancement ne comptent qu'une installation.
   const first = await db.runTransaction(async t => {
     const snap = await t.get(ref);
-    if (snap.get("firstSeenAt")) return null;
+    if (snap.get("firstSeenAt") || snap.get("mergedInto")) return null; // identifiant fusionné : compté dans le compte cible
     const now = Date.now();
     const install = !!ctx.install && !isStoreOnlyId(appUserId);
     t.set(ref, { firstSeenAt: now, ...(install ? { installAt: now, platform: ctx.platform ?? "other" } : {}) }, { merge: true });
@@ -333,6 +333,8 @@ export async function mergeCustomers(project: Project, fromId: string, toId: str
   if (fromId === toId) return;
   if (!toId) throw new HttpError(400, "new_app_user_id_required");
   const from = db.doc(`projects/${project.id}/customers/${fromId}`);
+  const toRef = db.doc(`projects/${project.id}/customers/${toId}`);
+  const [fromSnap, toSnap] = await Promise.all([from.get(), toRef.get()]);
   const purchases = await from.collection("purchases").get();
   for (const doc of purchases.docs) {
     const p = doc.data() as Purchase;
@@ -343,8 +345,41 @@ export async function mergeCustomers(project: Project, fromId: string, toId: str
   const batch = db.batch();
   idx.docs.forEach(d => batch.set(d.ref, { appUserId: toId }));
   batch.set(from, { mergedInto: toId, entitlements: {}, activeEntitlements: [] }, { merge: true });
-  batch.set(db.doc(`projects/${project.id}/customers/${toId}`), { aliases: FieldValue.arrayUnion(fromId) }, { merge: true });
+  batch.set(toRef, { aliases: FieldValue.arrayUnion(fromId) }, { merge: true });
   await batch.commit();
+  await mergeCohort(project.id, fromSnap, toSnap, toRef, from);
+}
+
+/** Comme RevenueCat : des identifiants fusionnés comptent pour un seul client, daté du premier passage
+ *  (le plus ancien des deux). Une installation anonyme rattachée à un compte qui existait déjà
+ *  (réinstallation, puis connexion) n'est plus comptée ; sinon elle passe au compte. */
+export function cohortAfterMerge(from: { firstSeenAt?: number; installAt?: number }, to: { firstSeenAt?: number; installAt?: number } | null) {
+  const seen = [from.firstSeenAt, to?.firstSeenAt].filter((x): x is number => typeof x === "number");
+  const firstSeenAt = seen.length ? Math.min(...seen) : undefined;
+  if (!from.installAt) return { firstSeenAt, installAt: to?.installAt, dropInstall: false };
+  const returning = !!to && (typeof to.installAt === "number" || (typeof to.firstSeenAt === "number" && to.firstSeenAt < from.installAt));
+  return returning ? { firstSeenAt, installAt: to!.installAt, dropInstall: true } : { firstSeenAt, installAt: from.installAt, dropInstall: false };
+}
+
+async function mergeCohort(pid: string, fromSnap: FirebaseFirestore.DocumentSnapshot, toSnap: FirebaseFirestore.DocumentSnapshot,
+  toRef: FirebaseFirestore.DocumentReference, fromRef: FirebaseFirestore.DocumentReference) {
+  const f = { firstSeenAt: fromSnap.get("firstSeenAt") as number | undefined, installAt: fromSnap.get("installAt") as number | undefined };
+  const t = toSnap.exists ? { firstSeenAt: toSnap.get("firstSeenAt") as number | undefined, installAt: toSnap.get("installAt") as number | undefined } : null;
+  const r = cohortAfterMerge(f, t);
+  const platform = fromSnap.get("platform") ?? "other";
+  await toRef.set({
+    ...(r.firstSeenAt ? { firstSeenAt: r.firstSeenAt } : {}),
+    ...(r.installAt && r.installAt !== t?.installAt ? { installAt: r.installAt, platform } : {}),
+  }, { merge: true });
+  // L'identifiant anonyme fusionné ne compte plus ni comme client, ni comme installation.
+  await fromRef.set({ firstSeenAt: FieldValue.delete(), installAt: FieldValue.delete(), mergedFirstSeenAt: f.firstSeenAt ?? null }, { merge: true });
+  if (r.dropInstall && f.installAt) {
+    const date = new Date(f.installAt).toISOString().slice(0, 10);
+    await db.doc(`projects/${pid}/installs/${date}`).set({
+      units: FieldValue.increment(-1), byPlatform: { [platform]: FieldValue.increment(-1) },
+      byHour: { [String(new Date(f.installAt).getUTCHours())]: FieldValue.increment(-1) }, reinstalls: FieldValue.increment(1),
+    }, { merge: true }).catch(e => console.error("install merge", pid, e));
+  }
 }
 
 
