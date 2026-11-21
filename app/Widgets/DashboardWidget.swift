@@ -68,14 +68,20 @@ struct DashEntry: TimelineEntry {
 }
 
 struct DashProvider: TimelineProvider {
+    /// Faux tableau de bord seulement dans la galerie (`isPreview`) ; ailleurs, le cache ou un état vide.
     func placeholder(in context: Context) -> DashEntry {
-        DashEntry(date: .now, overview: .placeholderDashboard, last: FeedEvent.samples.first, today: .placeholder, signedIn: true)
+        DashEntry(date: .now, overview: nil, last: nil, today: .empty(), signedIn: true)
     }
     func getSnapshot(in context: Context, completion: @escaping (DashEntry) -> Void) {
-        completion(DashEntry(date: .now, overview: context.isPreview ? .placeholderDashboard : (MoneyMakerClient.cachedOverview ?? .placeholderDashboard),
-                             last: MMShared.cachedFeed.first(where: \.isRevenue) ?? FeedEvent.samples.first,
-                             today: MMShared.cachedToday ?? .placeholder, chart: WChart.current, signedIn: context.isPreview || MoneyMakerClient.stored.token != nil,
-                             projectId: MMShared.widgetProjectId, record: MMRecord(today: MMShared.cachedToday, history: MMShared.history)))
+        if context.isPreview {
+            completion(DashEntry(date: .now, overview: .placeholderDashboard, last: FeedEvent.samples.first, today: .placeholder, chart: WChart.current, signedIn: true))
+            return
+        }
+        let today = MMShared.todayOrEmpty
+        completion(DashEntry(date: .now, overview: MoneyMakerClient.cachedOverview,
+                             last: MMShared.cachedFeed.first(where: \.isRevenue),
+                             today: today, chart: WChart.current, signedIn: MoneyMakerClient.stored.token != nil,
+                             projectId: MMShared.widgetProjectId, record: MMRecord(today: today, history: MMShared.history)))
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<DashEntry>) -> Void) {
         Task {
@@ -90,16 +96,16 @@ struct DashProvider: TimelineProvider {
             let (overview, feed, today, history) = await (o, f, t, h)
             let pid = MMShared.widgetProjectId
             // Le record se calcule sur tous les business (l'historique est global).
-            let record = pid == nil ? MMRecord(today: today ?? MMShared.cachedToday, history: history) : nil
+            let record = pid == nil ? MMRecord(today: today ?? MMShared.todayOrEmpty, history: history) : nil
             let last = (feed ?? MMShared.cachedFeed).first { $0.isRevenue && (pid == nil || $0.projectId == pid) }
             let ov = overview ?? MoneyMakerClient.cachedOverview
             // Logos : business suivi, dernière vente, puis (grand format) le classement par business.
             var ids: [String?] = context.family == .systemSmall ? [] : [pid, last?.projectId]
-            if context.family == .systemLarge { ids += (ov?.projects ?? []).sorted { $0.netRevenueMicros > $1.netRevenueMicros }.prefix(4).map(\.projectId) }
+            if context.family == .systemLarge { ids += (ov?.projects ?? []).sorted { $0.grossRevenueMicros > $1.grossRevenueMicros }.prefix(4).map(\.projectId) }
             let icons = await WIconCache.load(ids, overview: ov)
             let next = Date.now.addingTimeInterval(15 * 60)
             completion(Timeline(entries: wTimelineDates(until: next).map {
-                                    DashEntry(date: $0, overview: ov, last: last, today: today ?? MMShared.cachedToday, chart: chart,
+                                    DashEntry(date: $0, overview: ov, last: last, today: today ?? MMShared.todayOrEmpty, chart: chart,
                                               signedIn: client.token != nil, projectId: pid, record: record, icons: icons)
                                 },
                                 policy: .after(next)))
@@ -148,7 +154,7 @@ struct DashboardWidgetView: View {
             case .systemSmall:
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .top, spacing: 4) {
-                        WValue(text: o.revenueMicros.money(o.currency, compact: true), size: 30)
+                        WValue(text: o.grossRevenueMicros.money(o.currency, compact: true), size: 30)
                         if let r = entry.record, r.isRecord { Spacer(minLength: 0); Image(systemName: "trophy.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(WTone.gold) }
                     }
                     WDelta(value: halfOverHalf(pts)).padding(.top, 1)
@@ -168,7 +174,7 @@ struct DashboardWidgetView: View {
                     }
                     HStack(alignment: .bottom, spacing: 12) {
                         VStack(alignment: .leading, spacing: 2) {
-                            WValue(text: o.revenueMicros.money(o.currency, compact: true), size: 32)
+                            WValue(text: o.grossRevenueMicros.money(o.currency, compact: true), size: 32)
                             WDelta(value: halfOverHalf(pts))
                         }
                         .fixedSize()
@@ -214,7 +220,7 @@ struct DashboardWidgetView: View {
             if let r = entry.record, r.isRecord, let t = entry.today {
                 HStack(spacing: 6) {
                     WRecordBadge(record: r)
-                    Text("\(t.netMicros.money(t.currency, compact: true)) aujourd'hui").font(MMFont.system(11)).foregroundStyle(MMColor.ink3).lineLimit(1)
+                    Text("\(t.grossMicros.money(t.currency, compact: true)) aujourd'hui").font(MMFont.system(11)).foregroundStyle(MMColor.ink3).lineLimit(1)
                 }
                 .padding(.top, 6)
             }
@@ -260,14 +266,14 @@ struct DashboardWidgetView: View {
     }
 
     private func headline(_ c: WChart, _ o: Overview) -> String {
-        if c == .today, let t = entry.today { return t.netMicros.money(t.currency, compact: true) }
-        return o.revenueMicros.money(o.currency, compact: true)
+        if c == .today, let t = entry.today { return t.grossMicros.money(t.currency, compact: true) }
+        return o.grossRevenueMicros.money(o.currency, compact: true)
     }
 
     /// Répartition par business : barres violettes fines, nom + montant.
     private func business(_ o: Overview) -> some View {
-        let rows = Array(o.projects.sorted { $0.netRevenueMicros > $1.netRevenueMicros }.prefix(4))
-        let hi = Double(max(rows.first?.netRevenueMicros ?? 1, 1))
+        let rows = Array(o.projects.sorted { $0.grossRevenueMicros > $1.grossRevenueMicros }.prefix(4))
+        let hi = Double(max(rows.first?.grossRevenueMicros ?? 1, 1))
         return VStack(alignment: .leading, spacing: 9) {
             if rows.isEmpty { Text("—").foregroundStyle(MMColor.ink3) }
             ForEach(rows, id: \.projectId) { p in
@@ -276,9 +282,9 @@ struct DashboardWidgetView: View {
                         WBizIcon(data: entry.icons[p.projectId], name: p.name, size: 18)
                         Text(p.name).font(MMFont.system(13, .medium)).foregroundStyle(MMColor.ink).lineLimit(1)
                         Spacer()
-                        Text(p.netRevenueMicros.money(p.currency, compact: true)).font(MMFont.number(13, .regular)).foregroundStyle(MMColor.ink2)
+                        Text(p.grossRevenueMicros.money(p.currency, compact: true)).font(MMFont.number(13, .regular)).foregroundStyle(MMColor.ink2)
                     }
-                    WProgress(value: Double(p.netRevenueMicros) / hi, tone: .violet)
+                    WProgress(value: Double(p.grossRevenueMicros) / hi, tone: .violet)
                 }
             }
             Spacer(minLength: 0)

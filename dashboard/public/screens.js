@@ -1,5 +1,5 @@
 // Écrans repris de l'app iPhone : Accueil, détail d'une carte, Ventes, fiche de vente, Client, Apps, Classement, Planète.
-import { esc, ic, money, int, flag, dailySeries, halfOverHalf, deltaBadge, projectIcon, platformMark, storeBadges, logoFan, wideTile, sliderTrack, vline, neon, tileHead, hydrate, paintDots, eventBadge, tbadge, storeLabel, isRevenueEvent, stars, skeleton, ago, glowChart } from "./kit.js";
+import { esc, ic, money, int, flag, dotsCanvas, dailySeries, halfOverHalf, deltaBadge, projectIcon, platformMark, storeBadges, logoFan, wideTile, sliderTrack, vline, neon, tileHead, hydrate, paintDots, eventBadge, tbadge, storeLabel, isRevenueEvent, isRefundEvent, productLabel, stars, skeleton, ago, glowChart } from "./kit.js";
 import { mountGlobe, globeSpots } from "./globe.js";
 
 let h; // { api, state, go, back, toast, openModal, newProjectDialog, assistantCard, countryName, alertRow, openProject }
@@ -14,6 +14,8 @@ const load = key => { try { return JSON.parse(localStorage.getItem(key)); } catc
 const save = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} };
 const pref = key => { try { return localStorage.getItem(key); } catch { return null; } };
 const curQ = () => pref("mmCurrency") ? `currency=${pref("mmCurrency")}` : "";
+/** Devise d'affichage effective : celle choisie, sinon celle de la vue d'ensemble. Ventes et « Aujourd'hui » sont convertis dedans. */
+const dispQ = () => curQ() || (store.overview?.currency ? `currency=${store.overview.currency}` : "");
 const tz = () => pref("mmUTC") ? "UTC" : Intl.DateTimeFormat().resolvedOptions().timeZone;
 const withQ = (path, q) => q ? `${path}${path.includes("?") ? "&" : "?"}${q}` : path;
 
@@ -31,28 +33,35 @@ function scopeOverview(o, ids = viewIds()) {
   const projects = o.projects.filter(p => ids.includes(p.projectId));
   const anyDl = projects.some(p => p.downloads != null);
   return {
-    ...o, projects, mrrMicros: sum(projects, p => p.mrrMicros), revenueMicros: sum(projects, p => p.netRevenueMicros),
+    // revenueMicros = ventes brutes (jamais négatives) ; remboursements à part. Repli sur le net pour un serveur plus ancien.
+    ...o, projects, mrrMicros: sum(projects, p => p.mrrMicros), revenueMicros: sum(projects, p => p.revenueMicros ?? p.netRevenueMicros), refundsMicros: sum(projects, p => p.refundsMicros ?? 0),
     activeSubscriptions: sum(projects, p => p.activeSubscriptions), activeTrials: sum(projects, p => p.activeTrials), newCustomers: sum(projects, p => p.newCustomers),
     payingCustomers: sum(projects, p => p.payingCustomers ?? p.activeSubscriptions), downloads: anyDl ? sum(projects, p => p.downloads) : null, hasTrials: projects.some(p => p.hasTrials),
   };
 }
 const mergedByDay = o => { const acc = {}; for (const p of o.projects) for (const [k, v] of Object.entries(p.revenueByDay ?? {})) acc[k] = (acc[k] ?? 0) + v; return acc; };
-const net = t => t ? (t.revenueMicros ?? 0) - (t.refundsMicros ?? 0) : 0;
+// « Aujourd'hui » : ventes brutes (jamais négatives), les remboursements sont affichés à part.
+const gross = t => t ? Math.max(0, t.revenueMicros ?? 0) : 0;
+const refundLine = t => t?.refundsMicros > 0 ? `−${money(t.refundsMicros, t.currency)} remboursé` : "";
 const avg = xs => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
 
 async function refresh() {
   store.loading ??= (async () => {
-    const [o, f] = await Promise.all([h.api(withQ("/v1/overview?days=30", curQ())), h.api(withQ("/v1/feed?limit=120", curQ())).catch(() => ({ events: [] }))]);
+    // Le flux est demandé dans la devise d'affichage : chaque vente porte displayMicros, les totaux ne mélangent jamais € et $.
+    const feed = q => h.api(withQ("/v1/feed?limit=120", q)).catch(() => ({ events: [] }));
+    let o, f;
+    if (curQ()) [o, f] = await Promise.all([h.api(withQ("/v1/overview?days=30", curQ())), feed(curQ())]);
+    else { o = await h.api("/v1/overview?days=30"); f = await feed(`currency=${o.currency}`); }
     store.overview = o; store.feed = f.events ?? [];
     await refreshToday();
     store.at = Date.now();
-    renderSide();
+    renderSide(); renderTopbar();
   })().finally(() => { store.loading = null; });
   return store.loading;
 }
 async function refreshToday() {
   const ids = viewIds(), scoped = ids.length !== (store.overview?.projects.length ?? 0);
-  store.today = await h.api(withQ(`/v1/today?tz=${encodeURIComponent(tz())}${scoped ? `&projectIds=${ids.join(",")}` : ""}`, curQ())).catch(() => null);
+  store.today = await h.api(withQ(`/v1/today?tz=${encodeURIComponent(tz())}${scoped ? `&projectIds=${ids.join(",")}` : ""}`, dispQ())).catch(() => null);
 }
 export const ensureStore = async (maxAge = 60000) => { if (!store.overview) await refresh(); else if (Date.now() - store.at > maxAge) refresh().then(() => h.onStoreChange?.()).catch(() => {}); };
 export const invalidateStore = () => { store.at = 0; store.overview = null; store.long = null; };
@@ -78,7 +87,7 @@ export function renderTabbar() {
   nav.innerHTML = TABS.map(([k, i, t]) => `<button class="${k === sideCur ? "on" : ""}" data-nav="${k}" ${k === sideCur ? 'aria-current="page"' : ""}>${ic(i, 18)}<span>${t}</span></button>`).join("");
   nav.querySelectorAll("[data-nav]").forEach(b => b.onclick = () => h.go({ view: b.dataset.nav, projectId: null }));
   renderSide();
-  if (desktop()) paintSideDots();
+  renderTopbar();
 }
 export const closeMenu = () => document.getElementById("app").classList.remove("menu-open");
 export const toggleMenu = force => { const a = document.getElementById("app"), on = a.classList.toggle("menu-open", force); if (on) { renderSide(); paintSideDots(); } };
@@ -145,13 +154,13 @@ function bindFan(root, repaint) {
 
 // ── Accueil ─────────────────────────────────────────────────────────────────────────────
 const METRICS = {
-  today: { icon: "bolt", seed: 0, money: true, title: () => "Aujourd'hui", explain: "Revenu net encaissé depuis minuit, remboursements déduits." },
+  today: { icon: "bolt", seed: 0, money: true, title: () => "Aujourd'hui", explain: "Ventes encaissées depuis minuit (hors achats de test), avant remboursements. Les remboursements du jour sont indiqués à part." },
   mrr: { icon: "cycle", seed: 1, money: true, title: () => "MRR", explain: "Revenu récurrent mensuel : ce que rapportent les abonnements actifs chaque mois." },
-  revenue: { icon: "euro", seed: 2, money: true, title: o => `Revenu ${o.periodDays} j`, explain: "Revenu net encaissé sur la période, tous canaux confondus." },
+  revenue: { icon: "euro", seed: 2, money: true, title: o => `Revenu ${o.periodDays} j`, explain: "Ventes encaissées sur la période, tous canaux confondus, avant remboursements (indiqués à part)." },
   subscriptions: { icon: "people", seed: 3, title: () => "Abonnés actifs", explain: "Abonnements en cours et renouvelés, hors essais gratuits." },
   paying: { icon: "card", seed: 4, title: () => "Utilisateurs payants", explain: "Clients qui paient en ce moment : abonnés actifs et achats encore valables. Les nouveaux clients sont ceux qui ont payé pour la première fois sur la période." },
   trials: { icon: "hourglass", seed: 5, title: () => "Essais en cours", explain: "Essais gratuits en cours, qui deviendront des abonnements s'ils sont convertis." },
-  downloads: { icon: "download", seed: 6, title: () => "Téléchargements", explain: "Premiers téléchargements sur la période, d'après les stores." },
+  downloads: { icon: "download", seed: 6, title: () => "Téléchargements", explain: "Premiers téléchargements sur la période, d'après les rapports App Store Connect. Ils arrivent sous 48 h après la connexion App Store Connect." },
 };
 const payingOf = o => o.payingCustomers ?? o.activeSubscriptions;
 function metricRatio(k, o) {
@@ -161,15 +170,17 @@ function metricRatio(k, o) {
     : k === "downloads" ? (o.downloads > 0 ? o.newCustomers / o.downloads : 0) : k === "subscriptions" ? o.activeSubscriptions / paying : .5;
   return Math.min(Math.max(r, .04), 1);
 }
-function metricTotal(k, o, t) { return { today: net(t), mrr: o.mrrMicros, revenue: o.revenueMicros, subscriptions: o.activeSubscriptions, paying: payingOf(o), trials: o.activeTrials, downloads: o.downloads ?? 0 }[k]; }
-const fmtMetric = (k, v, cur, compact = false) => METRICS[k].money ? money(v, cur, compact) : int(v);
+function metricTotal(k, o, t) { return { today: gross(t), mrr: o.mrrMicros, revenue: o.revenueMicros, subscriptions: o.activeSubscriptions, paying: payingOf(o), trials: o.activeTrials, downloads: o.downloads }[k]; }
+/** Téléchargements inconnus (null) : « — », jamais 0. */
+const fmtMetric = (k, v, cur, compact = false) => v == null ? "—" : METRICS[k].money ? money(v, cur, compact) : int(v);
+const DL_PENDING = "Les téléchargements arrivent sous 48 h après la connexion App Store Connect.";
 function homeTile(k, o, t, i) {
   const m = METRICS[k], cur = o.currency, title = m.title(o), byDay = mergedByDay(o), href = `metric/${k}`;
   const base = { icon: m.icon, title, seed: m.seed, href, i };
   switch (k) {
-    case "today": return wideTile({ ...base, value: money(net(t), t?.currency ?? cur), chart: vline((t?.hourly ?? [0, 0]).map(v => v / 1e6), { money: true }) });
+    case "today": return wideTile({ ...base, value: money(gross(t), t?.currency ?? cur), sub: refundLine(t), chart: vline((t?.hourly ?? [0, 0]).map(v => v / 1e6), { money: true }) });
     case "mrr": { let run = 0; return wideTile({ ...base, anchor: "bottomTrailing", value: money(o.mrrMicros, cur, true), chart: vline(dailySeries(byDay, 30).map(d => (run += d.v)), { money: true }) }); }
-    case "revenue": return wideTile({ ...base, value: money(o.revenueMicros, cur, true), chart: vline(dailySeries(byDay, 14).map(d => d.v), { money: true }) });
+    case "revenue": return wideTile({ ...base, value: money(o.revenueMicros, cur, true), sub: o.refundsMicros > 0 ? `−${money(o.refundsMicros, cur, true)} remboursé` : "", chart: vline(dailySeries(byDay, 14).map(d => d.v), { money: true }) });
     case "paying": return wideTile({ ...base, value: int(payingOf(o)), chart: vline(dailySeries(byDay, 30).map(d => d.v)) });
     default: return wideTile({ ...base, value: fmtMetric(k, metricTotal(k, o, t), cur), chart: sliderTrack(metricRatio(k, o)) });
   }
@@ -209,6 +220,7 @@ const extraTile = ([icon, title, value, ratio, href], i, seed = 8) => wideTile({
 
 export async function renderHome(main) {
   if (!h.state.projects.length) return renderWelcome(main);
+  if (desktop()) return renderDeskHome(main);
   main.innerHTML = `<div class="page wide">
     <div class="home-head"><button class="iconbtn" id="hMenu" aria-label="Menu">${ic("menu", 22)}</button><img src="/logo.png" alt="MoneyMaker"><button class="iconbtn" id="hGear" aria-label="Réglages">${ic("gear", 20)}</button></div>
     <div class="desk-top"><div class="page-title desk-only">Accueil</div><div class="fan-row" id="fanRow"></div></div>
@@ -319,16 +331,16 @@ function bizCaption(k, p) {
     case "revenue": return `MRR ${money(p.mrrMicros, p.currency, true)}`;
     case "paying": return `${int(p.newCustomers)} nouveaux · ${int(p.billingIssues)} problèmes de paiement`;
     case "trials": return p.trialConversionRate != null ? `Conversion ${Math.round(p.trialConversionRate * 100)} %` : "Pas encore de conversion";
-    case "downloads": return `${int(p.newCustomers)} nouveaux clients`;
+    case "downloads": return p.downloads == null ? DL_PENDING : `${int(p.newCustomers)} nouveaux clients`;
     default: return "";
   }
 }
-function bizValue(k, p) { return { revenue: p.netRevenueMicros, mrr: p.mrrMicros, subscriptions: p.activeSubscriptions, paying: p.payingCustomers ?? p.activeSubscriptions, trials: p.activeTrials, downloads: p.downloads ?? 0 }[k] ?? 0; }
+function bizValue(k, p) { return k === "downloads" ? p.downloads : { revenue: p.revenueMicros ?? p.netRevenueMicros, mrr: p.mrrMicros, subscriptions: p.activeSubscriptions, paying: p.payingCustomers ?? p.activeSubscriptions, trials: p.activeTrials }[k] ?? 0; }
 function bizRows(k, o) {
-  const rows = o.projects.map(p => [p, bizValue(k, p)]).sort((a, b) => b[1] - a[1]), top = Math.max(rows[0]?.[1] ?? 1, 1);
+  const rows = o.projects.map(p => [p, bizValue(k, p)]).sort((a, b) => (b[1] ?? -1) - (a[1] ?? -1)), top = Math.max(rows[0]?.[1] ?? 1, 1);
   return rows.map(([p, v]) => `<button class="tile" data-goproject="${esc(p.projectId)}"><div class="biz-tile">
     <div class="top"><span style="position:relative;flex:none">${projectIcon(p, 36)}<span style="position:absolute;right:-4px;bottom:-4px">${platformMark(p.stores, 16)}</span></span><div class="nm"><b><bdi>${esc(p.name)}</bdi></b><i>${esc(bizCaption(k, p))}</i></div><span class="val">${fmtMetric(k, v, p.currency)}</span><span style="color:var(--ink3)">${ic("right", 11)}</span></div>
-    ${sliderTrack(Math.min(Math.max(v / top, .04), 1), true)}</div></button>`).join("");
+    ${sliderTrack(Math.min(Math.max((v ?? 0) / top, .04), 1), true)}</div></button>`).join("");
 }
 
 // ── Détail d'une carte (HomeMetricDetail) ───────────────────────────────────────────────
@@ -347,15 +359,18 @@ export async function renderMetric(main) {
     const o = scopeOverview(store.overview), t = store.today, cur = o.currency;
     const ids = viewIds();
     const byDay = range > 30 && store.long ? mergedByDay({ projects: store.long.projects.filter(p => ids.includes(p.projectId)) }) : mergedByDay(o);
-    const daily = dailySeries(byDay, range);
+    // Téléchargements : vraie série par jour (downloadsByDay). Les autres cartes tracent les ventes du jour (montants).
+    const dlByDay = () => { const acc = {}; for (const p of (range > 30 && store.long ? store.long.projects.filter(p => ids.includes(p.projectId)) : o.projects)) for (const [d, v] of Object.entries(p.downloadsByDay ?? {})) acc[d] = (acc[d] ?? 0) + v; return acc; };
+    const daily = dailySeries(k === "downloads" ? dlByDay() : byDay, range), seriesMoney = k !== "downloads";
     let pts;
     if (k === "today") { const start = t?.dayStart ?? Date.now(), hr = t?.hourly ?? []; pts = hr.map((v, i) => ({ t: start + i * 36e5, v: v / 1e6 })); }
     else if (k === "mrr") { let run = 0; pts = daily.map(d => ({ t: d.t, v: (run += d.v), day: d.v })); }
     else pts = daily;
     const total = pts.reduce((s, p) => s + p.v, 0);
-    const headline = () => ["today", "mrr", "subscriptions", "paying", "trials"].includes(k) ? fmtMetric(k, metricTotal(k, o, t), cur) : k === "revenue" ? money(total * 1e6, cur) : fmtMetric(k, metricTotal(k, o, t), cur);
+    const headline = () => k === "revenue" ? money(total * 1e6, cur) : fmtMetric(k, metricTotal(k, o, t), cur);
     const subtitle = () => {
-      if (k === "today") return "Cumul depuis minuit";
+      if (k === "today") return refundLine(t) ? `Cumul depuis minuit · ${refundLine(t)}` : "Cumul depuis minuit";
+      if (k === "downloads" && o.downloads == null) return DL_PENDING;
       if (k === "mrr") return `${int(o.activeSubscriptions)} abonnés actifs · ARR ${money(o.mrrMicros * 12, cur, true)}`;
       const label = RANGES.find(r => r[1] === range)[0].toLowerCase();
       if (["paying", "subscriptions", "trials"].includes(k)) return `Encaissé sur ${label} : ${money(total * 1e6, cur)}`;
@@ -369,9 +384,9 @@ export async function renderMetric(main) {
       <div class="dt-grid"><div class="dt-left"><div class="fan-row" id="dtFan">${fanHtml}</div>
       <div class="dt-hero"><canvas class="dots" data-anchor="topTrailing" data-seed="${m.seed}" data-reach=".9"></canvas>
         ${tileHead(m.icon, m.title(o))}<div class="v" id="dtV">${headline()}</div><div class="s" id="dtS">${subtitle()}</div>
-        ${neon(pts.map(p => p.v), { money: Boolean(m.money) })}
+        ${neon(pts.map(p => p.v), { money: seriesMoney })}
         <div class="axis"><span>${pts[0] ? (k === "today" ? new Date(pts[0].t).toLocaleTimeString(MM_LOCALE, { hour: "numeric" }) : shortDay(pts[0].t)) : ""}</span><span>${k === "today" ? "Maintenant" : "Aujourd'hui"}</span></div></div>
-      ${k === "today" ? "" : `<div class="chips-days" id="dtDays">${pts.map((p, i) => `<button data-i="${i}"><em>${isToday(p.t) ? "Aujourd'hui" : shortDay(p.t)}</em><b>${money((k === "mrr" ? p.day : p.v) * 1e6, cur, true)}</b></button>`).join("")}</div>`}
+      ${k === "today" ? "" : `<div class="chips-days" id="dtDays">${pts.map((p, i) => `<button data-i="${i}"><em>${isToday(p.t) ? "Aujourd'hui" : shortDay(p.t)}</em><b>${seriesMoney ? money((k === "mrr" ? p.day : p.v) * 1e6, cur, true) : int(p.v)}</b></button>`).join("")}</div>`}
       </div><div class="dt-right"><div class="stats2">${detailStats(k, o, t, pts, range).map(([tt, v, i]) => `<div class="tile mini static"><div class="h">${ic(i, 11)}<span>${esc(tt)}</span></div><div class="val">${esc(v)}</div></div>`).join("")}</div>
       <p class="note">${esc(m.explain)}</p></div></div>
       ${o.projects.length && k !== "today" ? `<div class="mlabel" style="padding:6px 4px 0"><span>Par business</span><span>${o.projects.length}</span></div><div class="tiles">${bizRows(k, o)}</div>` : ""}
@@ -390,8 +405,9 @@ export async function renderMetric(main) {
       if (sel) { sel.style.display = ""; sel.querySelector("line").setAttribute("x1", x); sel.querySelector("line").setAttribute("x2", x); const c = sel.querySelector("circle"); c.setAttribute("cx", x); c.setAttribute("cy", y); }
       if (end) end.style.display = "none";
       const val = k === "mrr" ? p.day : p.v;
-      vEl.textContent = m.money ? money(val * 1e6, cur) : money(val * 1e6, cur);
-      sEl.textContent = k === "today" ? new Date(p.t).toLocaleTimeString(MM_LOCALE, { hour: "numeric", minute: "2-digit" }) : longDay(p.t);
+      // Cartes en nombre (abonnés, essais, payants) : le point choisi est l'encaissé du jour, affiché comme tel.
+      vEl.textContent = seriesMoney ? money(val * 1e6, cur) : int(val);
+      sEl.textContent = k === "today" ? new Date(p.t).toLocaleTimeString(MM_LOCALE, { hour: "numeric", minute: "2-digit" }) : m.money || !seriesMoney ? longDay(p.t) : `${longDay(p.t)} · encaissé`;
       main.querySelectorAll("#dtDays button").forEach(b => { const on = Number(b.dataset.i) === i; b.classList.toggle("on", on); if (on) b.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); });
     };
     const fromEvent = e => { const r = nv.getBoundingClientRect(); return Math.max(0, Math.min(pts.length - 1, Math.round((e.clientX - r.left) / r.width * (pts.length - 1)))); };
@@ -414,23 +430,27 @@ function detailStats(k, o, t, pts, range) {
   switch (k) {
     case "today": return t ? [["Ventes", int(t.sales), "cart"], ["Renouvellements", int(t.renewals), "refresh"], ["Nouveaux abonnés", int(t.newSubscribers), "sparkles"], ["Essais démarrés", int(t.trials), "hourglass"], ["Remboursements", money(t.refundsMicros, t.currency), "undo"], ["Transactions", int(t.sales + t.renewals), "list"]] : [];
     case "mrr": case "subscriptions": { const out = [["Abonnés actifs", int(o.activeSubscriptions), "people"], ["ARR", money(o.mrrMicros * 12, cur, true), "calendar"], ["Revenu par abonné", money(o.mrrMicros / Math.max(o.activeSubscriptions, 1), cur), "person"], ["Essais en cours", int(o.activeTrials), "hourglass"], ["Renouvellements", int(count("RENEWAL")), "refresh"], ["Annulations", int(count("CANCELLATION")), "xcircle"]]; if (churns.length) out.push(["Désabonnement", pct(avg(churns)), "undodown"]); if (rates.length) out.push(["Conversion essais", pct(avg(rates)), "seal"]); return out; }
-    case "revenue": return [["Total", money(s * 1e6, cur), "euro"], ["Moyenne / jour", money(s / Math.max(pts.length, 1) * 1e6, cur), "divide"], ["Meilleur jour", money(best * 1e6, cur), "trophy"], ["Jours avec vente", `${active}/${pts.length}`, "calendar"], ["Ventes", int(inRange.filter(isRevenueEvent).length), "cart"], ["Remboursements", int(count("REFUND")), "undo"]];
+    case "revenue": return [["Total", money(s * 1e6, cur), "euro"], ["Moyenne / jour", money(s / Math.max(pts.length, 1) * 1e6, cur), "divide"], ["Meilleur jour", money(best * 1e6, cur), "trophy"], ["Jours avec vente", `${active}/${pts.length}`, "calendar"], ["Ventes", int(inRange.filter(isRevenueEvent).length), "cart"], ["Remboursements", int(inRange.filter(isRefundEvent).length), "undo"]];
     case "paying": return [["Utilisateurs payants", int(paying), "card"], ["Abonnés actifs", int(o.activeSubscriptions), "people"], ["Achats uniques", int(Math.max(paying - o.activeSubscriptions, 0)), "bag"], ["Nouveaux clients", int(o.newCustomers), "sparkles"], ["Problèmes de paiement", int(sum(o.projects, p => p.billingIssues)), "warning"], ["Revenu par client", money(s * 1e6 / Math.max(paying, 1), cur), "person"]];
     case "trials": { const out = [["Essais en cours", int(o.activeTrials), "hourglass"], ["Essais démarrés", int(count("TRIAL_STARTED")), "playc"], ["Essais convertis", int(count("TRIAL_CONVERTED")), "checkc"]]; if (rates.length) out.push(["Conversion", pct(avg(rates)), "seal"]); return out; }
-    case "downloads": { const d = o.downloads ?? 0; return [["Téléchargements", int(d), "download"], ["Nouveaux clients", int(o.newCustomers), "sparkles"], ["Téléchargement → payant", d > 0 ? pct(o.newCustomers / d) : "—", "ext"], ["Revenu par téléchargement", d > 0 ? money(s * 1e6 / d, cur) : "—", "euro"]]; }
+    case "downloads": { const d = o.downloads ?? 0; if (o.downloads == null) return [["Téléchargements", "—", "download"], ["Nouveaux clients", int(o.newCustomers), "sparkles"]]; return [["Téléchargements", int(d), "download"], ["Nouveaux clients", int(o.newCustomers), "sparkles"], ["Téléchargement → payant", d > 0 ? pct(o.newCustomers / d) : "—", "ext"], ["Revenu par téléchargement", d > 0 ? money(s * 1e6 / d, cur) : "—", "euro"]]; }
     default: return [];
   }
 }
 
 // ── Ventes en direct (FeedScreen) ───────────────────────────────────────────────────────
 const amountOf = e => (e.priceMicros ?? 0) > 0 || e.displayMicros ? money(e.displayMicros ?? e.priceMicros, e.displayCurrency ?? e.currency) : null;
+/** Montant dans la devise d'affichage `cur`, ou null si la conversion manque (jamais d'addition de devises différentes). */
+const inCur = (e, cur) => (e.displayCurrency ?? e.currency) === cur ? (e.displayMicros ?? e.priceMicros ?? 0) : null;
+/** Couleur d'un montant : rouge pour un remboursement, gris pour un événement qui n'est pas une vente (annulation, demande de remboursement…). */
+const amountColor = e => isRefundEvent(e) ? "var(--red)" : isRevenueEvent(e) ? "var(--ink)" : "var(--ink3)";
 const projectOf = id => (store.overview?.projects ?? []).find(p => p.projectId === id);
 const timeOf = e => { const recent = Date.now() - e.at < 2 * 864e5, d = new Date(e.at), hm = d.toLocaleTimeString(MM_LOCALE, { hour: "2-digit", minute: "2-digit", timeZone: tz() }); return recent ? hm : `${d.toLocaleDateString(MM_LOCALE, { day: "numeric", month: "short", timeZone: tz() })} ${hm}`; };
 function feedRow(e) {
   const b = eventBadge(e), amt = amountOf(e), p = projectOf(e.projectId);
   return `<button class="fi" data-event="${esc(e.id)}"><span class="ic">${p ? projectIcon(p, 42) : projectIcon({ projectId: e.projectId, name: e.projectName }, 42)}${e.country ? `<span class="fl">${flag(e.country)}</span>` : ""}</span>
-    <span class="tx"><b><bdi>${esc(e.productId ?? e.projectName ?? e.type)}</bdi></b><i>${esc([timeOf(e), storeLabel(e.store)].filter(Boolean).join(" · "))}</i></span>
-    <span class="am"><b style="color:${["REFUND", "REVOKED"].includes(e.type) ? "var(--red)" : amt ? "var(--ink)" : "var(--ink3)"}">${amt ?? (b.free ? "Gratuit" : "")}</b>${tbadge(b)}</span></button>`;
+    <span class="tx"><b><bdi>${esc(productLabel(e) ?? e.projectName ?? e.type)}</bdi></b><i>${esc([timeOf(e), storeLabel(e.store)].filter(Boolean).join(" · "))}</i></span>
+    <span class="am"><b style="color:${amt ? amountColor(e) : "var(--ink3)"}">${amt ?? (b.free ? "Gratuit" : "")}</b>${e.isSandbox ? tbadge({ label: "Test", color: "255,255,255", grey: true }) : ""}${tbadge(b)}</span></button>`;
 }
 const dayTitle = t => { const d = new Date(t), y = new Date(Date.now() - 864e5); return isToday(t) ? "Aujourd'hui" : d.toDateString() === y.toDateString() ? "Hier" : d.toLocaleDateString(MM_LOCALE, { weekday: "long", day: "numeric", month: "long" }).replace(/^./, c => c.toUpperCase()); };
 function scopeLabel() { const ids = viewIds(), all = allProjects(); return ids.length === all.length ? "Tous les business" : ids.length === 1 ? projectOf(ids[0])?.name ?? "" : `${ids.length} business`; }
@@ -465,8 +485,11 @@ export async function renderFeed(main) {
     const groups = [];
     for (const e of list) { const key = new Date(e.at).toLocaleDateString(MM_LOCALE, { timeZone: tz() }); let g = groups.find(x => x.key === key); if (!g) groups.push(g = { key, at: e.at, items: [] }); g.items.push(e); }
     box.innerHTML = groups.map(g => {
-      const total = g.items.filter(e => (e.priceMicros ?? 0) > 0 && !["TRIAL_STARTED", "CANCELLATION", "EXPIRATION", "BILLING_ISSUE"].includes(e.type)).reduce((s, e) => s + (e.displayMicros ?? e.priceMicros) * (["REFUND", "REVOKED"].includes(e.type) ? -1 : 1), 0);
-      return `<div class="day-head"><span>${esc(dayTitle(g.at))}</span><b>${money(total, cur)}</b></div><div class="card flush" style="overflow:hidden">${g.items.map(feedRow).join("")}</div>`;
+      // Ventes brutes du jour (hors achats de test), converties dans la devise d'affichage ; remboursements à part.
+      const live = g.items.filter(e => !e.isSandbox);
+      const sales = live.filter(isRevenueEvent).reduce((s, e) => s + (inCur(e, cur) ?? 0), 0);
+      const refunds = live.filter(isRefundEvent).reduce((s, e) => s + Math.abs(inCur(e, cur) ?? 0), 0);
+      return `<div class="day-head"><span>${esc(dayTitle(g.at))}</span><b>${money(sales, cur)}${refunds > 0 ? `<i class="day-ref">−${money(refunds, cur)} remboursé</i>` : ""}</b></div><div class="card flush" style="overflow:hidden">${g.items.map(feedRow).join("")}</div>`;
     }).join("");
     box.querySelectorAll("[data-event]").forEach(b => b.onclick = () => {
       const e = store.feed.find(x => x.id === b.dataset.event);
@@ -494,7 +517,7 @@ export async function renderTx(main) {
   await ensureStore().catch(() => {});
   if (n !== nav) return;
   const ref = h.state.eventRef;
-  const e = ref && h.state.event?.id !== ref.id ? store.feed.find(x => x.id === ref.id && x.projectId === ref.projectId) ?? (await h.api(withQ("/v1/feed?limit=300", curQ())).catch(() => ({ events: [] }))).events.find(x => x.id === ref.id && x.projectId === ref.projectId) : h.state.event;
+  const e = ref && h.state.event?.id !== ref.id ? store.feed.find(x => x.id === ref.id && x.projectId === ref.projectId) ?? (await h.api(withQ("/v1/feed?limit=300", dispQ())).catch(() => ({ events: [] }))).events.find(x => x.id === ref.id && x.projectId === ref.projectId) : h.state.event;
   if (!e) return h.go({ view: "feed" });
   h.state.event = e; h.state.eventRef = { projectId: e.projectId, id: e.id };
   main.innerHTML = `<div class="tx-glow"><span>${flag(e.country ?? "")}</span></div><div class="page tx-page" style="position:relative">
@@ -505,7 +528,7 @@ export async function renderTx(main) {
 function txBody(e) {
   const p = projectOf(e.projectId), b = eventBadge(e), exp = e.expiresAt, m = e.periodMonths;
   return `<div class="tx-hero">${projectIcon(p ?? { projectId: e.projectId, name: e.projectName }, 110)}<span class="fl">${flag(e.country ?? "")}</span></div>
-    ${sec([(e.productId ?? "").length > 22 ? txStack("square", "Produit", e.productId) : txRow("square", "Produit", esc(e.productId ?? "—")), txRow("dollar", "Revenu", esc(amountOf(e) ?? (b.free ? "Gratuit" : "—"))),
+    ${sec([(productLabel(e) ?? "").length > 22 ? txStack("square", "Produit", productLabel(e)) : txRow("square", "Produit", esc(productLabel(e) ?? "—")), ...(e.productName && e.productId && e.productName !== e.productId ? [txStack("hash", "Identifiant produit", e.productId, true)] : []), txRow("dollar", "Revenu", esc(amountOf(e) ?? (b.free ? "Gratuit" : "—"))),
       ...(e.appUserId ? [`<div class="tx-row link" data-customer><span class="i">${ic("person", 18)}</span><div style="flex:1;min-width:0"><div class="k">Client</div><div class="k2" style="font-size:14px;color:var(--ink3);margin-top:3px">${esc(masked(e.appUserId))}</div></div><span style="color:var(--ink3)">${ic("right", 13)}</span></div>`] : [])])}
     ${sec([txRow("calendar", "Date", esc(new Date(e.at).toLocaleString(MM_LOCALE, { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: tz() }))), txRow("globe", "Pays", e.country ? `${flag(e.country)} ${esc(h.countryName(e.country))}` : "Inconnu"), txRow("store", "Boutique", esc(storeLabel(e.store) ?? "—")), `<div class="tx-row"><span class="i">${ic("tag", 18)}</span><span class="k">Type</span><span class="val">${tbadge(b)}</span></div>`,
       ...(exp ? [txRow("clock", exp > Date.now() ? "Expire le" : "Expiré le", esc(new Date(exp).toLocaleDateString(MM_LOCALE, { day: "numeric", month: "short", year: "numeric" })))] : []),
@@ -517,6 +540,7 @@ function bindTx(root, e) {
   if (c) c.onclick = () => h.go({ view: "customer", customer: { projectId: e.projectId, appUserId: e.appUserId }, projectId: null });
 }
 
+const PURCHASE_STATUS = { expired: "Expiré", grace: "Période de grâce", billing_retry: "Relance de paiement", paused: "En pause", refunded: "Remboursé", revoked: "Révoqué", cancelled: "Annulé", active: "Actif" };
 // ── Historique d'un client (CustomerHistoryView) ────────────────────────────────────────
 export async function renderCustomer(main) {
   const r = h.state.customer;
@@ -534,18 +558,23 @@ export async function renderCustomer(main) {
 function bindCustomer(root, r) { root.querySelector("[data-admin]").onclick = () => { h.state.openCustomer = r.appUserId; h.go({ view: "project", projectId: r.projectId, tab: "customers" }); }; }
 async function customerBody(r) {
   const c = await h.api(`/v1/projects/${r.projectId}/customers/${encodeURIComponent(r.appUserId)}`);
-  const p = projectOf(r.projectId), purchases = [...(c.purchases ?? [])].sort((a, b) => (b.latestPurchaseAt ?? 0) - (a.latestPurchaseAt ?? 0)), events = [...(c.events ?? [])].sort((a, b) => b.at - a.at);
-  const active = Object.values(c.entitlements ?? {}).some(e => e.active) || purchases.some(x => x.status === "active");
-  const first = events.at(-1)?.at, last = events[0]?.at, country = purchases.find(x => x.country)?.country ?? events.find(x => x.country)?.country;
-  const spent = events.filter(isRevenueEvent).reduce((s, e) => s + (e.priceMicros ?? 0), 0), cur = events.find(e => e.currency)?.currency ?? p?.currency ?? "EUR";
-  const cells = [["Dépensé", money(spent, cur), "euro"], ["Achats", int(purchases.length), "bag"], ["Vu la première fois", first ? shortDay(first) : "—", "calendar"], ["Vu la dernière fois", last ? shortDay(last) : "—", "clock"]];
-  const dotColor = t => ({ RENEWAL: "var(--accent)", INITIAL_PURCHASE: "var(--accent)", TRIAL_CONVERTED: "var(--accent)", NON_RENEWING_PURCHASE: "var(--accent)", UNCANCELLATION: "var(--accent)", BILLING_RECOVERED: "var(--accent)", TRIAL_STARTED: "var(--blue)", CANCELLATION: "var(--orange)", BILLING_ISSUE: "var(--orange)", REFUND: "var(--red)", REVOKED: "var(--red)" }[t] ?? "var(--ink3)");
-  return `<div class="cu-col"><div class="card"><div style="display:flex;align-items:center;gap:14px">${p ? projectIcon(p, 56) : ""}<div style="flex:1;min-width:0"><div style="font-size:18px;font-weight:500;overflow:hidden;text-overflow:ellipsis">${country ? `${flag(country)} ` : ""}${esc(masked(r.appUserId))}</div><div class="page-sub"><bdi>${esc(p?.name ?? "")}</bdi></div></div>${tbadge(active ? { label: "ACTIF", color: "51,217,128" } : { label: "INACTIF", color: "255,255,255", grey: true })}</div></div>
+  // Champs réellement renvoyés par l'API (GET /v1/projects/:pid/customers/:id) : purchases[].purchasedAt / expiresAt / isTrial / isSandbox,
+  // country, firstSeenAt, lastSeenAt, totalSpentMicros (dans la devise du business, achats de test exclus) et currency.
+  const p = projectOf(r.projectId), events = [...(c.events ?? [])].sort((a, b) => b.at - a.at);
+  const purchases = [...(c.purchases ?? [])].sort((a, b) => (b.purchasedAt ?? 0) - (a.purchasedAt ?? 0));
+  const active = Object.values(c.entitlements ?? {}).some(e => e.active) || purchases.some(x => x.active ?? x.status === "active");
+  const first = c.firstSeenAt ?? events.at(-1)?.at, last = c.lastSeenAt ?? events[0]?.at, country = c.country ?? events.find(x => x.country)?.country;
+  const cur = c.currency ?? p?.sourceCurrency ?? p?.currency ?? "EUR";
+  // Prix d'un achat : dernière vente enregistrée pour cet achat (l'achat lui-même ne porte pas de prix dans la réponse).
+  const priceOf = x => events.find(e => e.purchaseId === x.id && isRevenueEvent(e)) ?? null;
+  const cells = [["Dépensé", money(c.totalSpentMicros ?? 0, cur), "euro"], ["Achats", int(purchases.length), "bag"], ["Vu la première fois", first ? shortDay(first) : "—", "calendar"], ["Vu la dernière fois", last ? shortDay(last) : "—", "clock"]];
+  const dotColor = t => ({ RENEWAL: "var(--accent)", INITIAL_PURCHASE: "var(--accent)", TRIAL_CONVERTED: "var(--accent)", NON_RENEWING_PURCHASE: "var(--accent)", UNCANCELLATION: "var(--accent)", BILLING_RECOVERED: "var(--accent)", REFUND_REVERSED: "var(--accent)", TRIAL_STARTED: "var(--blue)", PRODUCT_CHANGE: "var(--blue)", REFUND_DECLINED: "var(--blue)", CANCELLATION: "var(--orange)", BILLING_ISSUE: "var(--orange)", REFUND_REQUESTED: "var(--orange)", REFUND: "var(--red)", REVOKED: "var(--red)" }[t] ?? "var(--ink3)");
+  return `<div class="cu-col"><div class="card"><div style="display:flex;align-items:center;gap:14px">${p ? projectIcon(p, 56) : ""}<div style="flex:1;min-width:0"><div style="font-size:18px;font-weight:500;overflow:hidden;text-overflow:ellipsis">${country ? `${flag(country)} ` : ""}${esc(masked(r.appUserId))}</div><div class="page-sub"><bdi>${esc(p?.name ?? "")}</bdi></div></div>${tbadge(active ? { label: "Actif", color: "51,217,128" } : { label: "Inactif", color: "255,255,255", grey: true })}</div></div>
     <div class="grid2" style="grid-template-columns:1fr 1fr">${cells.map(([t, v, i]) => `<div style="background:rgba(255,255,255,.05);border-radius:16px;padding:14px"><div class="mini"  style="padding:0"><div class="h">${ic(i, 11)}<span>${esc(t)}</span></div><div class="val">${esc(v)}</div></div></div>`).join("")}</div>
     <div class="mlabel" style="padding:6px 4px 0"><span>Achats</span><span>${purchases.length}</span></div>
-    <div class="card flush" style="overflow:hidden">${purchases.map(x => `<div class="fi" style="cursor:default"><span class="tx"><b><bdi>${esc(x.productId)}</bdi></b><i>${esc([storeLabel(x.store), x.expiresAt ? `jusqu'au ${shortDay(x.expiresAt)}` : "à vie"].filter(Boolean).join(" · "))}</i></span><span class="am"><b>${x.priceMicros ? money(x.priceMicros, x.currency) : ""}</b>${tbadge(x.status === "active" ? { label: "ACTIF", color: "51,217,128" } : { label: String(x.status).toUpperCase(), color: "255,255,255", grey: true })}</span></div>`).join("") || `<p class="muted" style="padding:18px;margin:0">Aucun achat.</p>`}</div></div>
+    <div class="card flush" style="overflow:hidden">${purchases.map(x => { const sale = priceOf(x); return `<div class="fi" style="cursor:default"><span class="tx"><b><bdi>${esc(productLabel(sale ?? x) ?? x.productId)}</bdi></b><i>${esc([storeLabel(x.store), x.purchasedAt ? shortDay(x.purchasedAt) : null, x.expiresAt ? `jusqu'au ${shortDay(x.expiresAt)}` : "à vie", x.isTrial ? "essai" : null].filter(Boolean).join(" · "))}</i></span><span class="am"><b>${sale ? esc(amountOf(sale) ?? "") : ""}</b>${x.isSandbox ? tbadge({ label: "Test", color: "255,255,255", grey: true }) : ""}${tbadge((x.active ?? x.status === "active") ? { label: "Actif", color: "51,217,128" } : { label: PURCHASE_STATUS[x.status] ?? String(x.status ?? "—"), color: "255,255,255", grey: true })}</span></div>`; }).join("") || `<p class="muted" style="padding:18px;margin:0">Aucun achat.</p>`}</div></div>
     <div class="cu-col"><div class="mlabel" style="padding:6px 4px 0"><span>Historique</span><span>${events.length}</span></div>
-    <div class="card">${events.slice(0, 60).map((e, i, all) => `<div style="display:flex;gap:12px"><div style="display:flex;flex-direction:column;align-items:center;width:8px;flex:none"><i style="width:8px;height:8px;border-radius:50%;background:${dotColor(e.type)};box-shadow:0 0 8px ${dotColor(e.type)};margin-top:6px"></i>${i < all.length - 1 ? `<i style="flex:1;width:1px;background:var(--hair);margin-top:3px"></i>` : ""}</div><div style="flex:1;min-width:0;padding-bottom:14px;display:flex;justify-content:space-between;gap:10px"><div style="min-width:0"><div style="font-size:14px;font-weight:500">${esc(eventBadge(e).label)}</div><div class="page-sub" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.productId ?? "")}</div></div><div class="page-sub" style="font-size:12px;white-space:nowrap">${esc(new Date(e.at).toLocaleString(MM_LOCALE, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}</div></div></div>`).join("") || `<p class="muted" style="margin:0">Rien pour l'instant.</p>`}</div>
+    <div class="card">${events.slice(0, 60).map((e, i, all) => `<div style="display:flex;gap:12px"><div style="display:flex;flex-direction:column;align-items:center;width:8px;flex:none"><i style="width:8px;height:8px;border-radius:50%;background:${dotColor(e.type)};box-shadow:0 0 8px ${dotColor(e.type)};margin-top:6px"></i>${i < all.length - 1 ? `<i style="flex:1;width:1px;background:var(--hair);margin-top:3px"></i>` : ""}</div><div style="flex:1;min-width:0;padding-bottom:14px;display:flex;justify-content:space-between;gap:10px"><div style="min-width:0"><div style="font-size:14px;font-weight:500">${esc(eventBadge(e).label)}</div><div class="page-sub" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(productLabel(e) ?? "")}${e.isSandbox ? " · test" : ""}</div></div><div class="page-sub" style="font-size:12px;white-space:nowrap">${esc(new Date(e.at).toLocaleString(MM_LOCALE, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}</div></div></div>`).join("") || `<p class="muted" style="margin:0">Rien pour l'instant.</p>`}</div>
     <button class="ghost small" data-admin type="button" style="align-self:center">Gérer les accès</button></div>`;
 }
 
@@ -772,4 +801,123 @@ export async function renderPlanet(main) {
   document.getElementById("zOut").onclick = () => g.zoomBy(1 / 1.35);
   document.getElementById("zLoc").onclick = () => { g.reset(); select(null); };
   if (selected) select(selected);
+}
+
+// ── Ordinateur : barre du haut (pas de menu latéral) et Vue d'ensemble façon tableau de bord ──
+document.addEventListener("click", e => { const m = document.getElementById("tbMenu"); if (m && !m.hidden && !e.target.closest(".tb-biz")) { m.hidden = true; document.getElementById("tbPick")?.setAttribute("aria-expanded", "false"); } });
+addEventListener("keydown", e => { if (e.key === "Escape") { const m = document.getElementById("tbMenu"); if (m) m.hidden = true; } });
+const DESK_NAV = [["home", "Vue d'ensemble"], ["feed", "Ventes"], ["apps", "Apps"], ["board", "Classement"]];
+export function renderTopbar() {
+  const bar = document.getElementById("topbar");
+  if (!bar) return;
+  const cur = h.state.view === "project" ? null : TAB_OF[h.state.view] ?? (h.state.view === "settings" ? null : "home");
+  const list = allProjects().length ? allProjects() : h.state.projects.map(p => ({ projectId: p.id, name: p.name }));
+  const curP = h.state.view === "project" ? list.find(p => p.projectId === h.state.projectId) : null;
+  bar.innerHTML = `<button class="tb-logo" data-tb="home" aria-label="Vue d'ensemble"><img src="/logo.png" alt="MoneyMaker"></button>
+    <div class="tb-biz"><button class="tb-pick" id="tbPick" aria-haspopup="menu" aria-expanded="false">${curP ? projectIcon(curP, 20) : ""}<span><bdi>${esc(curP?.name ?? "Tous les business")}</bdi></span>${ic("down", 11)}</button>
+      <div class="tb-menu" id="tbMenu" role="menu" hidden>
+        <button role="menuitem" data-tb="home"><span class="tb-all">${ic("grid", 14)}</span><span>Tous les business</span></button>
+        ${list.map(p => `<button role="menuitem" data-open="${esc(p.projectId)}">${projectIcon(p, 22)}<span><bdi>${esc(p.name)}</bdi></span></button>`).join("")}
+        <div class="tb-sep"></div>
+        <button role="menuitem" id="tbNew"><span class="tb-all">${ic("plus", 14)}</span><span>Nouveau business</span></button>
+      </div></div>
+    <nav class="tb-nav" aria-label="Navigation">${DESK_NAV.map(([k, t]) => `<button data-tb="${k}" class="${k === cur ? "on" : ""}" ${k === cur ? 'aria-current="page"' : ""}>${t}</button>`).join("")}</nav>
+    <div class="tb-right">
+      <a class="tb-icon" href="https://apps.apple.com/app/id6821596839" target="_blank" rel="noopener" title="App iPhone" aria-label="App iPhone">${ic("phone", 17)}</a>
+      <button class="tb-icon ${h.state.view === "settings" ? "on" : ""}" data-tb="settings" title="Réglages" aria-label="Réglages">${ic("gearf", 17)}</button>
+    </div>`;
+  const menu = bar.querySelector("#tbMenu"), pick = bar.querySelector("#tbPick");
+  const close = () => { menu.hidden = true; pick.setAttribute("aria-expanded", "false"); };
+  pick.onclick = e => { e.stopPropagation(); menu.hidden = !menu.hidden; pick.setAttribute("aria-expanded", String(!menu.hidden)); };
+  bar.querySelectorAll("[data-tb]").forEach(b => b.onclick = () => { close(); h.state.focus = null; h.go({ view: b.dataset.tb, projectId: null }); });
+  bar.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { close(); h.openProject(b.dataset.open); });
+  bar.querySelector("#tbNew").onclick = () => { close(); h.newProjectDialog(); };
+}
+
+/** Carte de métrique ordinateur : la tuile de l'app iPhone (surface, grille de points, courbe vline), en grand. */
+function deskCard({ title, icon, value, sub, chart, href, seed, anchor = "topTrailing" }, i) {
+  const tag = href ? "button" : "div";
+  return `<${tag} class="tile anim-in dk-tile ${href ? "" : "static"}" ${href ? `data-href="${href}"` : ""} style="--i:${i}">${dotsCanvas(anchor, seed)}
+    <div class="dk-in">${tileHead(icon, title)}<div class="dk-v">${esc(value)}</div><div class="dk-s">${esc(sub)}</div><div class="dk-chart">${chart}</div></div></${tag}>`;
+}
+function deskCards(o, t) {
+  const cur = o.currency, byDay = mergedByDay(o), days = o.periodDays ?? 30;
+  // Nouveaux clients par jour : seulement les business affichés, hors achats de test.
+  const ids = o.projects.map(p => p.projectId), newByDay = {};
+  for (const e of store.feed) if (ids.includes(e.projectId) && !e.isSandbox && (e.type === "INITIAL_PURCHASE" || e.type === "NON_RENEWING_PURCHASE")) { const k = new Date(e.at).toISOString().slice(0, 10); newByDay[k] = (newByDay[k] ?? 0) + 1e6; }
+  let run = 0;
+  const cards = [
+    { title: "Aujourd'hui", icon: "bolt", value: money(gross(t), t?.currency ?? cur), sub: refundLine(t) ? `Ventes depuis minuit · ${refundLine(t)}` : "Ventes depuis minuit", chart: vline((t?.hourly ?? [0, 0]).map(v => v / 1e6), { money: true }), href: "metric/today", seed: 0 },
+    { title: "MRR", icon: "cycle", value: money(o.mrrMicros, cur), sub: "Revenu récurrent mensuel", chart: vline(dailySeries(byDay, 30).map(d => (run += d.v)), { money: true }), href: "metric/mrr", seed: 1, anchor: "bottomTrailing" },
+    { title: `Revenu ${days} j`, icon: "euro", value: money(o.revenueMicros, cur), sub: o.refundsMicros > 0 ? `${days} derniers jours · −${money(o.refundsMicros, cur)} remboursé` : `${days} derniers jours`, chart: vline(dailySeries(byDay, days).map(d => d.v), { money: true }), href: "metric/revenue", seed: 2 },
+    { title: "Abonnés actifs", icon: "people", value: int(o.activeSubscriptions), sub: "En ce moment", chart: sliderTrack(metricRatio("subscriptions", o)), href: "metric/subscriptions", seed: 3 },
+    { title: "Nouveaux clients", icon: "sparkles", value: int(o.newCustomers), sub: `${days} derniers jours`, chart: vline(dailySeries(newByDay, days).map(d => d.v)), seed: 4, anchor: "bottomLeading" },
+    (o.hasTrials ?? o.activeTrials > 0)
+      ? { title: "Essais en cours", icon: "hourglass", value: int(o.activeTrials), sub: "En ce moment", chart: sliderTrack(metricRatio("trials", o)), href: "metric/trials", seed: 5 }
+      : o.downloads != null
+        ? { title: "Téléchargements", icon: "download", value: int(o.downloads), sub: `${days} derniers jours`, chart: sliderTrack(metricRatio("downloads", o)), href: "metric/downloads", seed: 6 }
+        : { title: "Utilisateurs payants", icon: "card", value: int(payingOf(o)), sub: "En ce moment", chart: vline(dailySeries(byDay, 30).map(d => d.v)), href: "metric/paying", seed: 5 },
+  ];
+  return cards.map(deskCard).join("");
+}
+function deskTable(events) {
+  const rows = events.slice(0, 10).map(e => {
+    const b = eventBadge(e), amt = amountOf(e), p = projectOf(e.projectId) ?? { projectId: e.projectId, name: e.projectName };
+    const who = e.appUserId ? masked(String(e.appUserId)) : "—";
+    return `<tr data-event="${esc(e.id)}"><td><span class="dk-who">${e.country ? `<span>${flag(e.country)}</span>` : ""}<bdi>${esc(who)}</bdi></span></td>
+      <td><span class="dk-proj">${projectIcon(p, 22)}<bdi>${esc(p.name ?? "")}</bdi></span></td>
+      <td>${esc(storeLabel(e.store) ?? "—")}</td><td class="dk-prod"><bdi>${esc(productLabel(e) ?? "—")}</bdi></td>
+      <td>${esc(timeOf(e))}</td><td class="num" style="color:${amt ? amountColor(e) : "inherit"}">${amt ?? "—"}</td><td>${tbadge(b)}</td></tr>`;
+  }).join("");
+  return rows ? `<div class="dk-tablewrap"><table class="dk-table"><thead><tr><th>Client</th><th>Business</th><th>Store</th><th>Produit</th><th>Date</th><th class="num">Montant</th><th>Type</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : `<div class="dk-empty">Tes premières ventes apparaîtront ici dès qu'un store est connecté.</div>`;
+}
+async function renderDeskHome(main) {
+  main.innerHTML = `<div class="dk"><div class="dk-head"><h1>Vue d'ensemble</h1><div class="dk-actions"><span class="dk-upd" id="dkUpd"></span><button class="dk-btn glass" id="dkAll">Toutes les ventes ${ic("right", 11)}</button></div></div>
+    <div class="dk-chips" id="dkChips"></div>
+    <div class="dk-grid" id="dkGrid">${skeleton(6, 210)}</div>
+    <div class="dk-h2"><h2>Transactions récentes</h2><button class="dk-link" id="dkAll2">Tout voir ${ic("right", 11)}</button></div><div id="dkTx"></div>
+    <div class="dk-h2"><h2>Revenus par pays</h2><button class="dk-link" id="dkPlanet">Explorer ${ic("right", 11)}</button></div>
+    <div class="globe-sec" id="dkGlobe"><div class="globe-box"><div id="dkGlobeView" style="position:absolute;inset:0"></div></div><div class="gl-side"><div id="gRank"></div></div></div></div>`;
+  document.getElementById("dkPlanet").onclick = () => h.go({ view: "planet", projectId: null });
+  document.getElementById("dkAll").onclick = document.getElementById("dkAll2").onclick = () => h.go({ view: "feed", projectId: null });
+  const paint = () => {
+    const grid = document.getElementById("dkGrid");
+    if (!grid || !store.overview) return;
+    const sel = selectedProjects(), f = h.state.focus, o = scopeOverview(store.overview), ids = viewIds();
+    const chips = document.getElementById("dkChips");
+    chips.innerHTML = sel.length > 1 ? `<button class="glass ${f ? "" : "on"}" data-focus=""><span class="dk-stack">${sel.slice(0, 3).map(p => projectIcon(p, 22)).join("")}</span><span>Tous les business</span></button>${sel.map(p => `<button class="glass ${f === p.projectId ? "on" : ""}" data-focus="${esc(p.projectId)}">${projectIcon(p, 22)}<bdi>${esc(p.name)}</bdi></button>`).join("")}` : "";
+    chips.querySelectorAll("[data-focus]").forEach(b => b.onclick = () => { h.state.focus = b.dataset.focus || null; paint(); scopeChanged(); });
+    const firstPaint = !grid.querySelector(".dk-tile");
+    grid.innerHTML = deskCards(o, store.today);
+    if (!firstPaint) grid.querySelectorAll(".anim-in").forEach(e => e.classList.remove("anim-in"));
+    hydrate(grid);
+    grid.querySelectorAll("[data-href]").forEach(b => b.onclick = () => { const [view, k] = b.dataset.href.split("/"); h.go({ view, metric: k, projectId: null }); });
+    const tx = document.getElementById("dkTx");
+    const events = store.feed.filter(e => ids.includes(e.projectId) && e.type !== "TEST");
+    tx.innerHTML = deskTable(events);
+    hydrate(tx);
+    tx.querySelectorAll("[data-event]").forEach(r => r.onclick = () => {
+      const e = store.feed.find(x => x.id === r.dataset.event); if (!e) return;
+      if (load("mmOpenAs") === "customer" && e.appUserId) h.go({ view: "customer", customer: { projectId: e.projectId, appUserId: e.appUserId }, projectId: null });
+      else h.go({ view: "tx", event: e, eventRef: { projectId: e.projectId, id: e.id }, projectId: null });
+    });
+    const u = document.getElementById("dkUpd"); if (u) u.textContent = `Mis à jour ${ago(store.at || o.generatedAt)}`;
+    const spots = globeSpots(o.projects, store.feed), cur = o.currency, ranked = spots.filter(x => x.value >= .01).sort((a, b) => b.value - a.value);
+    globe?.setSpots(spots);
+    const list = document.getElementById("gRank");
+    list.innerHTML = `<div class="card flush">${ranked.slice(0, 20).map(x => `<button class="cr" data-cc="${x.cc}"><span class="fl">${flag(x.cc)}</span><span class="bd"><span class="ln"><b>${esc(h.countryName(x.cc))}</b><span>${money(x.value * 1e6, cur, true)}</span></span><span class="br" style="width:${Math.max(1, x.value / ranked[0].value * 100)}%"></span></span></button>`).join("") || `<p class="muted" style="padding:18px;margin:0">Tes premières ventes apparaîtront ici, pays par pays.</p>`}</div>`;
+    list.querySelectorAll("[data-cc]").forEach(b => b.onclick = () => { globe?.setHighlight(b.dataset.cc); globe?.focus(b.dataset.cc); list.querySelectorAll("[data-cc]").forEach(x => x.classList.toggle("on", x === b)); });
+  };
+  let globe = null;
+  try { await ensureStore(); } catch (e) { main.innerHTML = `<div class="empty error">${esc(e.message)}</div>`; return; }
+  paint();
+  renderTopbar();
+  const o0 = scopeOverview(store.overview);
+  mountGlobe(document.getElementById("dkGlobeView"), { spots: globeSpots(o0.projects, store.feed), onTap: cc => h.go({ view: "planet", planetCC: cc ?? null, projectId: null }) })
+    .then(g => { if (!document.getElementById("dkGlobeView")) return g.destroy(); globe = g; cleanups.push(() => g.destroy()); }).catch(() => {});
+  h.onStoreChange = paint;
+  cleanups.push(() => { h.onStoreChange = null; });
+  const tick = setInterval(() => { if (!document.hidden) refresh().then(() => h.onStoreChange?.()).catch(() => {}); }, 60000);
+  cleanups.push(() => clearInterval(tick));
 }

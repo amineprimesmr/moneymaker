@@ -3,7 +3,7 @@
 Tout est prêt et testé en production. Il reste à **envoyer les deux formulaires** (comptes d'Amine).
 Identifiants du compte relecteur : `submission/reviewer-credentials.txt` (local, ignoré par git ;
 régénérer : `cd backend/functions && GCLOUD_PROJECT=moneymaker-io node tests/seed-reviewer.cjs`).
-Re-vérifier avant d'envoyer : `cd backend/functions && node tests/mcp-prod-check.mjs` (OAuth réel + 52 outils).
+Re-vérifier avant d'envoyer : `cd backend/functions && node tests/mcp-prod-check.mjs` (OAuth réel + 73 outils).
 
 ## Champs communs
 
@@ -19,17 +19,17 @@ Re-vérifier avant d'envoyer : `cd backend/functions && node tests/mcp-prod-chec
 | Documentation | https://usemoneymaker.com/mcp-docs |
 | Confidentialité | https://usemoneymaker.com/privacy (section « Assistants IA ») |
 | Conditions | https://usemoneymaker.com/terms |
-| Support | https://usemoneymaker.com/support |
+| Support | https://usemoneymaker.com/support · support@usemoneymaker.com |
 | Logo | `dashboard/public/icon-512.png` (512×512) |
 | Catégorie | Finance / Business analytics |
-| Outils | 68 : 43 lecture (`readOnlyHint`), 20 écriture, 5 suppressions (`destructiveHint`, `confirm: true`). Liste : `/mcp-docs` |
+| Outils | 73 : 44 lecture (`readOnlyHint`), 23 écriture, 6 suppressions (`destructiveHint`, `confirm: true`). Liste : `/mcp-docs` |
 
 **Description courte (EN)** : Revenue and subscription analytics for your apps — MRR, subscribers, customers, App Store rankings, reviews and finance.
 
 **Description courte (FR)** : Les revenus et abonnements de tes apps — MRR, abonnés, clients, classements App Store, avis et finance.
 
 **Description longue (EN)** :
-MoneyMaker tracks in-app subscription revenue across the App Store, Google Play, Stripe, Paddle, Amazon and Roku. Connect it to ask about MRR, revenue, active subscribers, trials, churn, LTV and cohorts across all your apps; open a customer's full history; follow App Store rankings, ratings and reviews; see VAT, store fees and net income; and get anomaly alerts and insights. With write access, the assistant can create a business, update offerings, tracked apps, alert preferences, expenses, promotional access and team invitations — always with your approval, and every change is recorded in the audit log. Store credentials are never exposed. Read-only access is available.
+MoneyMaker tracks in-app subscription revenue across the App Store, Google Play, Stripe, Paddle, Amazon and Roku. Connect it to ask about MRR, revenue, active subscribers, trials, churn, LTV and cohorts across all your apps; open a customer's full history; follow App Store rankings, ratings and reviews; see VAT, store fees and net income; and get anomaly alerts and insights. With write access, the assistant can create a business, update offerings, tracked apps, alert preferences, expenses, promotional access and team invitations — always with your approval, and every change is recorded in the audit log. Store credentials sent through the connection tools are stored server-side and never read back or returned. Read-only access is available.
 
 **Exemples de questions** :
 1. « How much did I make this week across all my apps? »

@@ -1,6 +1,6 @@
 # MoneyMaker: App Store listing, en-US
 
-Text of the en-US listing for version 1.1 (app id 6821596839).
+Text of the en-US listing for version 1.1.1 (app id 6821596839).
 
 | Field | Limit | Used |
 |---|---|---|
@@ -50,11 +50,17 @@ APP STORE
 LEADERBOARD
 • Compare your verified revenue with other businesses, if you choose to appear
 
-FREE TO START
-• The free plan tracks one business
-• MoneyMaker Pro unlocks unlimited businesses, charts, ratings, and app health with a one-time purchase, no subscription
+100% FREE
+• During launch, everything is free: unlimited businesses, charts, ratings, and app health
+• Got an idea or found a bug? Tell us right from the app menu
 
 Create your account right in the app, then connect your revenue sources in minutes. Tax estimates are for guidance only and don't replace an accountant.
+
+## What's New in 1.1.1
+
+• MoneyMaker is now 100% free for early users: unlimited businesses and every feature
+• New: share your feedback from the menu, every message comes straight to us
+• Minor fixes
 
 ## What's New in 1.1
 

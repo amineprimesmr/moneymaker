@@ -95,7 +95,8 @@ export function matchAudience(f: AudienceFilters, c: CustomerRow, now = Date.now
   return true;
 }
 
-const csvCell = (v: unknown) => { const s = v == null ? "" : String(v); return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+// Une cellule qui commence par = + - @ est neutralisée (injection de formule dans Excel / Sheets).
+const csvCell = (v: unknown) => { const s0 = v == null ? "" : String(v); const s = /^[=+\-@\t\r]/.test(s0) && !/^-?\d/.test(s0) ? `'${s0}` : s0; return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 
 export function audienceCsv(rows: CustomerRow[], now = Date.now()): string {
   const head = ["app_user_id", "status", "country", "first_seen_at", "total_spent_micros", "active_entitlements", "stores", "products", "apple_ads_campaign"];

@@ -7,12 +7,18 @@ import com.android.billingclient.api.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import org.json.JSONException
 import org.json.JSONObject
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.security.MessageDigest
 import java.util.UUID
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
  * MoneyMaker — subscriptions for Google Play, App Store and Stripe on your own backend.
@@ -22,6 +28,9 @@ import java.util.UUID
  * MoneyMaker.shared.customerInfo.collect { if (it?.isEntitled("premium") == true) … }
  * MoneyMaker.shared.purchase(activity, offerings.current!!.packages.first())
  * ```
+ *
+ * Consumable one-time products (coins, credits…) must be declared with `consumableProductIds`: they are sent as
+ * `consumable` and consumed after the server validated them, so they can be bought again.
  */
 class MoneyMaker private constructor(
     context: Context,
@@ -30,23 +39,37 @@ class MoneyMaker private constructor(
     private val baseUrl: String,
     /** Signature checking of customer-info responses (trusted entitlements). */
     val entitlementVerification: EntitlementVerificationMode = EntitlementVerificationMode.INFORMATIONAL,
+    consumableProductIds: Set<String> = emptySet(),
 ) : PurchasesUpdatedListener {
 
     companion object {
+        const val SDK_VERSION = "1.2.0"
         const val DEFAULT_BASE_URL = "https://usemoneymaker.com/v1"
-        /** Ed25519 key of the hosted service (GET /v1/signing-key), pinned for DEFAULT_BASE_URL. */
+        /** Ed25519 key of the hosted service (GET /v1/signing-key), pinned for the hosted API hosts below. */
         const val HOSTED_SIGNING_KEY = "9F7dzH51ASV9YKJmckzwJPTmNzoaefMzuOPPz2xXOBA="
+        /** Hosts serving the hosted API (same signing key): usemoneymaker.com and the former Firebase Hosting domain. */
+        internal val HOSTED_HOSTS = setOf("usemoneymaker.com", "moneymaker-io.web.app")
+        private const val CONNECT_TIMEOUT_MS = 30_000L
         @Volatile private var instance: MoneyMaker? = null
 
         val shared: MoneyMaker get() = instance ?: error("Call MoneyMaker.configure(context, apiKey) first")
         val isConfigured: Boolean get() = instance != null
 
+        /**
+         * @param consumableProductIds Play one-time products that are consumable (coins, credits…): consumed after
+         * server validation so they can be bought again. Other one-time products are non-consumable.
+         */
         @JvmStatic @JvmOverloads
         fun configure(
             context: Context, apiKey: String, appUserId: String? = null, baseUrl: String = DEFAULT_BASE_URL,
             entitlementVerification: EntitlementVerificationMode = EntitlementVerificationMode.INFORMATIONAL,
+            consumableProductIds: Set<String> = emptySet(),
         ): MoneyMaker =
-            instance ?: synchronized(this) { instance ?: MoneyMaker(context.applicationContext, apiKey, appUserId, baseUrl, entitlementVerification).also { instance = it } }
+            instance ?: synchronized(this) { instance ?: MoneyMaker(context.applicationContext, apiKey, appUserId, baseUrl, entitlementVerification, consumableProductIds).also { instance = it } }
+
+        /** True when [baseUrl] is the hosted API (its signing key is pinned in the SDK). */
+        internal fun isHostedBaseUrl(baseUrl: String): Boolean =
+            runCatching { java.net.URI(baseUrl).host.lowercase() in HOSTED_HOSTS }.getOrDefault(false)
 
         /** Ed25519 public key (base64 raw, from GET /v1/signing-key) pinned in the app. Null → fetched once and pinned (TOFU). */
         @JvmStatic var signingPublicKey: String? = null
@@ -59,9 +82,17 @@ class MoneyMaker private constructor(
     private val prefs: SharedPreferences = context.getSharedPreferences("moneymaker.${apiKey.takeLast(8)}", Context.MODE_PRIVATE)
     private val api = Api(baseUrl, apiKey)
     private val billing = BillingClient.newBuilder(context).setListener(this)
-        .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build()).build()
+        .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
+        .enableAutoServiceReconnection()
+        .build()
+    private val connectMutex = Mutex()
     private var pendingPurchase: CompletableDeferred<PurchaseResult>? = null
-    private val productDetails = mutableMapOf<String, ProductDetails>()
+    private val productDetails = java.util.concurrent.ConcurrentHashMap<String, ProductDetails>()
+    /** Offer chosen at purchase time, per product (price / period hints sent with the purchase token). */
+    private val chosenOffers = java.util.concurrent.ConcurrentHashMap<String, OfferCandidate>()
+
+    /** One-time products to consume after server validation (see [configure]). Can be changed at runtime. */
+    @Volatile var consumableProductIds: Set<String> = consumableProductIds.toSet()
     /** Test Store key (`mm_test_…`): never talks to Google Play; purchases are sandbox grants on the server. */
     val isTestStore: Boolean = apiKey.startsWith("mm_test_")
     private val pending = PendingPurchaseQueue(prefs)
@@ -105,14 +136,22 @@ class MoneyMaker private constructor(
     }
 
     // ── Identity ─────────────────────────────────────────────────────────
+    /**
+     * Identifies the user. Purchases made while anonymous are moved to this id, then the purchases owned by the
+     * Google account are re-synced (same as iOS). The current id only changes once the server answered:
+     * on failure the SDK stays on the previous id.
+     */
     suspend fun logIn(newAppUserId: String): CustomerInfo {
+        require(newAppUserId.isNotBlank()) { "appUserId must not be blank" }
         if (newAppUserId == appUserId) return refreshCustomerInfo()
         val previous = appUserId
-        appUserId = newAppUserId
         val info = if (previous.startsWith("\$anon:"))
             fetchCustomerInfo("customers/${enc(previous)}/alias", JSONObject().put("newAppUserId", newAppUserId))
         else fetchCustomerInfo("customers/${enc(newAppUserId)}")
-        return publish(info)
+        appUserId = newAppUserId
+        publish(info)
+        if (!isTestStore) runCatching { connect(); syncExistingPurchases() }
+        return _customerInfo.value?.takeIf { it.appUserId == newAppUserId } ?: info
     }
 
     fun logOut() {
@@ -146,7 +185,7 @@ class MoneyMaker private constructor(
         val owned = runCatching {
             connect()
             listOf(BillingClient.ProductType.SUBS, BillingClient.ProductType.INAPP).flatMap { type ->
-                billing.queryPurchasesAsync(QueryPurchasesParams.newBuilder().setProductType(type).build()).purchasesList
+                queryPurchases(type)
                     .filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
                     .flatMap { p -> p.products.map { it to p.purchaseTime } }
             }
@@ -158,7 +197,9 @@ class MoneyMaker private constructor(
     private suspend fun fetchCustomerInfo(path: String, body: JSONObject? = null): CustomerInfo {
         val nonce = UUID.randomUUID().toString()
         val r = api.raw(path, if (body == null) "GET" else "POST", body, mapOf("X-Nonce" to nonce))
-        val info = CustomerInfo.fromJson(JSONObject(r.body))
+        val info = try { CustomerInfo.fromJson(JSONObject(r.body)) } catch (e: JSONException) {
+            throw MoneyMakerException("invalid_response", "Invalid customer info from /$path", r.status, cause = e)
+        }
         if (entitlementVerification == EntitlementVerificationMode.DISABLED || !SignatureVerifier.isSupported) return info
         val key = signingKey() ?: return if (entitlementVerification == EntitlementVerificationMode.ENFORCED) info.revokingEntitlements() else info
         val ok = SignatureVerifier.verify(key, r.headers["x-moneymaker-signature"], nonce, r.headers["x-request-time"], r.body.toByteArray())
@@ -171,7 +212,7 @@ class MoneyMaker private constructor(
 
     private suspend fun signingKey(): String? {
         signingPublicKey?.let { return it }
-        if (baseUrl.startsWith(DEFAULT_BASE_URL)) return HOSTED_SIGNING_KEY
+        if (isHostedBaseUrl(baseUrl)) return HOSTED_SIGNING_KEY
         prefs.getString("signingKey", null)?.let { return it }
         val k = runCatching { api.get("signing-key").getString("publicKey") }.getOrNull() ?: return null
         prefs.edit().putString("signingKey", k).apply()
@@ -182,7 +223,7 @@ class MoneyMaker private constructor(
         runCatching { JSONObject(s).let { o -> o.keys().asSequence().associateWith { k -> o.getJSONArray(k).let { a -> (0 until a.length()).map(a::getString) } } } }.getOrNull()
     }
 
-    /** Re-posts purchases queued while offline. */
+    /** Re-posts purchases queued while offline (and consumes the consumables the server accepted). */
     suspend fun flushPendingPurchases() {
         if (isTestStore || flushing) return
         flushing = true
@@ -192,6 +233,7 @@ class MoneyMaker private constructor(
                 try {
                     last = fetchCustomerInfo("customers/${enc(item.appUserId)}/google", item.body)
                     pending.remove(item.purchaseToken)
+                    if (item.body.optString("type") == "consumable") consume(item.purchaseToken)
                 } catch (e: Exception) {
                     if (isRetryable(e)) break
                     pending.remove(item.purchaseToken) // rejected (4xx): retrying won't help
@@ -209,7 +251,7 @@ class MoneyMaker private constructor(
     /** Balances of the virtual currencies configured in the dashboard (credited automatically on purchases).
      *  Spending is server-side only (secret key): POST /v1/customers/{id}/wallet/{code}/spend. */
     suspend fun virtualCurrencies(): Map<String, VirtualCurrencyBalance> {
-        val obj = JSONObject(api.raw("customers/${enc(appUserId)}/wallet", "GET", null).body).optJSONObject("virtualCurrencies") ?: JSONObject()
+        val obj = api.get("customers/${enc(appUserId)}/wallet").optJSONObject("virtualCurrencies") ?: JSONObject()
         return obj.keys().asSequence().associateWith { k ->
             val c = obj.getJSONObject(k)
             VirtualCurrencyBalance(c.optString("code", k), c.optString("name", k), c.optLong("balance", 0))
@@ -220,6 +262,11 @@ class MoneyMaker private constructor(
     private val appVersion: String? = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
     var offerings: Offerings? = null; private set
 
+    /**
+     * Loads the offerings configured in the dashboard and the Play product details.
+     * Throws [MoneyMakerException] when the API is unreachable or rejects the request (never returns empty offerings
+     * silently). On a device without Google Play (`BILLING_UNAVAILABLE`) offerings are returned with `product == null`.
+     */
     suspend fun loadOfferings(): Offerings {
         val q = buildList {
             add("appUserId=${enc(appUserId)}"); add("platform=android")
@@ -231,9 +278,12 @@ class MoneyMaker private constructor(
         val raw = json.optJSONObject("offerings") ?: JSONObject()
         val ids = mutableSetOf<String>()
         raw.keys().forEach { k -> raw.getJSONObject(k).optJSONArray("packages")?.let { a ->
-            for (i in 0 until a.length()) a.getJSONObject(i).optJSONObject("productIds")?.optString("play_store")?.takeIf { it.isNotEmpty() }?.let(ids::add)
+            for (i in 0 until a.length()) a.getJSONObject(i).optJSONObject("productIds")?.optString("play_store")?.takeIf { it.isNotEmpty() }?.let { ids.add(playProductId(it)) }
         } }
-        if (!isTestStore) loadProducts(ids)
+        if (!isTestStore) try { loadProducts(ids) } catch (e: MoneyMakerException) {
+            if (e.billingResponseCode != BillingClient.BillingResponseCode.BILLING_UNAVAILABLE) throw e
+            android.util.Log.w("MoneyMaker", "Google Play Billing unavailable on this device: offerings without Play products")
+        }
         val all = raw.keys().asSequence().associateWith { k ->
             val o = raw.getJSONObject(k)
             val pk = o.optJSONArray("packages")
@@ -242,7 +292,7 @@ class MoneyMaker private constructor(
                 val pids = p.optJSONObject("productIds") ?: JSONObject()
                 val meta = p.optJSONObject("metadata") ?: JSONObject()
                 Package(p.getString("id"), pids.keys().asSequence().associateWith { pids.getString(it) },
-                    meta.keys().asSequence().associateWith { meta.get(it).toString() }, productDetails[pids.optString("play_store")], isTestStore)
+                    meta.keys().asSequence().associateWith { meta.get(it).toString() }, productDetails[playProductId(pids.optString("play_store"))], isTestStore)
             })
         }
         val pl = json.optJSONObject("placements") ?: JSONObject()
@@ -286,10 +336,14 @@ class MoneyMaker private constructor(
         trackAdRevenue(valueMicros, currencyCode, precision, adUnitId, network, placement, "impression")
 
     // ── Purchases ────────────────────────────────────────────────────────
-    suspend fun purchase(activity: Activity, pkg: Package, offerToken: String? = null): PurchaseResult {
-        if (isTestStore) return testPurchase(pkg.productIds["play_store"] ?: pkg.id)
+    /**
+     * Buys a package. Subscriptions: the base plan without offer is bought unless [offerToken] or [offerId] is given
+     * (a `play_store` id of the form `productId:basePlanId` selects that base plan).
+     */
+    suspend fun purchase(activity: Activity, pkg: Package, offerToken: String? = null, offerId: String? = null): PurchaseResult {
+        if (isTestStore) return testPurchase(pkg.productIds["play_store"]?.let(::playProductId) ?: pkg.id)
         val details = pkg.product ?: throw MoneyMakerException("product_not_found", "Play product ${pkg.productIds["play_store"]} not found")
-        return purchase(activity, details, offerToken)
+        return purchase(activity, details, offerToken, basePlanId = pkg.productIds["play_store"]?.let(::playBasePlanId), offerId = offerId)
     }
 
     /** Test Store purchase (mm_test_ key): sandbox grant on the server, no Google Play. */
@@ -298,12 +352,23 @@ class MoneyMaker private constructor(
         return PurchaseResult.Success(publish(fetchCustomerInfo("customers/${enc(appUserId)}/test-purchase", JSONObject().put("productId", productId))))
     }
 
-    suspend fun purchase(activity: Activity, details: ProductDetails, offerToken: String? = null): PurchaseResult {
+    /**
+     * Buys a Play product. Subscriptions: [offerToken] wins, then [offerId] (within [basePlanId] when given),
+     * otherwise the base plan **without offer** ([basePlanId], or the first base plan).
+     */
+    suspend fun purchase(activity: Activity, details: ProductDetails, offerToken: String? = null,
+                         basePlanId: String? = null, offerId: String? = null): PurchaseResult {
         if (isTestStore) return testPurchase(details.productId)
         connect()
+        val offer = if (details.productType == BillingClient.ProductType.SUBS) {
+            selectOffer(details.offerCandidates(), offerToken, basePlanId, offerId)
+                ?: throw MoneyMakerException("offer_not_found", "No subscription offer for ${details.productId}" +
+                    listOfNotNull(offerToken?.let { "offerToken" }, basePlanId?.let { "basePlanId=$it" }, offerId?.let { "offerId=$it" })
+                        .takeIf { it.isNotEmpty() }?.joinToString(prefix = " (", postfix = ")").orEmpty())
+        } else null
+        offer?.let { chosenOffers[details.productId] = it }
         val params = BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(details).apply {
-            val token = offerToken ?: details.subscriptionOfferDetails?.firstOrNull()?.offerToken
-            if (token != null) setOfferToken(token)
+            if (offer != null) setOfferToken(offer.offerToken)
         }.build()
         val flow = BillingFlowParams.newBuilder().setProductDetailsParamsList(listOf(params))
             .setObfuscatedAccountId(sha256Hex(appUserId)).build()
@@ -312,7 +377,7 @@ class MoneyMaker private constructor(
         val launch = billing.launchBillingFlow(activity, flow)
         if (launch.responseCode != BillingClient.BillingResponseCode.OK) {
             pendingPurchase = null
-            throw MoneyMakerException("billing_${launch.responseCode}", launch.debugMessage)
+            throw billingError(launch, "launchBillingFlow")
         }
         return deferred.await()
     }
@@ -364,24 +429,30 @@ class MoneyMaker private constructor(
                 } catch (e: Exception) { deferred?.completeExceptionally(e) }
             }
             BillingClient.BillingResponseCode.USER_CANCELED -> deferred?.complete(PurchaseResult.UserCancelled)
-            else -> deferred?.completeExceptionally(MoneyMakerException("billing_${result.responseCode}", result.debugMessage))
+            else -> deferred?.completeExceptionally(billingError(result, "purchase"))
         }
     }
 
     // ── Internals ────────────────────────────────────────────────────────
     private suspend fun post(p: Purchase): CustomerInfo {
         val productId = p.products.first()
-        val details = productDetails[productId] ?: loadProducts(setOf(productId)).let { productDetails[productId] }
+        val details = productDetails[productId] ?: runCatching { loadProducts(setOf(productId)) }.let { productDetails[productId] }
         val isSub = details?.productType == BillingClient.ProductType.SUBS
-        val phase = details?.subscriptionOfferDetails?.firstOrNull()?.pricingPhases?.pricingPhaseList?.lastOrNull()
-        val body = JSONObject().put("purchaseToken", p.purchaseToken).put("productId", productId)
-            .put("type", if (isSub) "subscription" else "non_consumable")
-        if (phase != null) body.put("priceMicros", phase.priceAmountMicros).put("currency", phase.priceCurrencyCode).put("period", phase.billingPeriod)
-        details?.oneTimePurchaseOfferDetails?.let { body.put("priceMicros", it.priceAmountMicros).put("currency", it.priceCurrencyCode) }
-        // The backend verifies with Google and acknowledges the purchase server-side, only once it accepted it.
+        val type = purchaseType(isSub, productId, consumableProductIds)
+        // Hints: the offer bought in this session, else the purchase's own base plan when unambiguous.
+        val offer = if (isSub) chosenOffers[productId] ?: details.offerCandidates().let { c ->
+            c.map { it.basePlanId }.distinct().singleOrNull()?.let { selectOffer(c, basePlanId = it) }
+        } else null
+        val oneTime = details?.oneTimePurchaseOfferDetails
+        val body = googlePurchaseBody(p.purchaseToken, productId, type, offer, oneTime?.priceAmountMicros, oneTime?.priceCurrencyCode)
+        // The backend verifies with Google and acknowledges the purchase server-side, only once it accepted it
+        // (consumables are not acknowledged by the server: they are consumed here, after validation).
         // Offline / 5xx: queue the token (retried later), entitlements computed on device meanwhile.
         return try {
-            publish(fetchCustomerInfo("customers/${enc(appUserId)}/google", body)).also { pending.remove(p.purchaseToken) }
+            val info = fetchCustomerInfo("customers/${enc(appUserId)}/google", body)
+            pending.remove(p.purchaseToken)
+            if (type == "consumable") consume(p.purchaseToken)
+            publish(info)
         } catch (e: MoneyMakerException) {
             if (!isRetryable(e)) throw e
             pending.enqueue(PendingPurchaseQueue.Item(p.purchaseToken, appUserId, body))
@@ -398,31 +469,79 @@ class MoneyMaker private constructor(
         return publish(fetchCustomerInfo("customers/${enc(appUserId)}/$store", body))
     }
 
+    /** Re-posts every owned purchase (idempotent server-side); unconsumed consumables are consumed once accepted. */
     private suspend fun syncExistingPurchases() {
         for (type in listOf(BillingClient.ProductType.SUBS, BillingClient.ProductType.INAPP)) {
-            val res = billing.queryPurchasesAsync(QueryPurchasesParams.newBuilder().setProductType(type).build())
-            res.purchasesList.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }.forEach { runCatching { post(it) } }
+            queryPurchases(type).filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }.forEach { runCatching { post(it) } }
+        }
+    }
+
+    private suspend fun queryPurchases(type: String): List<Purchase> = suspendCancellableCoroutine { cont ->
+        billing.queryPurchasesAsync(QueryPurchasesParams.newBuilder().setProductType(type).build()) { r, list ->
+            if (!cont.isActive) return@queryPurchasesAsync
+            if (r.responseCode == BillingClient.BillingResponseCode.OK) cont.resume(list) else cont.resumeWithException(billingError(r, "queryPurchases"))
+        }
+    }
+
+    /** Consumes a consumable once the server accepted it (consuming also acknowledges it), so it can be bought again. */
+    private suspend fun consume(purchaseToken: String) {
+        try {
+            connect()
+            val r = suspendCancellableCoroutine<BillingResult> { cont ->
+                billing.consumeAsync(ConsumeParams.newBuilder().setPurchaseToken(purchaseToken).build()) { result, _ -> if (cont.isActive) cont.resume(result) }
+            }
+            if (r.responseCode != BillingClient.BillingResponseCode.OK && r.responseCode != BillingClient.BillingResponseCode.ITEM_NOT_OWNED)
+                android.util.Log.w("MoneyMaker", "consume failed (${r.responseCode}): ${r.debugMessage}; retried at the next purchase sync")
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            android.util.Log.w("MoneyMaker", "consume failed: ${e.message}; retried at the next purchase sync")
         }
     }
 
     private suspend fun loadProducts(ids: Set<String>) {
         if (ids.isEmpty()) return
         connect()
+        val fetched = mutableSetOf<String>()
         for (type in listOf(BillingClient.ProductType.SUBS, BillingClient.ProductType.INAPP)) {
             val params = QueryProductDetailsParams.newBuilder().setProductList(ids.map {
                 QueryProductDetailsParams.Product.newBuilder().setProductId(it).setProductType(type).build()
             }).build()
-            billing.queryProductDetails(params).productDetailsList?.forEach { productDetails[it.productId] = it }
+            // PBL 8: QueryProductDetailsResult = fetched productDetailsList + unfetchedProductList (with a status code).
+            val result = suspendCancellableCoroutine<QueryProductDetailsResult> { cont ->
+                billing.queryProductDetailsAsync(params) { r, res ->
+                    if (!cont.isActive) return@queryProductDetailsAsync
+                    if (r.responseCode == BillingClient.BillingResponseCode.OK) cont.resume(res) else cont.resumeWithException(billingError(r, "queryProductDetails"))
+                }
+            }
+            result.productDetailsList.forEach { productDetails[it.productId] = it; fetched += it.productId }
         }
+        // Each id is queried as SUBS and INAPP, so it is "unfetched" for one of them: only report ids missing from both.
+        (ids - fetched).takeIf { it.isNotEmpty() }?.let { android.util.Log.w("MoneyMaker", "Play products not found or unavailable: ${it.joinToString()}") }
     }
 
+    /**
+     * Connects to Play Billing. Throws [MoneyMakerException] (`billing_<code>`) when setup fails
+     * (e.g. `BILLING_UNAVAILABLE`), when the service disconnects before setup finished, or after 30 s.
+     */
     private suspend fun connect() {
         if (billing.isReady) return
-        suspendCancellableCoroutine { cont ->
-            billing.startConnection(object : BillingClientStateListener {
-                override fun onBillingSetupFinished(r: BillingResult) { if (cont.isActive) cont.resumeWith(Result.success(Unit)) }
-                override fun onBillingServiceDisconnected() {}
-            })
+        connectMutex.withLock {
+            if (billing.isReady) return
+            val r = try {
+                withTimeout(CONNECT_TIMEOUT_MS) {
+                    suspendCancellableCoroutine<BillingResult> { cont ->
+                        billing.startConnection(object : BillingClientStateListener {
+                            override fun onBillingSetupFinished(r: BillingResult) { if (cont.isActive) cont.resume(r) }
+                            override fun onBillingServiceDisconnected() {
+                                if (cont.isActive) cont.resumeWithException(billingError(BillingClient.BillingResponseCode.SERVICE_DISCONNECTED, "disconnected before setup finished", "connect"))
+                            }
+                        })
+                    }
+                }
+            } catch (e: TimeoutCancellationException) {
+                throw billingError(BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE, "setup timed out after 30 s", "connect")
+            }
+            if (r.responseCode != BillingClient.BillingResponseCode.OK) throw billingError(r, "connect")
         }
     }
 
@@ -443,45 +562,75 @@ class MoneyMaker private constructor(
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 }
 
-class MoneyMakerException(val code: String, message: String) : Exception(message)
+/**
+ * Error thrown by the SDK. [code] is the server error code (`invalid_api_key`…), `http_<status>`, `network`,
+ * `invalid_response`, `product_not_found`, `offer_not_found` or `billing_<responseCode>` (Play Billing).
+ */
+class MoneyMakerException @JvmOverloads constructor(
+    val code: String,
+    message: String,
+    /** HTTP status for API errors, 0 otherwise. */
+    val status: Int = 0,
+    /** Play Billing response code for `billing_<n>` errors. */
+    val billingResponseCode: Int? = null,
+    cause: Throwable? = null,
+) : Exception(message, cause) {
+    /** Network failure, 5xx or 429: worth retrying later (purchases are queued). */
+    val isRetryable: Boolean get() = code == "network" || status >= 500 || status == 429
+}
 
 data class VirtualCurrencyBalance(val code: String, val name: String, val balance: Long)
 
-internal class Api(private val baseUrl: String, private val apiKey: String) {
+internal class Api(
+    private val baseUrl: String,
+    private val apiKey: String,
+    private val retryDelayMs: Long = 400,
+    private val maxAttempts: Int = 3,
+) {
     suspend fun get(path: String) = request(path, "GET", null)
     suspend fun post(path: String, body: JSONObject) = request(path, "POST", body)
 
-    class RawResponse(val body: String, val headers: Map<String, String>)
+    class RawResponse(val body: String, val headers: Map<String, String>, val status: Int = 200)
 
-    private suspend fun request(path: String, method: String, body: JSONObject?): JSONObject =
-        runCatching { JSONObject(raw(path, method, body).body) }.getOrDefault(JSONObject())
+    /** JSON body of a 2xx response. Throws [MoneyMakerException] on any failure (never an empty object). */
+    suspend fun request(path: String, method: String, body: JSONObject?): JSONObject {
+        val r = raw(path, method, body)
+        return try { JSONObject(r.body) } catch (e: JSONException) {
+            throw MoneyMakerException("invalid_response", "Invalid JSON from $method /$path", r.status, cause = e)
+        }
+    }
 
-    /** Raw 2xx body + lower-cased headers (body bytes are needed to verify signatures). Retries network / 5xx. */
+    /** Raw 2xx body + lower-cased headers (body bytes are needed to verify signatures). Retries network errors and every 5xx. */
     suspend fun raw(path: String, method: String, body: JSONObject?, headers: Map<String, String> = emptyMap()): RawResponse = withContext(Dispatchers.IO) {
-        var last: Exception = MoneyMakerException("network", "unknown")
-        repeat(3) { attempt ->
-            try {
-                val c = (URL("$baseUrl/$path").openConnection() as HttpURLConnection).apply {
-                    requestMethod = method; connectTimeout = 15000; readTimeout = 20000
-                    setRequestProperty("Authorization", "Bearer $apiKey")
-                    setRequestProperty("Content-Type", "application/json")
-                    setRequestProperty("User-Agent", "MoneyMaker-Android/1.0")
-                    headers.forEach { (k, v) -> setRequestProperty(k, v) }
-                    if (body != null) { doOutput = true; outputStream.use { it.write(body.toString().toByteArray()) } }
-                }
-                val code = c.responseCode
-                val text = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: "{}"
-                val json = runCatching { JSONObject(text) }.getOrDefault(JSONObject())
-                if (code in 200..299) return@withContext RawResponse(text, c.headerFields.filterKeys { it != null }.mapKeys { it.key.lowercase() }.mapValues { it.value.firstOrNull() ?: "" })
-                val err = MoneyMakerException(json.optString("error", "http_$code"), json.optString("message"))
-                if (code < 500) throw err
-                last = err
-            } catch (e: MoneyMakerException) {
-                if (!e.code.startsWith("http_5") && e.code != "internal_error") throw e
-                last = e
-            } catch (e: Exception) { last = MoneyMakerException("network", e.message ?: "network error") }
-            delay(400L * (attempt + 1))
+        var last = MoneyMakerException("network", "unknown network error")
+        for (attempt in 0 until maxAttempts) {
+            if (attempt > 0) delay(retryDelayMs * attempt)
+            val r = try { exchange(path, method, body, headers) } catch (e: IOException) {
+                last = MoneyMakerException("network", e.message ?: "network error", cause = e); continue
+            }
+            if (r.status in 200..299) return@withContext r
+            val json = runCatching { JSONObject(r.body) }.getOrNull()
+            val err = MoneyMakerException(json?.optString("error")?.takeIf { it.isNotEmpty() } ?: "http_${r.status}",
+                json?.optString("message")?.takeIf { it.isNotEmpty() } ?: "HTTP ${r.status} on $method /$path", r.status)
+            if (r.status < 500) throw err // 4xx: retrying won't help (429 is retryable at the queue level)
+            last = err
         }
         throw last
+    }
+
+    private fun exchange(path: String, method: String, body: JSONObject?, headers: Map<String, String>): RawResponse {
+        val c = (URL("$baseUrl/$path").openConnection() as HttpURLConnection)
+        try {
+            c.requestMethod = method; c.connectTimeout = 15000; c.readTimeout = 20000
+            c.setRequestProperty("Authorization", "Bearer $apiKey")
+            c.setRequestProperty("Content-Type", "application/json")
+            c.setRequestProperty("User-Agent", "MoneyMaker-Android/${MoneyMaker.SDK_VERSION}")
+            headers.forEach { (k, v) -> c.setRequestProperty(k, v) }
+            if (body != null) { c.doOutput = true; c.outputStream.use { it.write(body.toString().toByteArray()) } }
+            val code = c.responseCode
+            val text = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+            val h = c.headerFields.filterKeys { it != null }.mapKeys { it.key.lowercase() }.mapValues { it.value.firstOrNull() ?: "" }
+            return RawResponse(text, h, code)
+        } finally { c.disconnect() }
     }
 }

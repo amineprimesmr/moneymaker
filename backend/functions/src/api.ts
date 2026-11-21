@@ -6,13 +6,13 @@ import { FieldValue } from "firebase-admin/firestore";
 import { HttpError, cleanId, Purchase, convertMicros, readableProductId } from "./engine";
 import type { Credentials } from "./store";
 import {
-  db, getProject, createProject, customerInfo, mergeCustomers, touchCustomer, resolveKey, issueKey, revokeProjectKeys,
+  db, getProject, createProject, customerInfo, mergeCustomers, isAnonymousId, touchCustomer, resolveKey, issueKey, revokeProjectKeys, revokeKeysIssuedBy,
   upsertPurchase, lookupIndex, accountUUID, Project, ProjectConfig, getCredentials, KeyRecord, DEFAULT_CONFIG, CustomerCenterConfig,
 } from "./store";
 import { ingestAppleTransaction, ingestAppleNotification } from "./apple";
 import { sanitizeRefundControl, refundStats, DEFAULT_REFUND_CONTROL } from "./refund";
 import { ingestGooglePurchase, ingestGoogleNotification } from "./google";
-import { ingestStripeWebhook, createCheckout, createPortal } from "./stripe";
+import { ingestStripeWebhook, createCheckout, createPortal, guessableCustomerId } from "./stripe";
 import { sanitizeWeb, publicOffering, withPrices, webCheckout, webSuccess, webPortal, manageLink, redeemWebPurchase } from "./web";
 import { ingestPaddleWebhook } from "./paddle";
 import { ingestAmazonPurchase, ingestAmazonNotification } from "./amazon";
@@ -338,6 +338,12 @@ route("POST", "/v1/webhooks/stripe/:pid", async (req, _res, [pid]) => {
   return r;
 });
 
+/** En-tête de téléchargement sûr : nom ASCII de repli + nom UTF-8 (un emoji ou un guillemet ne fait plus planter l'export). */
+function attachmentName(name: string) {
+  const ascii = name.normalize("NFKD").replace(/[^\x20-\x7e]/g, "").replace(/["\\]/g, "").trim() || "export.csv";
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}
+
 // ── Client SDK (public key) ────────────────────────────────────────────────
 const sdkSeen = new Map<string, number>();
 async function clientProject(req: Request) {
@@ -444,6 +450,9 @@ route("POST", "/v1/customers/:id/roku", async (req, _res, [id]) => {
 route("POST", "/v1/customers/:id/alias", async (req, _res, [id]) => {
   const project = await clientProject(req);
   const from = cleanId(decodeURIComponent(id)), to = cleanId(req.body?.newAppUserId);
+  // Clé publique : seul un identifiant anonyme peut être fusionné (sinon n'importe qui déplacerait
+  // les achats d'un vrai client vers son compte). Même règle que logIn chez RevenueCat.
+  if (!isAnonymousId(from)) throw new HttpError(409, "alias_source_must_be_anonymous", "Seul un identifiant anonyme peut être fusionné");
   await mergeCustomers(project, from, to);
   await touchCustomer(project.id, to);
   return customerInfo(project, to);
@@ -480,8 +489,11 @@ route("POST", "/v1/customers/:id/offers/apple/sign", async (req, _res, [id]) => 
 route("POST", "/v1/customers/:id/stripe/checkout", async (req, _res, [id]) =>
   createCheckout(await clientProject(req), cleanId(decodeURIComponent(id)), req.body));
 
-route("POST", "/v1/customers/:id/stripe/portal", async (req, _res, [id]) =>
-  createPortal(await clientProject(req), cleanId(decodeURIComponent(id)), String(req.body?.returnUrl ?? "")));
+route("POST", "/v1/customers/:id/stripe/portal", async (req, _res, [id]) => {
+  const project = await clientProject(req), appUserId = cleanId(decodeURIComponent(id));
+  if (guessableCustomerId(appUserId)) throw new HttpError(403, "portal_requires_app_user_id", "Portail réservé aux identifiants de l'app");
+  return createPortal(project, appUserId, String(req.body?.returnUrl ?? ""));
+});
 
 // ── Account (dashboard session or personal access token) ──────────────────
 route("GET", "/v1/projects", async req => {
@@ -529,6 +541,14 @@ route("POST", "/v1/billing/checkout", async req => {
   return createProCheckout(uid, caller.kind === "user" ? caller.email : undefined, safeReturnUrl(req.body?.returnUrl, PUBLIC_BASE));
 });
 
+// Avis envoyés depuis le menu de l'app.
+route("POST", "/v1/feedback", async req => {
+  const caller = await authenticate(req);
+  const uid = requireUser(caller);
+  const { submitFeedback } = await import("./feedback");
+  return submitFeedback(uid, caller.kind === "user" ? caller.email : undefined, req.body);
+});
+
 route("POST", "/v1/webhooks/billing", async req => handleBillingWebhook(req.rawBody, req.get("stripe-signature")));
 
 route("POST", "/v1/tokens", async req => {
@@ -552,12 +572,29 @@ route("DELETE", "/v1/account", async req => {
       await db.doc(`iconCache/${p.id}`).delete().catch(() => null);
       deleted++;
     } else {
-      await p.ref.update({ members: FieldValue.arrayRemove(uid) });
+      // Le business reste aux autres membres : il ne doit jamais se retrouver sans propriétaire.
+      const rest = members.filter(m => m !== uid);
+      const roles = (p.get("roles") ?? {}) as Record<string, string>;
+      const stillOwner = rest.some(m => roles[m] === "owner" || p.get("ownerUid") === m);
+      const heir = rest.find(m => roles[m] === "admin") ?? rest[0];
+      await p.ref.update({
+        members: FieldValue.arrayRemove(uid), [`roles.${uid}`]: FieldValue.delete(),
+        ...(p.get("ownerUid") === uid || !stillOwner ? { ownerUid: heir, [`roles.${heir}`]: "owner" } : {}),
+      });
+      await revokeKeysIssuedBy(p.id, uid);
       left++;
     }
   }
   const pats = await db.collection("apiKeys").where("uid", "==", uid).get();
   await Promise.all(pats.docs.map(k => k.ref.delete()));
+  // Avis, signalements et code cadeau : effacés eux aussi (la politique de confidentialité le promet).
+  for (const col of ["appFeedback", "leaderboardReports"]) {
+    const snap = await db.collection(col).where("uid", "==", uid).get();
+    await Promise.all(snap.docs.map(d => d.ref.delete()));
+  }
+  await db.doc(`giftRedemptions/${uid}`).delete().catch(() => null);
+  const devices = await db.collection(`users/${uid}/devices`).get(); // jetons push
+  await Promise.all(devices.docs.map(d => d.ref.delete()));
   // L'achat Pro redevient restaurable sur un nouveau compte.
   const purchases = await db.collection("appStorePurchases").where("uid", "==", uid).get();
   await Promise.all(purchases.docs.map(p => p.ref.delete()));
@@ -570,7 +607,7 @@ route("GET", "/v1/overview", async req => {
   const uid = requireUser(await authenticate(req));
   return widgetCached(req.headers["user-agent"], `overview|${uid}|${req.originalUrl}`, async () => {
   const sinceAt = Number(req.query.since) || undefined;
-  let days = Math.min(365, Math.max(1, Number(req.query.days ?? 30)));
+  let days = Math.min(365, Math.max(1, (Number(req.query.days ?? 30) || 30)));
   if (sinceAt && sinceAt < Date.now() && Date.now() - sinceAt <= 31 * 86400000) days = Math.max(1, Math.ceil((Date.now() - sinceAt) / 86400000));
   const snap = await db.collection("projects").where("members", "array-contains", uid).get();
   const projects = await Promise.all(snap.docs.map(async d => {
@@ -585,8 +622,9 @@ route("GET", "/v1/overview", async req => {
   const sum = (f: (p: typeof projects[number]) => number) => projects.reduce((a, p) => a + convertMicros(f(p), p.currency, currency), 0);
   return {
     currency, periodDays: days, periodStart: sinceAt ?? null,
-    mrrMicros: sum(p => p.mrrMicros), revenueMicros: sum(p => p.netRevenueMicros),
-    adRevenueMicros: sum(p => p.adRevenueMicros ?? 0), revenueInclAdsMicros: sum(p => p.revenueInclAdsMicros ?? p.netRevenueMicros),
+    // revenueMicros = ventes (jamais négatif) ; les remboursements sont à part (refundsMicros), le net aussi.
+    mrrMicros: sum(p => p.mrrMicros), revenueMicros: sum(p => p.revenueMicros), refundsMicros: sum(p => p.refundsMicros), netRevenueMicros: sum(p => p.netRevenueMicros),
+    adRevenueMicros: sum(p => p.adRevenueMicros ?? 0), revenueInclAdsMicros: sum(p => p.revenueMicros + (p.adRevenueMicros ?? 0)),
     activeSubscriptions: projects.reduce((a, p) => a + p.activeSubscriptions, 0),
     activeTrials: projects.reduce((a, p) => a + p.activeTrials, 0),
     newCustomers: projects.reduce((a, p) => a + p.newCustomers, 0),
@@ -594,14 +632,15 @@ route("GET", "/v1/overview", async req => {
     downloads: projects.some(p => p.downloads !== null) ? projects.reduce((a, p) => a + (p.downloads ?? 0), 0) : null,
     hasTrials: projects.some(p => p.hasTrials),
     // Montants de chaque business convertis dans la devise d'affichage : l'app peut les additionner sans mélanger € et $.
-    projects: projects.map(({ history, revenueByDay, downloadsByDay, ...p }) => { const cv = (m: number) => convertMicros(m, p.currency, currency);
+    projects: projects.map(({ history, revenueByDay, refundsByDay, downloadsByDay, ...p }) => { const cv = (m: number) => convertMicros(m, p.currency, currency);
       const cvMap = (o?: Record<string, number> | null) => o ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, cv(v)])) : o;
       return {
       projectId: p.projectId, name: p.name, currency, sourceCurrency: p.currency, mrrMicros: cv(p.mrrMicros), netRevenueMicros: cv(p.netRevenueMicros),
+      revenueMicros: cv(p.revenueMicros), refundsMicros: cv(p.refundsMicros),
       activeSubscriptions: p.activeSubscriptions, activeTrials: p.activeTrials, newCustomers: p.newCustomers, trialConversionRate: p.trialConversionRate,
       adRevenueMicros: p.adRevenueMicros == null ? p.adRevenueMicros : cv(p.adRevenueMicros), revenueInclAdsMicros: p.revenueInclAdsMicros == null ? p.revenueInclAdsMicros : cv(p.revenueInclAdsMicros),
       churnRate: p.churnRate, billingIssues: p.billingIssues, payingCustomers: p.payingCustomers, downloads: p.downloads,
-      hasTrials: p.hasTrials, revenueByCountry: cvMap(p.revenueByCountry), iconUrl: p.iconUrl, stores: p.stores, downloadsByDay, revenueByDay: cvMap(revenueByDay),
+      hasTrials: p.hasTrials, revenueByCountry: cvMap(p.revenueByCountry), iconUrl: p.iconUrl, stores: p.stores, downloadsByDay, revenueByDay: cvMap(revenueByDay), refundsByDay: cvMap(refundsByDay),
     }; }),
     generatedAt: Date.now(),
   };
@@ -613,16 +652,17 @@ route("GET", "/v1/projects/:pid", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid);
   const creds = await getCredentials(project.id);
   const base = PUBLIC_BASE;
+  const canSeeTokens = atLeast(project.role ?? "viewer", "developer"); // les URL à jeton ne sont pas pour un simple lecteur
   return {
     ...project,
     credentials: { integrations: Object.keys(creds.integrations ?? {}), exports: Object.keys((creds as any).exports ?? {}), appStoreConnect: Boolean(creds.appStoreConnect), appsflyer: Boolean(creds.appsflyer), apple: Boolean(creds.apple), google: Boolean(creds.google), stripeKey: Boolean(creds.stripe?.secretKey), stripeWebhook: Boolean(creds.stripe?.webhookSecret), paddle: Boolean((creds as any).paddle?.webhookSecret), amazon: Boolean((creds as any).amazon?.sharedSecret), galaxy: Boolean((creds as any).galaxy?.serviceAccountId), roku: Boolean((creds as any).roku?.devApiKey) },
     endpoints: {
       appleNotifications: `${base}/v1/webhooks/apple/${project.id}`,
-      googleRtdn: `${base}/v1/webhooks/google/${project.id}?token=${creds.googleRtdnToken}`,
+      googleRtdn: canSeeTokens ? `${base}/v1/webhooks/google/${project.id}?token=${creds.googleRtdnToken}` : null,
       stripeWebhook: `${base}/v1/webhooks/stripe/${project.id}`,
       paddleWebhook: `${base}/v1/webhooks/paddle/${project.id}`,
-      amazonNotifications: `${base}/v1/webhooks/amazon/${project.id}?token=${creds.amazonNotificationToken}`,
-      rokuNotifications: `${base}/v1/webhooks/roku/${project.id}?token=${creds.rokuNotificationToken}`,
+      amazonNotifications: canSeeTokens ? `${base}/v1/webhooks/amazon/${project.id}?token=${creds.amazonNotificationToken}` : null,
+      rokuNotifications: canSeeTokens ? `${base}/v1/webhooks/roku/${project.id}?token=${creds.rokuNotificationToken}` : null,
     },
     webhookSigningSecret: project.role === "viewer" ? undefined : creds.webhookSigningSecret,
     amazonConfirmationToken: (creds as any).amazon ? ((await db.doc(`projects/${project.id}`).get()).get("health.amazonNotifications.confirmationToken") ?? null) : null,
@@ -717,21 +757,22 @@ route("PUT", "/v1/projects/:pid/credentials", async (req, _res, [pid]) => {
 
 route("POST", "/v1/projects/:pid/keys", async (req, _res, [pid]) => {
   const caller = await authenticate(req);
-  const project = await projectFor(caller, pid, false, req.body?.revokeExisting ? "admin" : undefined);
   const kind = req.body?.kind === "public" ? "public" : req.body?.kind === "test" ? "test" : "secret";
+  // Une clé secrète vaut le rôle admin : seul un admin peut en émettre.
+  const project = await projectFor(caller, pid, false, req.body?.revokeExisting || kind === "secret" ? "admin" : undefined);
   auditNote("keys.issue", { kind, revokeExisting: Boolean(req.body?.revokeExisting) });
   if (req.body?.revokeExisting) await revokeProjectKeys(project.id, kind);
-  return { kind, key: await issueKey({ kind, projectId: project.id }) };
+  return { kind, key: await issueKey({ kind, projectId: project.id, ...(caller.kind === "user" ? { issuedBy: caller.uid } : {}) }) };
 });
 
 route("GET", "/v1/projects/:pid/metrics", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid);
-  return projectMetrics(project, Math.min(365, Math.max(1, Number(req.query.days ?? 30))));
+  return projectMetrics(project, Math.min(365, Math.max(1, (Number(req.query.days ?? 30) || 30))));
 });
 
 route("GET", "/v1/projects/:pid/customers", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid);
-  let q = db.collection(`projects/${project.id}/customers`).orderBy("lastSeenAt", "desc").limit(Math.min(200, Number(req.query.limit ?? 50)));
+  let q = db.collection(`projects/${project.id}/customers`).orderBy("lastSeenAt", "desc").limit(Math.min(200, (Number(req.query.limit ?? 50) || 50)));
   if (req.query.paying === "true") q = q.where("isPaying", "==", true);
   if (req.query.after) q = q.startAfter(Number(req.query.after));
   const snap = await q.get();
@@ -774,7 +815,7 @@ route("POST", "/v1/projects/:pid/customers/:id/grant", async (req, _res, [pid, i
 
 route("GET", "/v1/projects/:pid/refund-requests", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid);
-  const snap = await db.collection(`projects/${project.id}/refundRequests`).orderBy("requestedAt", "desc").limit(Math.min(500, Number(req.query.limit ?? 200))).get();
+  const snap = await db.collection(`projects/${project.id}/refundRequests`).orderBy("requestedAt", "desc").limit(Math.min(500, (Number(req.query.limit ?? 200) || 200))).get();
   const all = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
   const rows = req.query.sandbox === "true" ? all : all.filter(r => !r.isSandbox);
   return { config: { ...DEFAULT_REFUND_CONTROL, ...((project.config as any).refundControl ?? {}) }, stats: refundStats(rows), requests: rows };
@@ -782,7 +823,7 @@ route("GET", "/v1/projects/:pid/refund-requests", async (req, _res, [pid]) => {
 
 route("GET", "/v1/projects/:pid/events", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid);
-  let q = db.collection(`projects/${project.id}/events`).orderBy("at", "desc").limit(Math.min(500, Number(req.query.limit ?? 100)));
+  let q = db.collection(`projects/${project.id}/events`).orderBy("at", "desc").limit(Math.min(500, (Number(req.query.limit ?? 100) || 100)));
   if (req.query.before) q = q.startAfter(Number(req.query.before));
   const snap = await q.get();
   return { events: snap.docs.map(d => ({ id: d.id, ...d.data() })) };
@@ -790,7 +831,7 @@ route("GET", "/v1/projects/:pid/events", async (req, _res, [pid]) => {
 
 route("GET", "/v1/projects/:pid/transactions", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid);
-  const snap = await db.collection(`projects/${project.id}/transactions`).orderBy("at", "desc").limit(Math.min(500, Number(req.query.limit ?? 100))).get();
+  const snap = await db.collection(`projects/${project.id}/transactions`).orderBy("at", "desc").limit(Math.min(500, (Number(req.query.limit ?? 100) || 100))).get();
   return { transactions: snap.docs.map(d => ({ id: d.id, ...d.data() })) };
 });
 
@@ -941,6 +982,9 @@ rcRoute("GET", "/subscribers/:id/offerings", async (req, _res, [id]) => {
 rcRoute("POST", "/subscribers/:id/alias", async (req, _res, [id]) => {
   const project = await rcProject(req);
   const from = cleanId(decodeURIComponent(id)), to = cleanId(String(req.body?.new_app_user_id ?? ""));
+  // Clé publique : seul un identifiant anonyme peut être fusionné (sinon n'importe qui déplacerait
+  // les achats d'un vrai client vers son compte). Même règle que logIn chez RevenueCat.
+  if (!isAnonymousId(from)) throw new HttpError(409, "alias_source_must_be_anonymous", "Seul un identifiant anonyme peut être fusionné");
   await mergeCustomers(project, from, to);
   return rcSubscriber(project, to);
 });
@@ -1021,14 +1065,14 @@ for (const action of ["revoke", "refund", "defer"]) {
 
 // ── Connections (one step per store) ──────────────────────────────────────
 route("POST", "/v1/projects/:pid/connect/stripe", async (req, _res, [pid]) => {
-  const project = await projectFor(await authenticate(req), pid);
+  const project = await projectFor(await authenticate(req), pid, false, "admin"); // écrit des identifiants : même rôle que PUT credentials
   const r = await connectStripe(project, PUBLIC_BASE, String(req.body?.secretKey ?? ""));
   await markConnected(project.id, "stripe");
   return r;
 });
 
 route("POST", "/v1/projects/:pid/connect/appstore", async (req, _res, [pid]) => {
-  const project = await projectFor(await authenticate(req), pid);
+  const project = await projectFor(await authenticate(req), pid, false, "admin"); // écrit des identifiants : même rôle que PUT credentials
   const r = await connectAppStore(project, PUBLIC_BASE, req.body);
   await markConnected(project.id, "app_store");
   await db.collection("scanRequests").add({ appIds: [r.app.id], at: Date.now() });
@@ -1036,7 +1080,7 @@ route("POST", "/v1/projects/:pid/connect/appstore", async (req, _res, [pid]) => 
 });
 
 route("POST", "/v1/projects/:pid/connect/google", async (req, _res, [pid]) => {
-  const project = await projectFor(await authenticate(req), pid);
+  const project = await projectFor(await authenticate(req), pid, false, "admin"); // écrit des identifiants : même rôle que PUT credentials
   const r = await connectGooglePlay(project, req.body);
   await markConnected(project.id, "play_store");
   return { ...r, rtdn: { pushEndpoint: PUBLIC_BASE + r.rtdn.pushEndpoint } };
@@ -1063,12 +1107,13 @@ route("GET", "/v1/projects/:pid/import/:jid", async (req, _res, [pid, jid]) => {
 
 // ── Advanced analytics ─────────────────────────────────────────────────────
 route("GET", "/v1/projects/:pid/cohorts", async (req, _res, [pid]) =>
-  projectCohorts(await projectFor(await authenticate(req), pid), Math.min(24, Math.max(3, Number(req.query.months ?? 12)))));
+  projectCohorts(await projectFor(await authenticate(req), pid), Math.min(24, Math.max(3, (Number(req.query.months ?? 12) || 12)))));
 
 const csv = (rows: Record<string, unknown>[], cols: string[]) =>
   [cols.join(","), ...rows.map(r => cols.map(c => {
     const v = r[c] ?? "";
-    const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+    const s0 = typeof v === "object" ? JSON.stringify(v) : String(v);
+    const s = /^[=+\-@\t\r]/.test(s0) && !/^-?\d/.test(s0) ? `'${s0}` : s0; // pas d'injection de formule
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   }).join(","))].join("\n");
 
@@ -1083,7 +1128,7 @@ route("GET", "/v1/projects/:pid/export/:kind", async (req, res, [pid, kind]) => 
   if (!spec) throw new HttpError(404, "unknown_export");
   const snap = await db.collection(`projects/${project.id}/${spec[0]}`).orderBy(spec[1], "desc").limit(50000).get();
   res.set("Content-Type", "text/csv; charset=utf-8");
-  res.set("Content-Disposition", `attachment; filename="${project.name}-${spec[0]}.csv"`);
+  res.set("Content-Disposition", attachmentName(`${project.name}-${spec[0]}.csv`));
   res.status(200).send(csv(snap.docs.map(d => d.data()), spec[2]));
 });
 
@@ -1128,13 +1173,21 @@ route("GET", "/v1/projects/:pid/appstore", async (req, _res, [pid]) => {
 });
 
 // Fiche de n'importe quelle app de l'App Store : première visite ou fiche de plus de 24 h = scan à la demande.
+const scanBudget = new Map<string, number[]>();
+/** 20 nouveaux scans par heure et par compte : un scan coûte une fonction de 1 Gio pendant plusieurs minutes. */
+function mayScan(who: string) {
+  const now = Date.now(), recent = (scanBudget.get(who) ?? []).filter(t => now - t < 3600000);
+  if (recent.length >= 20) return false;
+  recent.push(now); scanBudget.set(who, recent); return true;
+}
 route("GET", "/v1/appstore/:appId/sheet", async (req, _res, [appId]) => {
-  await authenticate(req);
+  const caller = await authenticate(req);
   if (!/^\d{5,12}$/.test(appId)) throw new HttpError(400, "invalid_app_id");
   const ref = db.doc(`apps/${appId}`);
   const app = await ref.get();
   const last = Math.max(app.get("rankedAt") ?? 0, app.get("scanRequestedAt") ?? 0);
-  const scanning = Date.now() - last > 86400000;
+  const who = caller.kind === "user" ? caller.uid : caller.kind === "secret" ? `key:${caller.projectId}` : null;
+  const scanning = Date.now() - last > 86400000 && who !== null && who !== DEMO_UID && mayScan(who);
   if (scanning) {
     const meta = app.get("genreId") ? {} : (await lookupApp(appId, "fr").catch(() => null) ?? await lookupApp(appId, "us").catch(() => null) ?? {});
     await ref.set({ appId, ...meta, scanRequestedAt: Date.now() }, { merge: true });
@@ -1170,7 +1223,7 @@ route("GET", "/v1/projects/:pid/appstore/:appId/ratings", async (req, _res, [pid
 route("GET", "/v1/projects/:pid/appstore/:appId/reviews", async (req, _res, [pid, appId]) => {
   const project = await projectFor(await authenticate(req), pid);
   if (!(project.config.appStore?.apps ?? []).some(a => a.appId === appId)) throw new HttpError(404, "app_not_tracked");
-  let q = db.collection(`apps/${appId}/reviews`).orderBy("at", "desc").limit(Math.min(200, Number(req.query.limit ?? 50)));
+  let q = db.collection(`apps/${appId}/reviews`).orderBy("at", "desc").limit(Math.min(200, (Number(req.query.limit ?? 50) || 50)));
   if (req.query.country) q = q.where("country", "==", String(req.query.country).toUpperCase());
   if (req.query.rating) q = q.where("rating", "==", Number(req.query.rating));
   const snap = await q.get();
@@ -1185,7 +1238,7 @@ route("POST", "/v1/projects/:pid/appstore/:appId/reviews/:rid/translate", async 
 
 route("GET", "/v1/projects/:pid/alerts", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid);
-  const snap = await db.collection(`projects/${project.id}/alerts`).orderBy("at", "desc").limit(Math.min(300, Number(req.query.limit ?? 100))).get();
+  const snap = await db.collection(`projects/${project.id}/alerts`).orderBy("at", "desc").limit(Math.min(300, (Number(req.query.limit ?? 100) || 100))).get();
   return { alerts: snap.docs.map(d => ({ id: d.id, ...d.data() })) };
 });
 
@@ -1203,7 +1256,7 @@ route("GET", "/v1/alerts", async req => {
 route("GET", "/v1/leaderboard", async (req, res) => {
   const { leaderboard, sortEntries, publicEntry, LEADERBOARD_SORTS, LEADERBOARD_CURRENCY } = await import("./leaderboard");
   const sort = LEADERBOARD_SORTS.find(s => s === req.query.sort) ?? "mrr";
-  const limit = Math.min(500, Math.max(1, Number(req.query.limit ?? 100)));
+  const limit = Math.min(500, Math.max(1, (Number(req.query.limit ?? 100) || 100)));
   const { entries, updatedAt } = await leaderboard(PUBLIC_BASE);
   const currency = typeof req.query.currency === "string" && /^[A-Z]{3}$/.test(req.query.currency) ? req.query.currency : LEADERBOARD_CURRENCY;
   res.set("Cache-Control", "public, max-age=0, s-maxage=30");
@@ -1405,7 +1458,7 @@ route("GET", "/v1/finance", async req => {
   const { waterfallFor, PRESETS } = await import("./finance");
   const { PRESET_EN } = await import("./i18n");
   const sinceAt = Number(req.query.since) || undefined;
-  let days = Math.min(365, Math.max(1, Number(req.query.days ?? 28)));
+  let days = Math.min(365, Math.max(1, (Number(req.query.days ?? 28) || 28)));
   if (sinceAt && sinceAt < Date.now() && Date.now() - sinceAt <= 31 * 86400000) days = Math.max(1, Math.ceil((Date.now() - sinceAt) / 86400000));
   const w = await waterfallFor(uid, days, projectIdsParam(req), undefined, sinceAt);
   return { ...w, presets: Object.fromEntries(Object.entries(PRESETS).map(([k, v]) => [k, { label: v.label, note: v.note, labelEn: PRESET_EN[k]?.label ?? v.label, noteEn: PRESET_EN[k]?.note ?? v.note }])) };
@@ -1423,8 +1476,8 @@ route("PUT", "/v1/finance/settings", async req => {
 route("GET", "/v1/finance/plan", async req => {
   const uid = requireUser(await authenticate(req));
   const { planFor } = await import("./plan");
-  const days = Math.min(365, Math.max(1, Number(req.query.days ?? 28)));
-  const goal = Number(req.query.goal ?? 0);
+  const days = Math.min(365, Math.max(1, (Number(req.query.days ?? 28) || 28)));
+  const goal = (Number(req.query.goal ?? 0) || 0);
   return planFor(uid, days, projectIdsParam(req), goal > 0 ? Math.round(goal * 1e6) : undefined);
 });
 
@@ -1484,11 +1537,11 @@ route("GET", "/v1/today", async req => {
 
 route("GET", "/v1/feed", async req => {
   const uid = requireUser(await authenticate(req));
-  const limit = Math.min(300, Math.max(1, Number(req.query.limit ?? 30)));
+  const limit = Math.min(300, Math.max(1, (Number(req.query.limit ?? 30) || 30)));
   const projects = await db.collection("projects").where("members", "array-contains", uid).select("name").get();
   const only = projectIdsParam(req);
   const all = (await Promise.all(projects.docs.filter(p => !only?.length || only.includes(p.id)).map(async p =>
-    (await db.collection(`projects/${p.id}/events`).orderBy("at", "desc").limit(limit).select("type", "productId", "priceMicros", "currency", "country", "store", "isSandbox", "isTrial", "periodMonths", "at", "appUserId", "purchaseId", "expiresAt").get())
+    (await db.collection(`projects/${p.id}/events`).orderBy("at", "desc").limit(limit).select("type", "productId", "priceMicros", "currency", "country", "store", "isSandbox", "isTrial", "periodMonths", "productName", "reason", "refundMicros", "at", "appUserId", "purchaseId", "expiresAt").get())
       .docs.map(d => ({ id: d.id, projectId: p.id, projectName: p.get("name"), ...d.data() })),
   ))).flat().filter((e: any) => e.type !== "TEST").sort((a: any, b: any) => b.at - a.at).slice(0, limit);
   // Montant converti dans la devise d'affichage choisie (?currency=EUR), en plus du montant d'origine.
@@ -1550,7 +1603,7 @@ route("POST", "/v1/customers/:id/paywall-events", async (req, _res, [id]) => {
 /** Daily paywall counters per offering (dashboard). */
 route("GET", "/v1/projects/:pid/paywall-stats", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid);
-  const days = Math.min(365, Math.max(1, Number(req.query.days ?? 30)));
+  const days = Math.min(365, Math.max(1, (Number(req.query.days ?? 30) || 30)));
   const since = dayKey(Date.now() - (days - 1) * 86400000);
   const snap = await db.collection(`projects/${project.id}/paywallStats`).where("day", ">=", since).get();
   const totals: Record<string, Record<string, number>> = {};
@@ -1617,7 +1670,7 @@ route("GET", "/v1/projects/:pid/audiences/:aid/customers", async (req, res, [pid
   const { rows, scanned, truncated } = await audienceCustomers(project, audience, now);
   if (req.query.format === "csv") {
     res.set("Content-Type", "text/csv; charset=utf-8");
-    res.set("Content-Disposition", `attachment; filename="${audience.id}.csv"`);
+    res.set("Content-Disposition", attachmentName(`${audience.id}.csv`));
     res.status(200).send(audienceCsv(rows, now));
     return;
   }
@@ -1717,7 +1770,7 @@ route("GET", "/v1/projects/:pid/charts/:name", async (req, res, [pid, name]) => 
   }
   const chart = await projectChart(project, name.replace(/\.csv$/, ""), req.query as Record<string, unknown>);
   res.set("Content-Type", "text/csv; charset=utf-8");
-  res.set("Content-Disposition", `attachment; filename="${project.name}-${chart.name}.csv"`);
+  res.set("Content-Disposition", attachmentName(`${project.name}-${chart.name}.csv`));
   res.status(200).send(chartToCsv(chart));
 });
 
@@ -1743,7 +1796,8 @@ route("DELETE", "/v1/projects/:pid/members/:uid", async (req, _res, [pid, uid]) 
   // Anyone can leave; removing someone else needs admin (checked again in removeMember).
   const project = await projectFor(caller, pid, false, target === actorUid ? "viewer" : "admin");
   const out = await removeMember(project, project.role!, actorUid, target);
-  auditNote("member.remove", { target, previous: out.previous });
+  const revoked = await revokeKeysIssuedBy(project.id, target); // un ancien membre ne garde pas d'accès par ses clés
+  auditNote("member.remove", { target, previous: out.previous, revokedKeys: revoked });
   return out;
 });
 
@@ -1783,7 +1837,7 @@ route("POST", "/v1/invites/:token/accept", async (req, _res, [token]) => {
 
 route("GET", "/v1/projects/:pid/audit", async (req, _res, [pid]) => {
   const project = await projectFor(await authenticate(req), pid, false, "admin");
-  return listAudit(project.id, Number(req.query.limit ?? 100), req.query.before ? Number(req.query.before) : undefined);
+  return listAudit(project.id, (Number(req.query.limit ?? 100) || 100), req.query.before ? (Number(req.query.before) || undefined) : undefined);
 });
 
 // ══ Web ══════════════════════════════════════════════════════════════════
@@ -1814,8 +1868,11 @@ route("POST", "/v1/customers/:id/redeem", async (req, _res, [id]) => {
   await redeemWebPurchase(project, appUserId, String(req.body?.token ?? ""));
   return customerInfo(project, appUserId);
 });
-route("POST", "/v1/customers/:id/manage-link", async (req, _res, [id]) =>
-  manageLink(await clientProject(req), cleanId(decodeURIComponent(id)), PUBLIC_BASE));
+route("POST", "/v1/customers/:id/manage-link", async (req, _res, [id]) => {
+  const project = await clientProject(req), appUserId = cleanId(decodeURIComponent(id));
+  if (guessableCustomerId(appUserId)) throw new HttpError(403, "portal_requires_app_user_id", "Lien réservé aux identifiants de l'app");
+  return manageLink(project, appUserId, PUBLIC_BASE);
+});
 // ══ /Web ═════════════════════════════════════════════════════════════════
 
 // ── Dispatcher ─────────────────────────────────────────────────────────────
@@ -1971,7 +2028,9 @@ export async function handle(req: Request, res: Response) {
   try {
     // Mode démo : lecture seule.
     // Seule exception : l'achat Pro, pour qu'App Review puisse le tester depuis la démo (rien n'est enregistré).
-    if (req.method !== "GET" && path !== "/v1/billing/appstore" && /^Bearer\s+mm_demo\s*$/i.test(req.get("authorization") ?? "")) throw new HttpError(403, "demo_read_only", "Mode démo : lecture seule");
+    // Même normalisation que authenticate() : avec ou sans « Bearer », casse et espaces ignorés.
+    const rawAuth = (req.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+    if (req.method !== "GET" && !READ_ONLY_POSTS.test(path) && path !== "/v1/billing/appstore" && rawAuth === DEMO_TOKEN) throw new HttpError(403, "demo_read_only", "Mode démo : lecture seule");
     for (const [method, re, handler, pattern] of routes) {
       const m = re.exec(path);
       if (!m || method !== req.method) continue;

@@ -82,6 +82,9 @@ final class FinanceModel: ObservableObject {
     @Published var loading = false
     private var key = ""
 
+    /// Déconnexion : rien de l'ancien compte ne reste.
+    func reset() { waterfall = nil; key = ""; loading = false }
+
     func load(_ store: Store, force: Bool = false) async {
         let days = store.period == 0 ? 1 : store.periodDays
         let since: Date? = store.monthMode ? CalendarMonth.start : nil

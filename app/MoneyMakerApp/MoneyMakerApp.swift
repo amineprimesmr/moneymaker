@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import WidgetKit
 
 @main
 struct MoneyMakerApp: App {
@@ -60,6 +61,9 @@ final class Store: ObservableObject {
     @Published var feed: [FeedEvent] = []
 
     init() {
+        // La démo n'est jamais gardée d'un lancement à l'autre : son jeton et ses chiffres ne doivent
+        // pas rester dans le trousseau partagé avec les widgets.
+        if MoneyMakerClient.stored.token == "mm_demo" { Store.wipeSharedAccountData() }
         observePrefs()
         // Cache disque (trousseau + JSON) lu et décodé hors du fil principal. Le splash de lancement
         // dure plus d'une seconde : les données sont posées bien avant que le contenu n'apparaisse.
@@ -196,11 +200,12 @@ final class Store: ObservableObject {
             } else {
                 let ps = m.viewProjects, dl = ps.compactMap(\.downloads)
                 m.scoped = Overview(currency: ps.first?.currency ?? o.currency, periodDays: o.periodDays,
-                                    mrrMicros: ps.reduce(0) { $0 + $1.mrrMicros }, revenueMicros: ps.reduce(0) { $0 + $1.netRevenueMicros },
+                                    mrrMicros: ps.reduce(0) { $0 + $1.mrrMicros }, revenueMicros: ps.reduce(0) { $0 + $1.grossRevenueMicros },
                                     activeSubscriptions: ps.reduce(0) { $0 + $1.activeSubscriptions }, activeTrials: ps.reduce(0) { $0 + $1.activeTrials },
                                     newCustomers: ps.reduce(0) { $0 + $1.newCustomers }, projects: ps, generatedAt: o.generatedAt,
                                     payingCustomers: ps.reduce(0) { $0 + ($1.payingCustomers ?? 0) },
-                                    downloads: dl.isEmpty ? nil : dl.reduce(0, +), hasTrials: ps.contains { $0.hasTrials ?? ($0.activeTrials > 0) }, periodStart: o.periodStart)
+                                    downloads: dl.isEmpty ? nil : dl.reduce(0, +), hasTrials: ps.contains { $0.hasTrials ?? ($0.activeTrials > 0) }, periodStart: o.periodStart,
+                                    refundsMicros: ps.reduce(0) { $0 + ($1.refundsMicros ?? 0) }, netRevenueMicros: ps.reduce(0) { $0 + $1.netRevenueMicros })
             }
         }
         // Seulement nos apps : les concurrents suivis (ex. Whoop) n'apparaissent jamais dans l'Accueil.
@@ -266,31 +271,89 @@ final class Store: ObservableObject {
     }
 
     var client: MoneyMakerClient { MoneyMakerClient(token: token) }
+    /// Session de démo (lecture seule, sans compte).
+    var isDemo: Bool { token == "mm_demo" }
 
     func signIn(_ raw: String) async {
         let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard t.hasPrefix("mm_pat_") || t == "mm_demo" else { error = String(localized: "Le jeton doit commencer par mm_pat_"); return }
+        guard Store.isTokenShaped(t) else { error = String(localized: "Le jeton doit commencer par mm_pat_"); return }
         token = t
         authRejected = false
+        signingIn = true
+        // Enregistré tout de suite : les caches partagés avec les widgets ne s'écrivent que pour le
+        // compte enregistré (une réponse d'un ancien compte ne peut plus les remplir).
+        MoneyMakerClient.save(token: t)
         await refresh()
+        signingIn = false
         // Seul un refus du serveur (jeton invalide) annule la connexion : hors ligne, on garde le jeton
         // et l'app réessaiera au prochain rafraîchissement au lieu de renvoyer vers la connexion web.
-        if authRejected { token = nil } else { MoneyMakerClient.save(token: t); Analytics.capture("signed_in") }
+        if authRejected {
+            token = nil
+            Store.wipeSharedAccountData()
+        } else {
+            Analytics.capture("signed_in")
+            // Notifications : l'appareil est rattaché au nouveau compte.
+            await PushManager.shared.registerAfterSignIn()
+        }
+    }
+
+    static func isTokenShaped(_ t: String) -> Bool { t.hasPrefix("mm_pat_") || t == "mm_demo" }
+
+    /// Lien moneymaker://auth reçu alors qu'un compte est déjà connecté (après confirmation) :
+    /// le nouveau jeton est vérifié AVANT de fermer la session en cours. Renvoie le motif d'un refus.
+    func switchAccount(to raw: String) async -> String? {
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Store.isTokenShaped(t) else { return String(localized: "Ce lien de connexion n'est pas valide. Tu restes connecté à ton compte actuel.") }
+        guard t != token else { return nil }
+        do {
+            // Lecture légère qui n'écrit aucun cache : rien n'est touché tant que le jeton n'est pas validé.
+            let _: BillingStatus = try await MoneyMakerClient(token: t).get("billing")
+        } catch let e as APIError where e.status == 401 || e.status == 403 {
+            return String(localized: "Ce lien de connexion n'est plus valide. Tu restes connecté à ton compte actuel.")
+        } catch {
+            return error.localizedDescription
+        }
+        signOut()
+        await signIn(t)
+        return nil
     }
 
     /// Le dernier rafraîchissement a été refusé par le serveur (jeton révoqué ou invalide).
     private var authRejected = false
+    /// Vrai pendant `signIn` : un refus y annule la connexion au lieu de déconnecter.
+    private var signingIn = false
+    /// Numéro du dernier rafraîchissement lancé : la réponse d'un rafraîchissement dépassé
+    /// (changement de période rapide, déconnexion) est ignorée.
+    private var refreshGeneration = 0
 
+    /// Déconnexion : plus rien de l'ancien compte ne reste, ni à l'écran, ni dans les caches, ni dans les widgets.
     func signOut() {
         let old = token
         Task { await LiveActivityManager.shared.stop(); await PushManager.shared.forgetDevice(token: old) }
-        MoneyMakerClient.save(token: nil); token = nil; overview = nil; today = nil; feed = []
+        refreshGeneration += 1
+        Store.wipeSharedAccountData()
+        token = nil; overview = nil; today = nil; feed = []; alerts = []; error = nil
+        selectedIds = []; focusId = nil
+        LongHistory.shared.reset()
+        SetupCache.shared.reset()
+        FinanceModel.shared.reset()
+        PosthogStore.shared.reset()
         ProPaywall.shared.reset()
         Analytics.reset()
+        loading = false
+    }
+
+    /// Jeton, chiffres, flux, alertes, historique et objectifs effacés du trousseau partagé, widgets rechargés.
+    private static func wipeSharedAccountData() {
+        MoneyMakerClient.save(token: nil)
+        MMShared.clearAccountData()
     }
 
     func refresh() async {
-        loading = true; defer { loading = false }
+        refreshGeneration += 1
+        let generation = refreshGeneration
+        loading = true
+        defer { if generation == refreshGeneration { loading = false } }
         let c = client
         let d = days
         let since: Date? = calendarMonth && d == 28 ? CalendarMonth.start : nil
@@ -303,16 +366,29 @@ final class Store: ObservableObject {
         let ids = scopeIds
         async let t = try? c.today(projectIds: ids)
         async let f = try? c.feed(projectIds: ids)
-        switch await o {
+        let result = await o
+        let fetchedAlerts = await a
+        let fetchedToday = await t
+        let fetchedFeed = await f
+        // Une réponse dépassée (période changée entre-temps, déconnexion) n'écrase pas la plus récente.
+        guard generation == refreshGeneration, c.token == token else { return }
+        switch result {
         case .success(let v): withAnimation(MMMotion.data) { overview = v; error = nil }
         case .failure(let e):
             // Une annulation n'est pas une panne : on garde les données affichées.
             if e is CancellationError || (e as? URLError)?.code == .cancelled { break }
-            if let status = (e as? APIError)?.status, status == 401 || status == 403 { authRejected = true }
+            let status = (e as? APIError)?.status
+            if status == 401 || status == 403 { authRejected = true }
+            // Jeton révoqué pendant l'usage : déconnexion propre, avec le motif sur l'écran de connexion.
+            if status == 401, !signingIn, token != nil {
+                signOut()
+                error = String(localized: "Ta session a expiré ou a été révoquée. Reconnecte-toi.")
+                return
+            }
             self.error = e.localizedDescription
         }
-        if let v = await a { withAnimation(MMMotion.data) { alerts = v } }
-        await applyLive(today: t, feed: f)
+        if let v = fetchedAlerts { withAnimation(MMMotion.data) { alerts = v } }
+        await applyLive(today: fetchedToday, feed: fetchedFeed)
     }
 
     /// Rafraîchissement léger (jour + flux) après un push ou un retour au premier plan.

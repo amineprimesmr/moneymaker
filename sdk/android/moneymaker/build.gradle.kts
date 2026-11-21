@@ -15,7 +15,7 @@ android {
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 
 dependencies {
-    api("com.android.billingclient:billing-ktx:7.1.1")
+    api("com.android.billingclient:billing-ktx:8.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
@@ -26,7 +26,7 @@ afterEvaluate {
         publications {
             create<MavenPublication>("release") {
                 from(components["release"])
-                groupId = "io.moneymaker"; artifactId = "moneymaker"; version = "1.1.1"
+                groupId = "io.moneymaker"; artifactId = "moneymaker"; version = "1.2.0"
             }
         }
     }

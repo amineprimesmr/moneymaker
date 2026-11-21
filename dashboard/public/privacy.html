@@ -1,12 +1,21 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Privacy · MoneyMaker</title><meta name="description" content="MoneyMaker privacy policy.">
+<title>Privacy · MoneyMaker</title><meta name="description" content="MoneyMaker privacy policy: data processed, processors, transfers, retention and deletion.">
+<link rel="canonical" href="https://usemoneymaker.com/privacy">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="MoneyMaker">
+<meta property="og:url" content="https://usemoneymaker.com/privacy">
+<meta property="og:title" content="Privacy · MoneyMaker">
+<meta property="og:description" content="MoneyMaker privacy policy: data processed, processors, transfers, retention and deletion.">
+<meta property="og:image" content="https://usemoneymaker.com/icon-512.png">
+<meta name="twitter:card" content="summary">
+
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png"><link rel="apple-touch-icon" href="/icon-180.png"><meta name="theme-color" content="#000000">
 <script>(function(){var q=new URLSearchParams(location.search).get('lang'),k='mmLang',v=null;if(q!=='fr'&&q!=='en')q=null;try{if(q)localStorage.setItem(k,q);v=localStorage.getItem(k)}catch(e){}var l=q||v||((navigator.language||'en').toLowerCase().indexOf('fr')===0?'fr':'en');document.documentElement.lang=l;document.documentElement.classList.add('l-'+l);if(l==='fr')document.title='Confidentialité · MoneyMaker'})()</script>
 <style>.i18n-fr{display:none}html.l-fr .i18n-fr{display:block}html.l-fr .i18n-en{display:none}</style>
 <link rel="stylesheet" href="/app.css"></head>
 <body class="doc"><main>
-<div class="i18n-en"><nav class="crumbs"><a href="/">MoneyMaker</a><a href="/privacy?lang=en">Privacy</a><a href="/terms?lang=en">Terms</a><a href="/support?lang=en">Help</a><a href="?lang=fr">Français</a></nav>
+<div class="i18n-en"><nav class="crumbs"><a href="/">MoneyMaker</a><a href="/privacy?lang=en">Privacy</a><a href="/terms?lang=en">Terms</a><a href="/support?lang=en">Help</a><a href="/legal?lang=en">Legal notice</a><a href="?lang=fr">Français</a></nav>
 
 <h1>Privacy policy</h1>
 <p>MoneyMaker is a revenue dashboard for publishers of apps and digital products, available on the web (usemoneymaker.com) and on iPhone and iPad. This page explains what data is processed, why, and how to delete it.</p>
@@ -18,6 +27,8 @@
 <li><b>Your customers' purchases</b>: the user identifier your app sends us (a pseudonym), product, price, currency, store country, subscription dates and status. For this data, MoneyMaker acts as a <b>processor</b>: you remain the controller for your own users.</li>
 <li><b>Optional financial settings</b>: legal status, rates, expenses, company name, only if you turn on "Net in pocket".</li>
 <li><b>Mobile app</b>: notification token (to send the sale notifications you turned on), notification preferences, time zone. No location, no contacts, no photos.</li>
+<li><b>Feedback sent from the app</b> (menu → Share feedback): your message, its type (idea, bug, other), your account email and identifier, the app version, the device model and the language. Used only to read and answer your feedback.</li>
+<li><b>Leaderboard reports, gift codes</b>: if you report a listing or redeem a gift code, we record your identifier, the item concerned and the date.</li>
 </ul>
 
 <h2>What we don't do</h2>
@@ -30,26 +41,47 @@
 <p>Only to provide the service: calculate your revenue and metrics, send the notifications you asked for, validate your customers' purchases and grant their premium access. Legal basis: performance of a contract (GDPR, art. 6.1.b).</p>
 
 <h2>Usage measurement</h2>
-<p>We measure use of the site and the app with PostHog (servers in the European Union): pages and steps viewed, app opens, onboarding, paywall and purchase of MoneyMaker Pro, with a random identifier. No email, no revenue figures, no session recording. The site sets no cookie for this measurement.</p>
+<p>We measure use of the site and the app with PostHog (servers in the European Union, Frankfurt): pages and screens viewed, app opens, onboarding steps, taps on the main features. In the app, these events are linked to a <b>stable pseudonymous identifier tied to your account</b> (your MoneyMaker user identifier, not your email), so that we can understand how the product is used across sessions; in Apple's terms, "Product interaction" data linked to you, used for analytics only. On the website, the identifier is random, kept in memory only and reset when the page is closed: no cookie, no local storage. No email, no revenue figures, no session recording, no advertising use.</p>
 
 <h2>Public leaderboard</h2>
 <p>Your business only appears on the leaderboard if you list it. Its name, logo, description, website, revenue and number of subscribers then become public (you can hide exact amounts). You can remove it at any time. A report records your identifier, the business concerned and your message.</p>
 
 <h2>Where the data is</h2>
-<p>On Google Cloud / Firebase, <b>europe-west1 region (Belgium)</b>. Traffic is encrypted (HTTPS), and data is encrypted at rest by Google. The third-party services involved are the ones you connect, and possibly Slack, Discord, Mixpanel, Amplitude, Segment, PostHog and AppsFlyer if you turn them on.</p>
+<p>On Google Cloud / Firebase, <b>europe-west1 region (Belgium)</b>. Traffic is encrypted (HTTPS), and data is encrypted at rest by Google.</p>
+
+<h2>Processors and recipients</h2>
+<ul>
+<li><b>Google Cloud / Firebase</b> (Google Ireland Limited): hosting, database, authentication, server functions, logs.</li>
+<li><b>Google Cloud Translation</b>: only when you tap "Translate" on an App Store review (the review text is sent, nothing else).</li>
+<li><b>Apple</b>: push notifications (APNs) to your devices, Sign in with Apple, and in-app purchases in the iPhone app.</li>
+<li><b>Stripe</b>: payment of MoneyMaker Pro on the web, when it is offered (it is not during the free launch), and reading your own Stripe sales if you connect your account.</li>
+<li><b>PostHog</b> (EU servers): usage measurement described above.</li>
+<li><b>Content delivery networks</b>: the website loads its scripts and fonts from jsDelivr, cdnjs and gstatic.com (Google), which receive your IP address and browser information as for any web request.</li>
+<li><b>Services you turn on yourself</b> for a business: your sales events are then sent to them on your instruction. Notifications and analytics: Slack, Discord, Mixpanel, Amplitude, Segment, PostHog, AppsFlyer. Server connectors: Meta Conversions API, Adjust, Branch, Singular, Kochava, Tenjin, Braze, OneSignal, Iterable, Customer.io, CleverTap, Airship, Airbridge, Intercom, Firebase / Google Analytics 4, mParticle, Statsig, TelemetryDeck. Also the stores and payment providers you connect (App Store Connect, Google Play, Stripe, Paddle, Amazon Appstore, Samsung Galaxy Store, Roku), your own webhooks and scheduled exports (S3, Google Cloud Storage, webhook).</li>
+</ul>
+
+<h2>Transfers outside the European Union</h2>
+<p>Our main data stays in the EU. Some processors (Google, Apple, Stripe, CDNs) and the services you turn on may process data outside the EU, mainly in the United States. These transfers rely on the EU–US Data Privacy Framework when the recipient is certified, and otherwise on the European Commission's standard contractual clauses.</p>
 
 <h2>AI assistant (Claude): MCP connector</h2>
-<p>If you connect MoneyMaker to an assistant (Claude by Anthropic or another MCP client) from <a href="/connect">/connect</a>, the assistant receives, at your request and only during the conversation, the data of the businesses you have access to: revenue and subscription metrics, customers (app identifiers, countries, purchases), transactions, App Store rankings and reviews, finance, configuration and team members. Store keys are never sent.</p>
+<p>If you connect MoneyMaker to an assistant (Claude by Anthropic or another MCP client) from <a href="/connect">/connect</a>, the assistant receives, at your request and only during the conversation, the data of the businesses you have access to: revenue and subscription metrics, customers (app identifiers, countries, purchases), transactions, App Store rankings and reviews, finance, configuration and team members. Store keys are never sent to the assistant. If you ask the assistant to connect a store (Stripe, App Store Connect, Google Play, PostHog), the key you give it passes through the conversation, is stored on our server and is never read back or returned afterwards.</p>
 <p>You choose read-only or read and write. Each change is made with your rights and recorded in the business's audit log; deletions require explicit confirmation. We only store hashes (SHA-256) of tokens, valid for 1 hour (access) and 90 days at most (authorization). You can revoke an assistant at any time on <a href="/connect">/connect</a>. What the assistant then does with the data is governed by its publisher's privacy policy.</p>
 <h2>Retention and deletion</h2>
-<p>Data is kept as long as your account exists. You can <b>delete your account at any time from the app</b> (Settings → Delete my account): your account, tokens, devices and the businesses of which you are the only member (sales, keys, settings) are erased immediately and permanently.</p>
+<ul>
+<li>Account, businesses, sales and settings: as long as your account exists.</li>
+<li>Feedback, leaderboard reports and gift codes: as long as your account exists, unless you ask us to delete them earlier.</li>
+<li>Assistant tokens: 1 hour (access) and 90 days at most (authorization), or until you revoke them.</li>
+<li>Technical server logs (Google Cloud Logging): 30 days.</li>
+<li>Usage measurement (PostHog): at most 12 months.</li>
+</ul>
+<p>You can <b>delete your account at any time</b>, in the app or on the web dashboard (Settings → Delete my account): your account, tokens, devices, the feedback you sent, your leaderboard reports, your gift codes and the businesses of which you are the only member (sales, keys, settings) are erased immediately and permanently. Backups kept by our host are overwritten in their normal cycle.</p>
 
 <h2>Your rights</h2>
-<p>Access, rectification, erasure, portability (CSV export in the dashboard), objection: <a href="mailto:contact@moneymakerr.com">contact@moneymakerr.com</a>. You can also contact the CNIL, the French data protection authority (cnil.fr).</p>
+<p>Access, rectification, erasure, portability (CSV export in the dashboard), objection, and the publisher's details (<a href="/legal?lang=en">legal notice</a>): <a href="mailto:support@usemoneymaker.com">support@usemoneymaker.com</a>. You can also contact the CNIL, the French data protection authority (cnil.fr).</p>
 
-<p class="muted" style="margin-top:48px">Last updated: November 5, 2026.</p></div>
+<p class="muted" style="margin-top:48px">Last updated: November 21, 2026.</p></div>
 
-<div class="i18n-fr" lang="fr"><nav class="crumbs"><a href="/">MoneyMaker</a><a href="/privacy?lang=fr">Confidentialité</a><a href="/terms?lang=fr">Conditions</a><a href="/support?lang=fr">Aide</a><a href="?lang=en">English</a></nav>
+<div class="i18n-fr" lang="fr"><nav class="crumbs"><a href="/">MoneyMaker</a><a href="/privacy?lang=fr">Confidentialité</a><a href="/terms?lang=fr">Conditions</a><a href="/support?lang=fr">Aide</a><a href="/legal?lang=fr">Mentions légales</a><a href="?lang=en">English</a></nav>
 
 <h1>Politique de confidentialité</h1>
 <p>MoneyMaker est un tableau de bord de revenus pour les éditeurs d'apps et de produits numériques (App Store, Google Play, Stripe), disponible sur le web (usemoneymaker.com), sur iPhone et sur iPad. Cette page explique quelles données sont traitées, pourquoi, et comment les supprimer.</p>
@@ -61,6 +93,8 @@
 <li><b>Les achats de tes clients</b> : identifiant d'utilisateur que ton app nous transmet (pseudonyme), produit, prix, devise, pays de la boutique, dates et statut de l'abonnement. Pour ces données, MoneyMaker agit comme <b>sous-traitant</b> : tu restes responsable du traitement vis-à-vis de tes propres utilisateurs.</li>
 <li><b>Réglages financiers optionnels</b> : statut juridique, taux, dépenses, nom de ton entreprise — uniquement si tu actives « Net en poche ».</li>
 <li><b>App mobile</b> : jeton de notification (pour t'envoyer les notifications de vente que tu as activées), préférences de notification, fuseau horaire. Aucune géolocalisation, aucun contact, aucune photo.</li>
+<li><b>Avis envoyés depuis l'app</b> (menu → Ton avis) : ton message, son type (idée, bug, autre), l'e-mail et l'identifiant de ton compte, la version de l'app, le modèle de l'appareil et la langue. Servent uniquement à lire ton avis et à te répondre.</li>
+<li><b>Signalements au classement, codes cadeaux</b> : si tu signales une fiche ou utilises un code cadeau, nous enregistrons ton identifiant, l'élément concerné et la date.</li>
 </ul>
 
 <h2>Ce que nous ne faisons pas</h2>
@@ -73,22 +107,43 @@
 <p>Uniquement pour fournir le service : calculer tes revenus et indicateurs, t'envoyer les notifications que tu as demandées, valider les achats de tes clients et accorder leurs accès premium. Base légale : exécution du contrat (RGPD, art. 6.1.b).</p>
 
 <h2>Mesure d'audience</h2>
-<p>Nous mesurons l'usage du site et de l'app avec PostHog (serveurs dans l'Union européenne) : pages et étapes vues, ouverture de l'app, onboarding, paywall et achat de MoneyMaker Pro, avec un identifiant aléatoire. Ni e-mail, ni chiffres de revenus, ni enregistrement de session. Le site ne dépose pas de cookie pour cette mesure.</p>
+<p>Nous mesurons l'usage du site et de l'app avec PostHog (serveurs dans l'Union européenne, Francfort) : pages et écrans vus, ouverture de l'app, étapes de l'onboarding, utilisation des principales fonctions. Dans l'app, ces événements sont liés à un <b>identifiant pseudonyme stable lié à ton compte</b> (ton identifiant d'utilisateur MoneyMaker, pas ton e-mail), pour comprendre l'usage du produit d'une session à l'autre ; au sens d'Apple, des données « Interactions avec le produit » liées à toi, utilisées pour l'analyse uniquement. Sur le site, l'identifiant est aléatoire, gardé en mémoire seulement et oublié à la fermeture de la page : ni cookie, ni stockage local. Ni e-mail, ni chiffres de revenus, ni enregistrement de session, aucun usage publicitaire.</p>
 
 <h2>Classement public</h2>
 <p>Ton business n'apparaît au classement que si tu l'y inscris. Sont alors publics : son nom, son logo, sa description, son site, ses revenus et son nombre d'abonnés (tu peux masquer les montants exacts). Tu peux le retirer à tout moment. Un signalement enregistre ton identifiant, le business concerné et ton message.</p>
 
 <h2>Où sont les données</h2>
-<p>Sur Google Cloud / Firebase, région <b>europe-west1 (Belgique)</b>. Les échanges sont chiffrés (HTTPS), les données chiffrées au repos par Google. Les services tiers sollicités sont ceux que tu connectes : Apple, Google, Stripe, et éventuellement Slack, Discord, Mixpanel, Amplitude, Segment, PostHog, AppsFlyer si tu les actives.</p>
+<p>Sur Google Cloud / Firebase, région <b>europe-west1 (Belgique)</b>. Les échanges sont chiffrés (HTTPS), les données chiffrées au repos par Google.</p>
+
+<h2>Sous-traitants et destinataires</h2>
+<ul>
+<li><b>Google Cloud / Firebase</b> (Google Ireland Limited) : hébergement, base de données, authentification, fonctions serveur, journaux.</li>
+<li><b>Google Cloud Translation</b> : seulement quand tu touches « Traduire » sur un avis App Store (seul le texte de l'avis est envoyé).</li>
+<li><b>Apple</b> : notifications push (APNs) vers tes appareils, connexion avec Apple, et achats intégrés de l'app iPhone.</li>
+<li><b>Stripe</b> : paiement de MoneyMaker Pro sur le web quand il est proposé (il ne l'est pas pendant le lancement gratuit), et lecture de tes propres ventes Stripe si tu connectes ton compte.</li>
+<li><b>PostHog</b> (serveurs dans l'UE) : mesure d'audience décrite plus haut.</li>
+<li><b>Réseaux de diffusion de contenu</b> : le site charge ses scripts et polices depuis jsDelivr, cdnjs et gstatic.com (Google), qui reçoivent ton adresse IP et les informations du navigateur comme pour toute requête web.</li>
+<li><b>Services que tu actives toi-même</b> pour un business : tes événements de vente leur sont alors envoyés, sur ton instruction. Notifications et analytics : Slack, Discord, Mixpanel, Amplitude, Segment, PostHog, AppsFlyer. Connecteurs serveur : Meta Conversions API, Adjust, Branch, Singular, Kochava, Tenjin, Braze, OneSignal, Iterable, Customer.io, CleverTap, Airship, Airbridge, Intercom, Firebase / Google Analytics 4, mParticle, Statsig, TelemetryDeck. Ainsi que les stores et moyens de paiement que tu connectes (App Store Connect, Google Play, Stripe, Paddle, Amazon Appstore, Samsung Galaxy Store, Roku), tes propres webhooks et tes exports programmés (S3, Google Cloud Storage, webhook).</li>
+</ul>
+
+<h2>Transferts hors de l'Union européenne</h2>
+<p>Nos données principales restent dans l'UE. Certains sous-traitants (Google, Apple, Stripe, réseaux de diffusion) et les services que tu actives peuvent traiter des données hors de l'UE, surtout aux États-Unis. Ces transferts reposent sur le Data Privacy Framework UE–États-Unis quand le destinataire y est certifié, et sinon sur les clauses contractuelles types de la Commission européenne.</p>
 
 <h2>Assistant IA (Claude) — connecteur MCP</h2>
-<p>Si tu connectes MoneyMaker à un assistant (Claude d'Anthropic ou un autre client MCP) depuis <a href="/connect">/connect</a>, l'assistant reçoit, à ta demande et uniquement pendant la conversation, les données des business auxquels tu as accès : métriques de revenus et d'abonnements, clients (identifiants d'app, pays, achats), transactions, classements et avis App Store, finance, configuration et membres de l'équipe. Les clés des stores (Stripe, App Store Connect, Google Play, PostHog) ne sont jamais transmises.</p>
+<p>Si tu connectes MoneyMaker à un assistant (Claude d'Anthropic ou un autre client MCP) depuis <a href="/connect">/connect</a>, l'assistant reçoit, à ta demande et uniquement pendant la conversation, les données des business auxquels tu as accès : métriques de revenus et d'abonnements, clients (identifiants d'app, pays, achats), transactions, classements et avis App Store, finance, configuration et membres de l'équipe. Les clés des stores (Stripe, App Store Connect, Google Play, PostHog) ne sont jamais transmises à l'assistant. Si tu lui demandes de connecter un store, la clé que tu lui donnes passe par la conversation, est enregistrée sur notre serveur et n'est ensuite jamais relue ni renvoyée.</p>
 <p>Tu choisis lecture seule ou lecture + modification. Chaque modification est faite avec tes droits et inscrite au journal d'audit du business ; les suppressions demandent une confirmation explicite. Nous ne stockons que des empreintes (SHA-256) des jetons, valables 1 heure (accès) et 90 jours au plus (autorisation). Tu peux révoquer un assistant à tout moment sur <a href="/connect">/connect</a>. Ce que l'assistant fait ensuite des données relève de la politique de confidentialité de son éditeur.</p>
 <h2>Durée de conservation et suppression</h2>
-<p>Les données sont conservées tant que ton compte existe. Tu peux <b>supprimer ton compte à tout moment depuis l'app</b> (Réglages → Supprimer mon compte) : ton compte, tes jetons, tes appareils et les business dont tu es le seul membre (ventes, clés, réglages) sont effacés immédiatement et définitivement.</p>
+<ul>
+<li>Compte, business, ventes et réglages : tant que ton compte existe.</li>
+<li>Avis, signalements au classement et codes cadeaux : tant que ton compte existe, sauf si tu nous demandes de les effacer avant.</li>
+<li>Jetons des assistants : 1 heure (accès) et 90 jours au plus (autorisation), ou jusqu'à leur révocation.</li>
+<li>Journaux techniques du serveur (Google Cloud Logging) : 30 jours.</li>
+<li>Mesure d'audience (PostHog) : 12 mois au plus.</li>
+</ul>
+<p>Tu peux <b>supprimer ton compte à tout moment</b>, dans l'app ou sur le dashboard web (Réglages → Supprimer mon compte) : ton compte, tes jetons, tes appareils, les avis que tu as envoyés, tes signalements au classement, tes codes cadeaux et les business dont tu es le seul membre (ventes, clés, réglages) sont effacés immédiatement et définitivement. Les sauvegardes de notre hébergeur sont écrasées selon leur cycle normal.</p>
 
 <h2>Tes droits</h2>
-<p>Accès, rectification, effacement, portabilité (export CSV dans le dashboard), opposition : <a href="mailto:contact@moneymakerr.com">contact@moneymakerr.com</a>. Tu peux aussi saisir la CNIL (cnil.fr).</p>
+<p>Accès, rectification, effacement, portabilité (export CSV dans le dashboard), opposition, et coordonnées de l'éditeur (<a href="/legal?lang=fr">mentions légales</a>) : <a href="mailto:support@usemoneymaker.com">support@usemoneymaker.com</a>. Tu peux aussi saisir la CNIL (cnil.fr).</p>
 
-<p class="muted" style="margin-top:48px">Dernière mise à jour : 5 novembre 2026.</p>
+<p class="muted" style="margin-top:48px">Dernière mise à jour : 21 novembre 2026.</p>
 </div></main></body></html>

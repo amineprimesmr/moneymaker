@@ -21,7 +21,7 @@ On first sign-in, a MoneyMaker page opens in the browser. The user chooses Googl
 
 If `list_projects` already returns the right business, keep it. Otherwise ask its name and what it sells. For an iOS app, find it with `search_app_store` and pass its ID as `appStoreAppId`. For an Android app, pass `googlePackageName`. For a Stripe-only business, the name is enough. Get confirmation, then call `create_project` and keep the `projectId`, which the next tools need.
 
-The free plan has a limited number of businesses. If creation is refused for this reason, explain that MoneyMaker Pro unlocks unlimited businesses, without buying anything yourself.
+MoneyMaker is free during launch, with unlimited businesses: there is nothing to buy. If creation is refused anyway, explain the error and never buy anything yourself.
 
 ## 4. Connect revenue
 
@@ -29,7 +29,7 @@ Ask which sources they use, then handle only those.
 
 | Source | What you need | Tool |
 |---|---|---|
-| Stripe | Restricted key `rk_` preferred (`sk_` accepted): read Subscriptions, Invoices, Customers, Payments, write Webhook Endpoints. Stripe Dashboard › Developers › API keys | `connect_stripe` |
+| Stripe | Restricted key `rk_` preferred (`sk_` accepted). Write: Webhook Endpoints, Subscriptions (adds `app_user_id` to metadata), Checkout Sessions and Customer portal (only for web checkout and subscription management). Read: Charges, Refunds, Customers, Invoices, Payment Intents, Prices, Products, Promotion codes. Optional: read Account (shows the account name). Stripe Dashboard › Developers › API keys | `connect_stripe` |
 | App Store | App Store Connect API key, App Manager or Admin role: issuer ID, key ID, contents of the `.p8`. Users and Access › Integrations | `connect_app_store` |
 | Google Play | JSON of a service account invited in Play Console, with "View financial data" and "Manage orders" permissions, and the package name. The tool returns a Pub/Sub endpoint to set in Play Console: pass it on | `connect_google_play` |
 | RevenueCat | Secret key `sk_`, to import history | `import_revenuecat` |

@@ -79,7 +79,7 @@ internal class PendingPurchaseQueue(private val prefs: SharedPreferences) {
 internal fun buildOfflineCustomerInfo(appUserId: String, entitlementMap: Map<String, List<String>>, owned: List<Pair<String, Long>>, previous: CustomerInfo?): CustomerInfo {
     val ents = JSONObject()
     for ((id, products) in entitlementMap) {
-        val match = owned.firstOrNull { (pid, _) -> "*" in products || pid in products } ?: continue
+        val match = owned.firstOrNull { (pid, _) -> "*" in products || products.any { playProductId(it) == pid } } ?: continue
         ents.put(id, JSONObject().put("id", id).put("active", true).put("productId", match.first).put("store", "play_store")
             .put("expiresAt", JSONObject.NULL).put("willRenew", false).put("isTrial", false).put("billingIssue", false).put("purchasedAt", match.second))
     }
@@ -90,4 +90,5 @@ internal fun buildOfflineCustomerInfo(appUserId: String, entitlementMap: Map<Str
     return CustomerInfo.fromJson(j).copy(verification = VerificationResult.VERIFIED_ON_DEVICE)
 }
 
-internal fun isRetryable(e: Throwable) = e is MoneyMakerException && (e.code == "network" || e.code.startsWith("http_5") || e.code == "internal_error")
+/** Network failure, any 5xx or 429 (see [MoneyMakerException.isRetryable]). */
+internal fun isRetryable(e: Throwable) = e is MoneyMakerException && e.isRetryable

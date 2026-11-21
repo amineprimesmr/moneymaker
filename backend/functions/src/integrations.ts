@@ -179,7 +179,9 @@ export function sanitizeConnector(name: string, v: any): any {
     else if (kind.startsWith("u")) {
       const host = kind.split(":")[1];
       let u: URL; try { u = new URL(String(raw)); } catch { throw new Error(`invalid_${name}_${field}`); }
-      if (u.protocol !== "https:" || (host && !u.hostname.includes(host))) throw new Error(`invalid_${name}_${field}`);
+      // Domaine exact ou sous-domaine (« hubspot.com.attaquant.net » est refusé).
+      const registrable = u.hostname.split(".").slice(-2)[0]; // braze dans rest.iad-01.braze.com
+      if (u.protocol !== "https:" || (host && registrable !== host)) throw new Error(`invalid_${name}_${field}`);
       out[field] = u.origin;
     } else if (kind.startsWith("e:")) { if (!kind.slice(2).split("|").includes(raw)) throw new Error(`invalid_${name}_${field}`); out[field] = raw; }
     else if (kind === "m") {

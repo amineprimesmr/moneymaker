@@ -81,12 +81,32 @@ async function remember(project: Project, token: string, data: Record<string, un
   await db.doc(`projects/${project.id}/googleTokens/${sha256(token)}`).set({ token, ...data, updatedAt: Date.now() }, { merge: true });
 }
 
+const periodCache = new Map<string, { period: string | null; at: number }>();
+/** Durée de facturation (ISO 8601, ex. P1Y) d'un forfait de base, mise en cache 6 h. */
+async function basePlanPeriod(call: (path: string) => Promise<any>, productId: string, basePlanId?: string): Promise<string | null> {
+  const key = `${productId}/${basePlanId ?? ""}`, hit = periodCache.get(key);
+  if (hit && Date.now() - hit.at < 6 * 3600000) return hit.period;
+  const def = await call(`/subscriptions/${encodeURIComponent(productId)}`);
+  const plans: any[] = def.basePlans ?? [];
+  const plan = plans.find(b => b.basePlanId === basePlanId) ?? (plans.length === 1 ? plans[0] : null);
+  const period = plan?.autoRenewingBasePlanType?.billingPeriodDuration ?? plan?.prepaidBasePlanType?.billingPeriodDuration ?? null;
+  periodCache.set(key, { period, at: Date.now() });
+  return period;
+}
+
 async function fetchAndStore(project: Project, token: string, productId: string, kind: "subscription" | "inapp", consumable: boolean, appUserId: string | null, hints: GoogleHints) {
   const { call } = await client(project);
   const tokenPath = encodeURIComponent(token);
   let purchase: Purchase, accountHash: string | undefined;
   if (kind === "subscription") {
     const sub = await call(`/purchases/subscriptionsv2/tokens/${tokenPath}`);
+    // Sans période envoyée par l'app (notification RTDN reçue d'abord, restauration…), on lit la période
+    // du forfait de base dans Play Console : sinon un annuel serait compté comme un mensuel (MRR × 12).
+    if (!hints.period) {
+      const line = (sub.lineItems ?? [])[0] ?? {};
+      const period = await basePlanPeriod(call, String(line.productId ?? productId), line.offerDetails?.basePlanId).catch(() => null);
+      if (period) hints = { ...hints, period };
+    }
     purchase = googleSubscriptionPurchase(token, sub, hints);
     accountHash = sub.externalAccountIdentifiers?.obfuscatedExternalAccountId;
     if (sub.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING" && purchase.status === "active") {
@@ -127,6 +147,23 @@ export async function ingestGooglePurchase(project: Project, appUserId: string, 
   });
 }
 
+/** Le jeton figure-t-il dans la liste officielle des achats annulés/remboursés (30 derniers jours) ? */
+async function confirmedVoided(project: Project, token: string): Promise<boolean> {
+  const { call } = await client(project).catch(() => ({ call: null as any }));
+  if (!call) return false;
+  let pageToken: string | undefined;
+  const startTime = Date.now() - 30 * 86400000;
+  for (let page = 0; page < 20; page++) {
+    const q = new URLSearchParams({ startTime: String(startTime), type: "1", maxResults: "1000", ...(pageToken ? { token: pageToken } : {}) });
+    const r = await call(`/purchases/voidedpurchases?${q}`).catch(() => null);
+    if (!r) return false;
+    if ((r.voidedPurchases ?? []).some((v: any) => v.purchaseToken === token)) return true;
+    pageToken = r.tokenPagination?.nextPageToken;
+    if (!pageToken) return false;
+  }
+  return false;
+}
+
 /** Server path: Real-time developer notifications (Pub/Sub push subscription). */
 export async function ingestGoogleNotification(project: Project, body: any) {
   const raw = body?.message?.data;
@@ -140,6 +177,8 @@ export async function ingestGoogleNotification(project: Project, body: any) {
   if (voided) {
     const owner = await lookupIndex(project.id, `google:${sha256(token)}`);
     if (!owner) return { ignored: "unknown_token" };
+    // L'URL RTDN n'est protégée que par un jeton : on ne marque un achat remboursé qu'après confirmation par Google.
+    if (!(await confirmedVoided(project, token))) return { ignored: "void_not_confirmed" };
     const ref = db.doc(`projects/${project.id}/customers/${owner}/purchases/gp_${sha256(token).slice(0, 40)}`);
     const prev = (await ref.get()).data() as Purchase | undefined;
     if (!prev) return { ignored: "unknown_purchase" };

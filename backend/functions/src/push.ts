@@ -12,7 +12,7 @@ import { connect, ClientHttp2Session, constants } from "http2";
 import { createPrivateKey, sign, KeyObject } from "crypto";
 import { db, Project } from "./store";
 import { convertMicros, readableProductId } from "./engine";
-import { Lang, normLang, money, EVENT_TITLES, periodLabel, todayLine, lateSaleLine, todayLabel, liveActivityStart, RANK_TITLES, CHART_NAMES, categoryLabel, previousRank, dailySummaryText } from "./i18n";
+import { Lang, normLang, money, EVENT_TITLES, eventHint, periodLabel, todayLine, lateSaleLine, todayLabel, liveActivityStart, RANK_TITLES, CHART_NAMES, categoryLabel, previousRank, dailySummaryText } from "./i18n";
 
 export const BUNDLE_ID = "io.moneymaker.app";
 
@@ -36,7 +36,7 @@ export interface PushPrefs {
 }
 
 export const DEFAULT_PREFS: PushPrefs = {
-  sales: true, renewals: true, trials: true, churn: false, billing: true, refunds: true, rankings: true, insights: true,
+  sales: true, renewals: true, trials: true, churn: true, billing: true, refunds: true, rankings: true, insights: true,
   dailySummary: true, sandbox: false, sound: true, saleSound: "cash", liveActivityAuto: true, mutedProjects: [],
 };
 
@@ -107,11 +107,17 @@ export async function devicesFor(uids: string[]): Promise<(Device & { uid: strin
 
 // ── Event → notification ────────────────────────────────────────────────────
 
+// Même couverture que les notifications de RevenueCat : ventes, renouvellements, essais, résiliations,
+// expirations, problèmes de paiement, remboursements (demandés, accordés, refusés, annulés), changements de formule.
 const PREF_FOR: Record<string, keyof PushPrefs> = {
-  INITIAL_PURCHASE: "sales", NON_RENEWING_PURCHASE: "sales", TRIAL_CONVERTED: "sales", RENEWAL: "renewals",
-  TRIAL_STARTED: "trials", CANCELLATION: "churn", EXPIRATION: "churn", BILLING_ISSUE: "billing", BILLING_RECOVERED: "billing",
-  REFUND: "refunds", REVOKED: "refunds", UNCANCELLATION: "sales", TEST: "sales",
+  INITIAL_PURCHASE: "sales", NON_RENEWING_PURCHASE: "sales", TRIAL_CONVERTED: "sales", RENEWAL: "renewals", PRODUCT_CHANGE: "sales",
+  TRIAL_STARTED: "trials", CANCELLATION: "churn", EXPIRATION: "churn", PAUSED: "churn", UNCANCELLATION: "churn",
+  BILLING_ISSUE: "billing", BILLING_RECOVERED: "billing",
+  REFUND: "refunds", REVOKED: "refunds", REFUND_REQUESTED: "refunds", REFUND_DECLINED: "refunds", REFUND_REVERSED: "refunds", TEST: "sales",
 };
+/** Événements d'essai : rangés avec les essais, pas avec les résiliations d'abonnés payants. */
+const prefKey = (e: Record<string, any>): keyof PushPrefs | undefined =>
+  e.isTrial && (e.type === "CANCELLATION" || e.type === "EXPIRATION") ? "trials" : PREF_FOR[e.type];
 
 
 const REVENUE = new Set(["INITIAL_PURCHASE", "NON_RENEWING_PURCHASE", "TRIAL_CONVERTED", "RENEWAL"]);
@@ -128,7 +134,7 @@ const flag = (cc?: string | null) => cc && /^[A-Z]{2}$/i.test(cc)
 export function wants(prefs: PushPrefs, projectId: string, e: Record<string, any>): boolean {
   if (prefs.mutedProjects.includes(projectId)) return false;
   if (e.isSandbox && e.type !== "TEST" && !prefs.sandbox) return false;
-  const key = PREF_FOR[e.type];
+  const key = prefKey(e);
   return Boolean(key && prefs[key]);
 }
 
@@ -141,13 +147,18 @@ export function eventNotification(project: Project, e: Record<string, any>, pref
   const TITLES = EVENT_TITLES[lang];
   const isRevenue = REVENUE.has(e.type) && !e.isTrial && e.priceMicros > 0;
   const late = isRevenue && isLateEvent(e);
-  const amount = e.priceMicros > 0 && !e.isTrial ? formatMoney(e.type === "REFUND" ? -e.priceMicros : e.priceMicros, e.currency, lang) : "";
-  const title = isRevenue ? `+${amount} · ${project.name}` : `${TITLES[e.type] ?? e.type} · ${project.name}`;
-  const bits = [isRevenue ? TITLES[e.type] : amount, periodLabel(lang, e.periodMonths), readableProductId(e.productId), `${flag(e.country)} ${e.country ?? ""}`.trim(), e.isSandbox ? "sandbox" : ""]
+  const negative = e.type === "REFUND" || e.type === "REVOKED";
+  const amount = e.priceMicros > 0 && !e.isTrial ? formatMoney(negative ? -e.priceMicros : e.priceMicros, e.currency, lang) : "";
+  const label = e.isTrial && e.type === "CANCELLATION" ? TITLES.TRIAL_CANCELLATION : e.isTrial && e.type === "EXPIRATION" ? TITLES.TRIAL_EXPIRATION : TITLES[e.type] ?? e.type;
+  const title = isRevenue ? `+${amount} · ${project.name}` : `${label} · ${project.name}`;
+  const product = e.productName || readableProductId(e.productId);
+  const bits = [isRevenue ? label : amount, periodLabel(lang, e.periodMonths), product, `${flag(e.country)} ${e.country ?? ""}`.trim(), e.isSandbox ? "sandbox" : ""]
     .filter(Boolean);
+  const hint = isRevenue ? "" : eventHint(lang, e.type, e, tz);
+  if (hint) bits.unshift(hint);
   const subtitle = late ? lateSaleLine(lang, new Date(e.purchasedAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", { timeZone: tz, day: "numeric", month: "short" }))
     : isRevenue && todayMicros !== undefined ? todayLine(lang, formatMoney(todayMicros, currency, lang)) : undefined;
-  const loud = !late && (isRevenue || e.type === "BILLING_ISSUE" || e.type === "REFUND");
+  const loud = !late && (isRevenue || e.type === "BILLING_ISSUE" || e.type === "REFUND" || e.type === "REFUND_REQUESTED");
   return {
     aps: {
       alert: { title, ...(subtitle ? { subtitle } : {}), body: bits.join(" · ") },
@@ -208,8 +219,8 @@ export function foldToday(
       if (x.isSandbox || x.at < dayStart) continue;
       const v = convertMicros(x.amountMicros, x.currency, currency);
       const h = Math.min(23, Math.max(0, Math.floor((x.at - dayStart) / 3600000)));
-      hourly[h] += v;
       if (x.kind === "refund") t.refundsMicros += -v; else {
+        hourly[h] += v; // courbe des ventes du jour : les remboursements ne la font pas plonger sous zéro
         t.revenueMicros += v;
         if (x.kind === "renewal") t.renewals++; else t.sales++;
         if (!t.last || x.at > t.last.at) t.last = { projectName: r.projectName, amountMicros: x.amountMicros, currency: x.currency, productId: readableProductId(x.productId) ?? undefined, country: x.country, at: x.at };
@@ -244,7 +255,7 @@ export async function todayFor(uid: string, tz: string, currency?: string, proje
 /** Live Activity content-state — mirrors `RevenueActivityAttributes.ContentState` in the app. */
 export function liveActivityState(t: Today) {
   return {
-    revenueMicros: t.revenueMicros - t.refundsMicros, currency: t.currency, sales: t.sales + t.renewals, trials: t.trials,
+    revenueMicros: t.revenueMicros, currency: t.currency, sales: t.sales + t.renewals, trials: t.trials, // ventes du jour (jamais négatif)
     lastProject: t.last?.projectName ?? null, lastAmountMicros: t.last?.amountMicros ?? 0, lastCurrency: t.last?.currency ?? t.currency, lastCountry: (t.last as any)?.country ?? null,
     lastSaleAt: t.last ? Math.floor(t.last.at / 1000) : null,
     hourly: t.hourly.map(v => Math.round(v / 10000) / 100), updatedAt: Math.floor(Date.now() / 1000),
@@ -359,7 +370,7 @@ export async function pushEvent(project: Project, e: Record<string, any>): Promi
     const prefs = { ...DEFAULT_PREFS, ...d.prefs };
     const t = isRevenue && !e.isSandbox ? await today(d).catch(() => undefined) : undefined;
     const jobs: Promise<void>[] = [];
-    if (d.apnsToken && wants(prefs, project.id, e)) jobs.push(apnsSend(d.env, d.apnsToken, "alert", eventNotification(project, e, prefs, t ? t.revenueMicros - t.refundsMicros : undefined, d.currency, normLang(d.lang), d.tz || "Europe/Paris"))
+    if (d.apnsToken && wants(prefs, project.id, e)) jobs.push(apnsSend(d.env, d.apnsToken, "alert", eventNotification(project, e, prefs, t ? t.revenueMicros : undefined, d.currency, normLang(d.lang), d.tz || "Europe/Paris"))
       .then(async r => { r.status === 200 ? stats.alerts++ : stats.failed++; await prune(d, "apnsToken", r); }));
     if (isRevenue && !e.isSandbox) {
       if (d.widgetPushToken) jobs.push(apnsSend(d.env, d.widgetPushToken, "widgets", { aps: { "content-changed": true } })
@@ -433,7 +444,7 @@ export async function sendDailySummaries(now = Date.now()): Promise<number> {
     const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: d.tz, hour: "numeric", hourCycle: "h23" }).format(new Date(now)));
     if (hour !== 21 || !d.apnsToken) return;
     const t = await todayFor(uid, d.tz, d.currency);
-    const net = t.revenueMicros - t.refundsMicros;
+    const net = t.revenueMicros; // ventes du jour (les remboursements ne rendent jamais le résumé négatif)
     const { title, body } = dailySummaryText(normLang(d.lang), t, net, t.currency);
     const r = await apnsSend(d.env, d.apnsToken, "alert", {
       aps: { alert: { title, body }, "thread-id": "daily", "interruption-level": "passive", category: "SUMMARY" },

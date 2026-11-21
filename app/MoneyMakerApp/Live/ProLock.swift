@@ -7,7 +7,7 @@ import SwiftUI
 
 extension ProPaywall {
     /// Statut inconnu ou achat indisponible : rien n'est verrouillé.
-    var locksContent: Bool { status.map { !$0.pro && $0.available } ?? false }
+    var locksContent: Bool { !Self.freeLaunch && (status.map { !$0.pro && $0.available } ?? false) }
 }
 
 private struct ProLock: ViewModifier {
@@ -54,7 +54,7 @@ struct ProHealthCard: View {
     }
     private var revenuePerPayer: String {
         guard let n = p.payingCustomers, n > 0 else { return "—" }
-        return (p.netRevenueMicros / n).money(p.currency)
+        return (p.grossRevenueMicros / n).money(p.currency)
     }
     private var installToPaid: Double? {
         guard let d = p.downloads, d > 0, let n = p.payingCustomers else { return nil }

@@ -23,12 +23,13 @@ export interface Purchase {
   updatedAt: number;
   country?: string | null;   // ISO alpha-2 of the storefront / billing address
   affiliate?: boolean;       // vente apportée par un affilié (code de parrainage dans les métadonnées Stripe)
+  productName?: string | null; // nom lisible du produit (Stripe : nom du produit), affiché à la place de l'identifiant
 }
 
 export type EventType =
   | "INITIAL_PURCHASE" | "RENEWAL" | "TRIAL_STARTED" | "TRIAL_CONVERTED" | "CANCELLATION" | "UNCANCELLATION"
   | "EXPIRATION" | "BILLING_ISSUE" | "BILLING_RECOVERED" | "REFUND" | "PRODUCT_CHANGE" | "NON_RENEWING_PURCHASE"
-  | "PAUSED" | "REVOKED" | "GRANT";
+  | "PAUSED" | "REVOKED" | "GRANT" | "REFUND_REQUESTED" | "REFUND_DECLINED" | "REFUND_REVERSED";
 
 export interface Entitlement {
   id: string;
@@ -92,7 +93,8 @@ export function diffEvents(prev: Purchase | undefined, next: Purchase): EventTyp
     ev.push(prev.isTrial && !next.isTrial ? "TRIAL_CONVERTED" : "RENEWAL");
   }
   if (prev.status !== next.status) {
-    if (next.status === "refunded") ev.push("REFUND");
+    if ((prev.status === "refunded" || prev.status === "revoked") && (next.status === "active" || next.status === "grace")) ev.push("REFUND_REVERSED");
+    else if (next.status === "refunded") ev.push("REFUND");
     else if (next.status === "revoked") ev.push("REVOKED");
     else if (next.status === "expired") ev.push("EXPIRATION");
     else if (next.status === "paused") ev.push("PAUSED");
@@ -100,7 +102,9 @@ export function diffEvents(prev: Purchase | undefined, next: Purchase): EventTyp
     else if (next.status === "active" && (prev.status === "billing_retry" || prev.status === "grace")) ev.push("BILLING_RECOVERED");
   }
   if (prev.willRenew && !next.willRenew && isPurchaseActive(next)) ev.push("CANCELLATION");
-  if (!prev.willRenew && next.willRenew && isPurchaseActive(next)) ev.push("UNCANCELLATION");
+  // Réabonnement : seulement après une vraie résiliation, pas quand le store confirme le renouvellement
+  // automatique juste après l'achat (doublon « Réactivation » avec « Nouvel abonné »).
+  if (!prev.willRenew && next.willRenew && isPurchaseActive(next) && next.updatedAt - prev.latestPurchaseAt > 15 * 60000) ev.push("UNCANCELLATION");
   return [...new Set(ev)];
 }
 
@@ -109,7 +113,28 @@ export const FX_PER_EUR: Record<string, number> = {
   EUR: 1, USD: 1.08, GBP: 0.85, CHF: 0.95, CAD: 1.47, AUD: 1.63, JPY: 162, CNY: 7.8, INR: 90, BRL: 5.9,
   MXN: 19.5, SEK: 11.4, NOK: 11.6, DKK: 7.46, PLN: 4.3, CZK: 25, HUF: 395, TRY: 37, MAD: 10.8, AED: 3.97,
   SAR: 4.05, KRW: 1480, SGD: 1.45, HKD: 8.4, NZD: 1.78, ZAR: 19.8, ILS: 4.0, RON: 4.97, IDR: 17300, THB: 38,
+  // Devises des stores absentes de la BCE : taux approchés (les taux BCE du jour remplacent les autres, voir loadFx).
+  TWD: 35, PHP: 63, VND: 28000, EGP: 53, NGN: 1700, PKR: 305, CLP: 1030, COP: 4500, PEN: 4.1, QAR: 3.93, KZT: 540,
+  UAH: 45, RUB: 95, ARS: 1300, BGN: 1.956, ISK: 150, MYR: 4.9, BDT: 130, LKR: 330, KES: 140, GHS: 15, TZS: 2900,
+  UGX: 4000, XOF: 655.957, XAF: 655.957, DZD: 145, TND: 3.35, JOD: 0.77, KWD: 0.33, BHD: 0.41, OMR: 0.42, GEL: 2.95,
+  AMD: 420, AZN: 1.84, RSD: 117, MKD: 61.5, BAM: 1.956, MDL: 19.5, MNT: 3700, KHR: 4400, NPR: 145, BOB: 7.5,
+  PYG: 8400, UYU: 45, DOP: 66, CRC: 550, GTQ: 8.4, HNL: 27, JMD: 170, TTD: 7.3, LBP: 97000, IQD: 1415, MOP: 8.7,
 };
+
+/** Remplace les taux par ceux du jour (BCE), sans retirer les devises que la BCE ne publie pas. */
+export function applyFxRates(rates: Record<string, number>) {
+  for (const [k, v] of Object.entries(rates)) if (/^[A-Z]{3}$/.test(k) && Number.isFinite(v) && v > 0) FX_PER_EUR[k] = v;
+}
+
+/** Devises sans unité mineure / à trois décimales chez Stripe (et la plupart des PSP). */
+const ZERO_DECIMAL = new Set(["BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"]);
+const THREE_DECIMAL = new Set(["BHD", "JOD", "KWD", "OMR", "TND"]);
+/** Montant en unité mineure (centimes, ou yen pour JPY) → micro-unités. Pure — unit-tested. */
+export function minorToMicros(minor: unknown, currency: string): number {
+  const c = String(currency ?? "").toUpperCase(), n = Number(minor ?? 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * (ZERO_DECIMAL.has(c) ? 1e6 : THREE_DECIMAL.has(c) ? 1e3 : 1e4));
+}
 
 export function convertMicros(micros: number, from: string, to: string): number {
   const f = FX_PER_EUR[from.toUpperCase()], t = FX_PER_EUR[to.toUpperCase()];

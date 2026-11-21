@@ -35,7 +35,7 @@ if Android). Keep the returned `projectId`; the public SDK key may be shown, the
 |---|---|---|---|
 | App Store Connect | `asc` CLI / ASC MCP: issuer id, key id, app Apple ID (`asc apps list`) | https://appstoreconnect.apple.com/access/integrations/api → Team Keys → **+** → role **App Manager** → download the .p8 once, copy Issuer ID and Key ID | `connect_app_store` |
 | Google Play | GCP connector: create a service account JSON | Play Console → Users and permissions → invite the service account email with **View financial data** + **Manage orders** | `connect_google_play` |
-| Stripe | Stripe MCP: create a restricted key (read Subscriptions, Invoices, Customers, Charges; write Webhook Endpoints) | https://dashboard.stripe.com/apikeys → **Create restricted key** with those rights | `connect_stripe` |
+| Stripe | Stripe MCP: create a restricted key — write: Webhook Endpoints, Subscriptions, Checkout Sessions, Customer portal; read: Charges, Refunds, Customers, Invoices, Payment Intents, Prices, Products, Promotion codes (optional: read Account) | https://dashboard.stripe.com/apikeys → **Create restricted key** with those rights (Checkout Sessions and Customer portal are only needed for web checkout) | `connect_stripe` |
 | RevenueCat | RevenueCat MCP: project id and a v1 secret key | https://app.revenuecat.com → Project settings › API keys → **+ New secret API key** (v1) | `import_revenuecat` then `get_import_status` until done |
 | PostHog | PostHog MCP: project id and host | https://eu.posthog.com/settings/user-api-keys → personal key with **query:read, project:read** | `connect_posthog` |
 | Paddle / Amazon / Roku / AppsFlyer | — | key from their console | `set_store_credentials` |

@@ -2,6 +2,15 @@
 <html lang="fr"><head><meta charset="utf-8">
 <script src="/i18n.js"></script><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Guide MoneyMaker</title>
+<link rel="canonical" href="https://usemoneymaker.com/guide">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="MoneyMaker">
+<meta property="og:url" content="https://usemoneymaker.com/guide">
+<meta property="og:title" content="Guide MoneyMaker">
+<meta property="og:description" content="Brancher ses abonnements App Store, Google Play et Stripe à MoneyMaker, étape par étape.">
+<meta property="og:image" content="https://usemoneymaker.com/icon-512.png">
+<meta name="twitter:card" content="summary">
+
 <meta name="description" content="Brancher ses abonnements App Store, Google Play et Stripe à MoneyMaker, étape par étape.">
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="icon" type="image/png" sizes="32x32" href="/icon-32.png">
@@ -95,11 +104,11 @@ try await MoneyMaker.shared.purchase(package)         // acheter (ou MoneyMakerP
 <li>Remplace le SDK RevenueCat par MoneyMaker (ton agent le fait avec le prompt). Au premier lancement, le SDK resynchronise <b>en silence</b> les achats en cours de chaque utilisateur.</li>
 <li>Redirige les notifications serveur Apple et Play vers MoneyMaker (étapes 3 et 4) et désactive l'intégration AppsFlyer de RevenueCat pour ne pas compter les revenus deux fois.</li>
 <li><b>Ton backend</b> appelle l'API RevenueCat (vérifier un abonné, offrir un mois) ou reçoit ses webhooks ? Remplace seulement l'URL de base par <code>https://usemoneymaker.com/v1/rc</code> et la clé par ta clé secrète MoneyMaker : mêmes réponses, mêmes webhooks (format « revenuecat » dans Réglages). Pendant la transition, lis les deux et garde l'accès qui expire le plus tard.</li>
-<li>Abonnés qui n'ouvrent plus l'app : leurs renouvellements sont rattachés automatiquement au bon compte dès qu'ils rouvrent l'app. Pour les rattacher tout de suite, importe la correspondance <code>original_transaction_id → app_user_id</code> depuis l'export RevenueCat (on l'a fait pour V2).</li>
+<li>Abonnés qui n'ouvrent plus l'app : leurs renouvellements sont rattachés automatiquement au bon compte dès qu'ils rouvrent l'app. Pour voir tout de suite leurs accès et leur historique, lance l'import RevenueCat (Connexions → RevenueCat, avec ta clé secrète RevenueCat).</li>
 </ol>
 
 <h2 id="faq">FAQ</h2>
-<h3>Combien ça coûte ?</h3><p>0 % de commission. Tu paies seulement l'hébergement Firebase, gratuit à petite échelle.</p>
+<h3>Combien ça coûte ?</h3><p>MoneyMaker est un service hébergé : rien à installer ni à héberger. Il est gratuit pendant le lancement, business illimités, et ne prend aucune commission sur tes ventes.</p>
 <h3>Mes données sont où ?</h3><p>Dans Firestore, accessibles uniquement par le serveur. Les clés des stores ne sont jamais renvoyées au navigateur ; les clés API sont stockées hachées.</p>
 <h3>Un achat n'apparaît pas</h3><p>Vérifie l'onglet Démarrage : si « notifications Apple » n'est pas coché, l'URL n'est pas réglée. Côté app, l'achat est aussi envoyé directement par le SDK : vérifie que <code>MoneyMaker.configure</code> est appelé avant le paywall.</p>
 <h3>Pourquoi le pays est « Inconnu » ?</h3><p>Ventes antérieures au branchement, ou client Stripe sans adresse.</p>

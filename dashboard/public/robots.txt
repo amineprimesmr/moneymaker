@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /v1/
+Disallow: /oauth/
+Disallow: /mcp
+Disallow: /connect
+Disallow: /app-login
+Disallow: /pay/
+Disallow: /manage/
+
+Sitemap: https://usemoneymaker.com/sitemap.xml

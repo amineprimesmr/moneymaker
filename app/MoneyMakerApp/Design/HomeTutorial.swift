@@ -83,7 +83,7 @@ enum HomeTutorialStep: Int, CaseIterable, Identifiable {
         case .moreData: String(localized: "En faisant défiler : utilisateurs payants, essais en cours et plus encore.")
         case .globe: String(localized: "Tes ventes pays par pays. Touche la planète pour l'explorer.")
         case .menu: String(localized: "Le menu à gauche liste tes business. Coche ceux à afficher : l'accueil change aussitôt.")
-        case .menuActions: String(localized: "Connecte un nouveau business, ouvre les réglages ou le dashboard web depuis le menu.")
+        case .menuActions: String(localized: "Connecte un nouveau business ou ouvre les réglages depuis le menu.")
         case .sales: String(localized: "Tes ventes, abonnements et remboursements, au moment où ils arrivent.")
         case .apps: String(localized: "Les classements, les notes et les avis de tes apps, pays par pays.")
         case .appsSearch: String(localized: "Cherche une app sur les stores pour voir ses classements et ses avis.")

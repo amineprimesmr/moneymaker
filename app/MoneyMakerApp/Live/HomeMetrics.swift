@@ -41,7 +41,8 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
             switch m {
             case .today: today != nil
             case .trials: o.hasTrials ?? (o.activeTrials > 0)
-            case .downloads: o.downloads != nil
+            // Inconnus (null) mais une app App Store est connectée : carte « — » avec l'explication.
+            case .downloads: o.downloads != nil || o.expectsDownloads
             // Abonnés actifs : dans le détail du MRR ; nouveaux clients : dans le détail des clients.
             case .subscriptions, .newCustomers: false
             default: true
@@ -54,7 +55,7 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
     /// Valeur d'un business pour ce chiffre (micros pour l'argent).
     func value(_ p: ProjectSummary) -> Double {
         switch self {
-        case .today, .revenue: Double(p.netRevenueMicros)
+        case .today, .revenue: Double(p.grossRevenueMicros)
         case .mrr: Double(p.mrrMicros)
         case .subscriptions: Double(p.activeSubscriptions)
         case .paying: Double(p.payingCustomers ?? p.activeSubscriptions)
@@ -66,9 +67,9 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
 
     func total(_ o: Overview, today: Today?) -> Double {
         switch self {
-        case .today: Double(today?.netMicros ?? 0)
+        case .today: Double(today?.grossMicros ?? 0)
         case .mrr: Double(o.mrrMicros)
-        case .revenue: Double(o.revenueMicros)
+        case .revenue: Double(o.grossRevenueMicros)
         case .subscriptions: Double(o.activeSubscriptions)
         case .paying: Double(o.payingCustomers ?? o.activeSubscriptions)
         case .trials: Double(o.activeTrials)
@@ -81,6 +82,14 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
         isMoney ? Int(v).money(o.currency, compact: compact) : Int(v).formatted()
     }
 
+    /// Valeur affichée : « — » pour des téléchargements pas encore connus (jamais un faux 0).
+    func display(_ o: Overview, today: Today?) -> String {
+        self == .downloads && o.downloads == nil ? "—" : format(total(o, today: today), o)
+    }
+
+    /// Explication courte quand les téléchargements ne sont pas encore disponibles.
+    static var downloadsPending: String { String(localized: "Les téléchargements arrivent sous 48 h après la connexion App Store Connect.") }
+
     func caption(_ o: Overview, today: Today?) -> String? {
         switch self {
         case .today: today.map { String(localized: "\($0.transactions) ventes · \($0.newSubscribers) nouveaux abonnés") }
@@ -89,7 +98,8 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
         case .subscriptions: String(localized: "\(o.activeTrials) essais en plus")
         case .paying: String(localized: "\(o.projects.count) business")
         case .trials: conversion(o).map { String(localized: "Conversion \(Int(($0 * 100).rounded()))%") }
-        case .downloads: o.periodStart != nil ? String(localized: "Depuis le 1er \(CalendarMonth.name)") : String(localized: "\(o.periodDays) derniers jours")
+        case .downloads: o.downloads == nil ? HomeMetric.downloadsPending
+            : o.periodStart != nil ? String(localized: "Depuis le 1er \(CalendarMonth.name)") : String(localized: "\(o.periodDays) derniers jours")
         case .newCustomers: o.periodStart != nil ? String(localized: "Depuis le 1er \(CalendarMonth.name)") : String(localized: "\(o.periodDays) derniers jours")
         }
     }
@@ -131,9 +141,9 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
 
     var explanation: String {
         switch self {
-        case .today: String(localized: "Revenu net encaissé depuis minuit, remboursements déduits.")
+        case .today: String(localized: "Ventes encaissées depuis minuit. Les remboursements du jour sont indiqués à part.")
         case .mrr: String(localized: "Revenu récurrent mensuel : ce que rapportent les abonnements actifs chaque mois.")
-        case .revenue: String(localized: "Revenu net encaissé sur la période, tous canaux confondus.")
+        case .revenue: String(localized: "Ventes encaissées sur la période, tous canaux confondus. Les remboursements sont indiqués à part.")
         case .subscriptions: String(localized: "Abonnements en cours et renouvelés, hors essais gratuits.")
         case .paying: String(localized: "Clients qui paient en ce moment : abonnés actifs et achats encore valables. Les nouveaux clients sont ceux qui ont payé pour la première fois sur la période.")
         case .trials: String(localized: "Essais gratuits en cours, qui deviendront des abonnements s'ils sont convertis.")
@@ -141,6 +151,11 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
         case .newCustomers: String(localized: "Clients qui ont payé pour la première fois sur la période.")
         }
     }
+}
+
+extension Overview {
+    /// Une app App Store est connectée : ses téléchargements sont attendus même s'ils ne sont pas encore arrivés.
+    var expectsDownloads: Bool { projects.contains { ($0.stores ?? []).contains("app_store") } }
 }
 
 extension Overview {
@@ -161,7 +176,7 @@ struct HomeMetricCard: View {
     var body: some View {
         MetricCard(
             title: metric.title(o),
-            value: metric.format(metric.total(o, today: today), o),
+            value: metric.display(o, today: today),
             delta: metric.delta(o),
             caption: metric.caption(o, today: today),
             theme: metric.theme,
@@ -195,6 +210,9 @@ final class LongHistory: ObservableObject {
     @Published private(set) var overview: Overview?
     @Published private(set) var feed: [FeedEvent] = []
     private var loadedAt = Date.distantPast
+
+    /// Déconnexion : l'historique de l'ancien compte disparaît.
+    func reset() { overview = nil; feed = []; loadedAt = .distantPast }
 
     func load(_ store: Store) async {
         guard Date().timeIntervalSince(loadedAt) > 300 else { return }
@@ -433,7 +451,7 @@ struct HomeMetricDetail: View {
             return out
         case .downloads:
             let d = o.downloads ?? 0
-            return [(String(localized: "Téléchargements"), d.formatted(), "arrow.down.app.fill"),
+            return [(String(localized: "Téléchargements"), o.downloads.map { $0.formatted() } ?? "—", "arrow.down.app.fill"),
                     (String(localized: "Nouveaux clients"), o.newCustomers.formatted(), "sparkles"),
                     (String(localized: "Téléchargement → payant"), d > 0 ? pct(Double(o.newCustomers) / Double(d)) : "—", "arrow.right.circle"),
                     (String(localized: "Revenu par téléchargement"), d > 0 ? Int(sum * 1e6 / Double(d)).money(cur) : "—", "eurosign")]
@@ -506,6 +524,7 @@ struct HomeMetricDetail: View {
         guard let o else { return "" }
         switch metric {
         case .today, .mrr, .subscriptions, .paying, .trials: return metric.format(metric.total(o, today: store.today), o)
+        case .downloads where o.downloads == nil: return "—"
         default: return Int(pts.reduce(0) { $0 + $1.value } * 1e6).money(o.currency)
         }
     }
@@ -513,7 +532,7 @@ struct HomeMetricDetail: View {
     private func subtitle(_ o: Overview?, pts: [MMPoint]) -> String {
         guard let o else { return "" }
         switch metric {
-        case .today: return String(localized: "Cumul depuis minuit")
+        case .today: return [String(localized: "Cumul depuis minuit"), store.today?.refundNote].compactMap { $0 }.joined(separator: " · ")
         case .mrr: return String(localized: "\(o.activeSubscriptions) abonnés actifs · ARR \((o.mrrMicros * 12).money(o.currency, compact: true))")
         case .paying, .subscriptions, .trials:
             let total = Int(pts.reduce(0) { $0 + $1.value } * 1e6).money(o.currency)
@@ -521,10 +540,11 @@ struct HomeMetricDetail: View {
         default:
             let mid = pts.count / 2
             let a = pts[..<mid].reduce(0) { $0 + $1.value }, b = pts[mid...].reduce(0) { $0 + $1.value }
-            guard a > 0 else { return String(localized: "Sur \(range.days) jours") }
+            let refund = metric == .revenue ? o.refundNote.map { " · " + $0 } ?? "" : ""
+            guard a > 0 else { return String(localized: "Sur \(range.days) jours") + refund }
             let d = Int(((b - a) / a * 100).rounded())
             let sign = d >= 0 ? "+" : ""
-            return String(localized: "\(sign)\(d) % sur la seconde moitié · \(range.days) jours")
+            return String(localized: "\(sign)\(d) % sur la seconde moitié · \(range.days) jours") + refund
         }
     }
 
@@ -827,7 +847,7 @@ struct HomeTiles: View {
         let paying = Double(max(o.payingCustomers ?? o.activeSubscriptions, 1))
         let shown = Set(HomeMetric.visible(o, today: today))
         var out: [ExtraStat] = HomeMetric.allCases.filter { !shown.contains($0) && $0 != .newCustomers && $0.isAvailable(o) }.map { m in
-            ExtraStat(symbol: m.symbol, title: m.title(o), value: m.format(m.total(o, today: today), o), ratio: m.ratio(o), metric: m)
+            ExtraStat(symbol: m.symbol, title: m.title(o), value: m.display(o, today: today), ratio: m.ratio(o), metric: m)
         }
         out.append(ExtraStat(symbol: "calendar", title: "ARR", value: (o.mrrMicros * 12).money(o.currency), ratio: 0.5))
         if o.activeSubscriptions > 0 {
@@ -876,7 +896,7 @@ extension HomeMetric {
     /// La donnée existe pour ce périmètre.
     func isAvailable(_ o: Overview) -> Bool {
         switch self {
-        case .downloads: o.downloads != nil
+        case .downloads: o.downloads != nil || o.expectsDownloads
         case .trials: o.hasTrials ?? (o.activeTrials > 0)
         case .today: false
         default: true
@@ -946,7 +966,7 @@ struct HomeTile: View, Equatable {
     @ViewBuilder
     private var tile: some View {
         let title = metric.title(o)
-        let value = metric.format(metric.total(o, today: today), o)
+        let value = metric.display(o, today: today)
         switch metric {
         case .today:
             // Ventes par tranche de 3 h (le cumul horaire est différencié).
@@ -954,7 +974,7 @@ struct HomeTile: View, Equatable {
             let perHour = h.enumerated().map { i, v in Double(v - (i > 0 ? h[i - 1] : 0)) }
             let buckets = stride(from: 0, to: perHour.count, by: 3).map { perHour[$0..<min($0 + 3, perHour.count)].reduce(0, +) }
             RecoveryWideTile(symbol: metric.symbol, title: title, value: value,
-                             footerLead: String(localized: "Ventes"), footerStrong: String(localized: "\(today?.transactions ?? 0) aujourd'hui")) {
+                             footerLead: String(localized: "Ventes"), footerStrong: String(localized: "\(today?.transactions ?? 0) aujourd'hui"), note: today?.refundNote) {
                 RecoveryVioletLine(values: h.map(Double.init), money: true)
             }
         case .mrr:
@@ -965,8 +985,9 @@ struct HomeTile: View, Equatable {
         case .revenue:
             let daily = dailySeries(o.mergedRevenueByDay, days: 14).map(\.value)
             let yesterday = daily.dropLast().last ?? 0
-            RecoveryWideTile(symbol: metric.symbol, title: title, value: o.revenueMicros.money(o.currency, compact: true),
-                             footerLead: String(localized: "Hier"), footerStrong: Int(yesterday * 1e6).money(o.currency, compact: true), dotsAnchor: .topTrailing) {
+            RecoveryWideTile(symbol: metric.symbol, title: title, value: o.grossRevenueMicros.money(o.currency, compact: true),
+                             footerLead: String(localized: "Hier"), footerStrong: Int(yesterday * 1e6).money(o.currency, compact: true), dotsAnchor: .topTrailing,
+                             note: o.refundNote) {
                 RecoveryVioletLine(values: daily, money: true)
             }
         case .subscriptions:
@@ -982,7 +1003,8 @@ struct HomeTile: View, Equatable {
             }
         default:
             // Même taille que les grandes cartes.
-            RecoveryWideTile(symbol: metric.symbol, title: title, value: value, footerLead: "", footerStrong: "") {
+            RecoveryWideTile(symbol: metric.symbol, title: title, value: value, footerLead: "", footerStrong: "",
+                             note: metric == .downloads && o.downloads == nil ? HomeMetric.downloadsPending : nil) {
                 RecoverySliderTrack(fraction: metric.ratio(o)).frame(height: 18)
             }
         }

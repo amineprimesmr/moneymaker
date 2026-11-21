@@ -20,10 +20,10 @@ struct MRRSlice: Hashable {
     init?(_ o: Overview?, projectId: String?) {
         guard let o else { return nil }
         if let id = projectId, id != "*", let p = o.projects.first(where: { $0.projectId == id }) {
-            name = p.name; currency = p.currency; mrrMicros = p.mrrMicros; revenueMicros = p.netRevenueMicros
+            name = p.name; currency = p.currency; mrrMicros = p.mrrMicros; revenueMicros = p.grossRevenueMicros
             subscribers = p.activeSubscriptions; trials = p.activeTrials; byDay = p.revenueByDay; projects = []; self.projectId = p.projectId
         } else {
-            name = String(localized: "Tous les business"); currency = o.currency; mrrMicros = o.mrrMicros; revenueMicros = o.revenueMicros
+            name = String(localized: "Tous les business"); currency = o.currency; mrrMicros = o.mrrMicros; revenueMicros = o.grossRevenueMicros
             subscribers = o.activeSubscriptions; trials = o.activeTrials; byDay = o.revenueByDay; projects = o.projects
         }
     }
@@ -46,10 +46,11 @@ private func mrrProject(_ c: MRRWidgetIntent) -> (id: String?, cyclable: Bool) {
 }
 
 struct Provider: AppIntentTimelineProvider {
-    func placeholder(in context: Context) -> Entry { Entry(date: .now, slice: MRRSlice(.placeholder, projectId: nil), goal: 6000, signedIn: true) }
+    func placeholder(in context: Context) -> Entry { Entry(date: .now, slice: nil, goal: nil, signedIn: true) }
 
     func snapshot(for configuration: MRRWidgetIntent, in context: Context) async -> Entry {
-        let o = context.isPreview ? .placeholder : (MoneyMakerClient.cachedOverview ?? .placeholder)
+        // Faux chiffres seulement dans la galerie ; ailleurs, le cache (ou rien).
+        let o: Overview? = context.isPreview ? .placeholder : MoneyMakerClient.cachedOverview
         let p = mrrProject(configuration)
         return Entry(date: .now, slice: MRRSlice(o, projectId: p.id), goal: configuration.goal ?? MMShared.mrrGoal, signedIn: context.isPreview || MoneyMakerClient.stored.token != nil, cyclable: p.cyclable)
     }
@@ -152,7 +153,7 @@ struct WidgetBody: View {
                     }
                     WHairline().padding(.vertical, 8)
                     HStack(alignment: .top) {
-                        WStat(label: String(localized: "Revenu 28 j"), value: o.revenueMicros.money(o.currency, compact: true), size: 16)
+                        WStat(label: String(localized: "Revenu 28 j"), value: max(0, o.revenueMicros).money(o.currency, compact: true), size: 16)
                         Spacer(minLength: 6)
                         WStat(label: String(localized: "Abonnés"), value: o.subscribers.formatted(), size: 16)
                         Spacer(minLength: 6)
@@ -209,7 +210,7 @@ struct RankEntry: TimelineEntry {
 struct RankProvider: TimelineProvider {
     static let sample = [RankingAlert(id: "1", type: "TOP_1", appName: String(localized: "Mon app"), appIcon: nil, cc: "FR", chart: "free", scope: "genre", rank: 1, prevRank: 3, own: true, projectName: nil, at: Date().timeIntervalSince1970 * 1000),
                          RankingAlert(id: "2", type: "NEW_COUNTRY", appName: String(localized: "Mon app"), appIcon: nil, cc: "JP", chart: "free", scope: "genre", rank: 18, prevRank: nil, own: true, projectName: nil, at: Date().timeIntervalSince1970 * 1000)]
-    func placeholder(in context: Context) -> RankEntry { RankEntry(date: .now, alerts: Self.sample) }
+    func placeholder(in context: Context) -> RankEntry { RankEntry(date: .now, alerts: []) }
     func getSnapshot(in context: Context, completion: @escaping (RankEntry) -> Void) {
         let cached = MoneyMakerClient.cachedAlerts
         completion(RankEntry(date: .now, alerts: context.isPreview ? Self.sample : cached))

@@ -14012,6 +14012,1302 @@
           }
         }
       }
+    },
+    "Ton avis compte" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your feedback matters"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton avis compte"
+          }
+        }
+      }
+    },
+    "Une idée, un bug, quelque chose à changer ? Dis-le-moi, je lis tout." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An idea, a bug, something to change? Tell me, I read everything."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une idée, un bug, quelque chose à changer ? Dis-le-moi, je lis tout."
+          }
+        }
+      }
+    },
+    "Donner mon avis" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share feedback"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Donner mon avis"
+          }
+        }
+      }
+    },
+    "Ton avis" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Feedback"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton avis"
+          }
+        }
+      }
+    },
+    "Idée" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Idea"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Idée"
+          }
+        }
+      }
+    },
+    "Bug" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bug"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bug"
+          }
+        }
+      }
+    },
+    "Autre" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Other"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autre"
+          }
+        }
+      }
+    },
+    "Ce qui ne marche pas, et sur quel écran…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What's not working, and on which screen…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce qui ne marche pas, et sur quel écran…"
+          }
+        }
+      }
+    },
+    "Ton idée ou ta remarque…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your idea or comment…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton idée ou ta remarque…"
+          }
+        }
+      }
+    },
+    "Envoyer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envoyer"
+          }
+        }
+      }
+    },
+    "Merci !" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thank you!"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Merci !"
+          }
+        }
+      }
+    },
+    "Ton message est bien arrivé. C'est grâce à vos retours que l'app avance." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your message came through. Your feedback is what moves the app forward."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton message est bien arrivé. C'est grâce à vos retours que l'app avance."
+          }
+        }
+      }
+    },
+    "Qu'est-ce qu'il faudrait améliorer, ajouter ou changer ? Chaque message arrive directement chez moi." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What should be improved, added, or changed? Every message comes straight to me."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qu'est-ce qu'il faudrait améliorer, ajouter ou changer ? Chaque message arrive directement chez moi."
+          }
+        }
+      }
+    },
+    "L'envoi n'a pas marché. Vérifie ta connexion et réessaie." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sending failed. Check your connection and try again."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'envoi n'a pas marché. Vérifie ta connexion et réessaie."
+          }
+        }
+      }
+    },
+    "Accès complet" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Full access"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accès complet"
+          }
+        }
+      }
+    },
+    "Pendant le lancement, tout MoneyMaker est gratuit : business illimités et toutes les fonctions." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "During launch, all of MoneyMaker is free: unlimited businesses and every feature."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pendant le lancement, tout MoneyMaker est gratuit : business illimités et toutes les fonctions."
+          }
+        }
+      }
+    },
+    "Connecte un nouveau business ou ouvre les réglages depuis le menu." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect a new business or open settings from the menu."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connecte un nouveau business ou ouvre les réglages depuis le menu."
+          }
+        }
+      }
+    },
+    "−%@ remboursé" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "−%@ refunded"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "−%@ remboursé"
+          }
+        }
+      }
+    },
+    "Essai annulé" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trial cancelled"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Essai annulé"
+          }
+        }
+      }
+    },
+    "Réabonné" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resubscribed"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réabonné"
+          }
+        }
+      }
+    },
+    "Demande de remboursement" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refund request"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Demande de remboursement"
+          }
+        }
+      }
+    },
+    "Remboursement refusé" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refund declined"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remboursement refusé"
+          }
+        }
+      }
+    },
+    "Remboursement annulé" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refund reversed"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remboursement annulé"
+          }
+        }
+      }
+    },
+    "TRIAL CANCELLED" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TRIAL CANCELLED"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TRIAL CANCELLED"
+          }
+        }
+      }
+    },
+    "REFUND REQUEST" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REFUND REQUEST"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REFUND REQUEST"
+          }
+        }
+      }
+    },
+    "REFUND DECLINED" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REFUND DECLINED"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REFUND DECLINED"
+          }
+        }
+      }
+    },
+    "REFUND REVERSED" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REFUND REVERSED"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REFUND REVERSED"
+          }
+        }
+      }
+    },
+    "RESUBSCRIBED" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RESUBSCRIBED"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RESUBSCRIBED"
+          }
+        }
+      }
+    },
+    "Ta session a expiré. Reconnecte-toi." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your session has expired. Please sign in again."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ta session a expiré. Reconnecte-toi."
+          }
+        }
+      }
+    },
+    "Tu n'as pas accès à cette action." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You don't have access to this action."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu n'as pas accès à cette action."
+          }
+        }
+      }
+    },
+    "Cette fonction n'est pas encore disponible. Mets l'app à jour ou réessaie plus tard." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This feature isn't available yet. Update the app or try again later."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette fonction n'est pas encore disponible. Mets l'app à jour ou réessaie plus tard."
+          }
+        }
+      }
+    },
+    "Le serveur met trop de temps à répondre. Réessaie dans un instant." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server is taking too long to respond. Try again in a moment."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur met trop de temps à répondre. Réessaie dans un instant."
+          }
+        }
+      }
+    },
+    "Le serveur a rencontré un problème. Réessaie dans un instant." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server ran into a problem. Try again in a moment."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur a rencontré un problème. Réessaie dans un instant."
+          }
+        }
+      }
+    },
+    "Une erreur est survenue (code %lld). Réessaie dans un instant." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something went wrong (code %lld). Try again in a moment."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une erreur est survenue (code %lld). Réessaie dans un instant."
+          }
+        }
+      }
+    },
+    "Business introuvable. Il a peut-être été supprimé." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Business not found. It may have been deleted."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Business introuvable. Il a peut-être été supprimé."
+          }
+        }
+      }
+    },
+    "Écris d'abord ton message." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Write your message first."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Écris d'abord ton message."
+          }
+        }
+      }
+    },
+    "Confirmation requise pour cette action." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This action requires confirmation."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirmation requise pour cette action."
+          }
+        }
+      }
+    },
+    "Cette action n'est pas prise en charge." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This action isn't supported."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette action n'est pas prise en charge."
+          }
+        }
+      }
+    },
+    "Mode démo : lecture seule. Cette action est désactivée." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Demo mode: read only. This action is disabled."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode démo : lecture seule. Cette action est désactivée."
+          }
+        }
+      }
+    },
+    "Revenu de %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ revenue"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revenu de %@"
+          }
+        }
+      }
+    },
+    "Depuis le 1er %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Since %@ 1"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Depuis le 1er %@"
+          }
+        }
+      }
+    },
+    "%lld %% du montant HT reversés aux affiliés, sur %lld vente(s) apportée(s)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%% of the pre-tax amount paid to affiliates, on %lld referred sale(s)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld %% du montant HT reversés aux affiliés, sur %lld vente(s) apportée(s)."
+          }
+        }
+      }
+    },
+    "Commissions d'affiliation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Affiliate commissions"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commissions d'affiliation"
+          }
+        }
+      }
+    },
+    "Déduire les commissions d'affiliation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deduct affiliate commissions"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déduire les commissions d'affiliation"
+          }
+        }
+      }
+    },
+    "Le vrai argent de chaque vente apportée par un affilié, commission retirée. Ventes repérées par leur code de parrainage Stripe." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The real money from each sale referred by an affiliate, commission removed. Sales are identified by their Stripe referral code."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le vrai argent de chaque vente apportée par un affilié, commission retirée. Ventes repérées par leur code de parrainage Stripe."
+          }
+        }
+      }
+    },
+    "Commission versée à l'affilié" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commission paid to the affiliate"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commission versée à l'affilié"
+          }
+        }
+      }
+    },
+    "Les téléchargements arrivent sous 48 h après la connexion App Store Connect." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloads show up within 48 hours of connecting App Store Connect."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les téléchargements arrivent sous 48 h après la connexion App Store Connect."
+          }
+        }
+      }
+    },
+    "Ventes encaissées depuis minuit. Les remboursements du jour sont indiqués à part." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sales collected since midnight. Today's refunds are shown separately."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ventes encaissées depuis minuit. Les remboursements du jour sont indiqués à part."
+          }
+        }
+      }
+    },
+    "Ventes encaissées sur la période, tous canaux confondus. Les remboursements sont indiqués à part." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sales collected over the period, across all channels. Refunds are shown separately."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ventes encaissées sur la période, tous canaux confondus. Les remboursements sont indiqués à part."
+          }
+        }
+      }
+    },
+    "Résiliations et expirations" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancellations and expirations"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Résiliations et expirations"
+          }
+        }
+      }
+    },
+    "Remboursements et demandes de remboursement" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refunds and refund requests"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remboursements et demandes de remboursement"
+          }
+        }
+      }
+    },
+    "Essai annulé : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trial cancelled: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Essai annulé : %@"
+          }
+        }
+      }
+    },
+    "Réabonné : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resubscribed: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réabonné : %@"
+          }
+        }
+      }
+    },
+    "Demande de remboursement : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refund request: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Demande de remboursement : %@"
+          }
+        }
+      }
+    },
+    "Remboursement refusé par Apple : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refund declined by Apple: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remboursement refusé par Apple : %@"
+          }
+        }
+      }
+    },
+    "Remboursement annulé : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refund reversed: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remboursement annulé : %@"
+          }
+        }
+      }
+    },
+    "Période du mois" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Month period"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Période du mois"
+          }
+        }
+      }
+    },
+    "28 derniers jours" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last 28 days"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "28 derniers jours"
+          }
+        }
+      }
+    },
+    "Mois calendaire" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calendar month"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mois calendaire"
+          }
+        }
+      }
+    },
+    "Mois calendaire : l'onglet MOIS compte depuis le 1er du mois, comparé au mois précédent à la même date." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calendar month: the MONTH tab counts from the 1st of the month, compared with the previous month on the same date."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mois calendaire : l'onglet MOIS compte depuis le 1er du mois, comparé au mois précédent à la même date."
+          }
+        }
+      }
+    },
+    "28 derniers jours : la période glisse chaque jour." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last 28 days: the period rolls forward every day."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "28 derniers jours : la période glisse chaque jour."
+          }
+        }
+      }
+    },
+    "Quitter la démo" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leave the demo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitter la démo"
+          }
+        }
+      }
+    },
+    "La langue sera appliquée au prochain lancement de l'app." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The language will apply the next time you open the app."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La langue sera appliquée au prochain lancement de l'app."
+          }
+        }
+      }
+    },
+    "Suppression impossible" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't delete"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suppression impossible"
+          }
+        }
+      }
+    },
+    "Mode démo" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Demo mode"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode démo"
+          }
+        }
+      }
+    },
+    "Se déconnecter de la démo" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign out of the demo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se déconnecter de la démo"
+          }
+        }
+      }
+    },
+    "La démo n'a pas de compte à supprimer. Pour en sortir, déconnecte-toi simplement de la démo." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The demo has no account to delete. To leave it, just sign out of the demo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La démo n'a pas de compte à supprimer. Pour en sortir, déconnecte-toi simplement de la démo."
+          }
+        }
+      }
+    },
+    "Gratuit pendant le lancement : business illimités" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Free during launch: unlimited businesses"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gratuit pendant le lancement : business illimités"
+          }
+        }
+      }
+    },
+    "L'App Store n'a pas pu vérifier cet achat. Rien n'a été activé : réessaie, ou touche « Restaurer » plus tard." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The App Store couldn't verify this purchase. Nothing was activated: try again, or tap “Restore” later."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'App Store n'a pas pu vérifier cet achat. Rien n'a été activé : réessaie, ou touche « Restaurer » plus tard."
+          }
+        }
+      }
+    },
+    "Ce lien de connexion n'est pas valide. Tu restes connecté à ton compte actuel." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This sign-in link isn't valid. You're still signed in to your current account."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce lien de connexion n'est pas valide. Tu restes connecté à ton compte actuel."
+          }
+        }
+      }
+    },
+    "Ce lien de connexion n'est plus valide. Tu restes connecté à ton compte actuel." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This sign-in link is no longer valid. You're still signed in to your current account."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce lien de connexion n'est plus valide. Tu restes connecté à ton compte actuel."
+          }
+        }
+      }
+    },
+    "Ta session a expiré ou a été révoquée. Reconnecte-toi." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your session has expired or was revoked. Please sign in again."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ta session a expiré ou a été révoquée. Reconnecte-toi."
+          }
+        }
+      }
+    },
+    "Changer de compte ?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch accounts?"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changer de compte ?"
+          }
+        }
+      }
+    },
+    "Changer de compte" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch accounts"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changer de compte"
+          }
+        }
+      }
+    },
+    "Ce lien ouvre un autre compte MoneyMaker. Tu seras déconnecté du compte actuel." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This link opens another MoneyMaker account. You'll be signed out of the current one."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce lien ouvre un autre compte MoneyMaker. Tu seras déconnecté du compte actuel."
+          }
+        }
+      }
+    },
+    "Connexion impossible" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't sign in"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connexion impossible"
+          }
+        }
+      }
+    },
+    "Connecte ta première app" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect your first app"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connecte ta première app"
+          }
+        }
+      }
+    },
+    "MoneyMaker affiche tes revenus App Store, Google Play et Stripe en direct : ventes du jour, MRR, abonnés et une notification à chaque vente." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MoneyMaker shows your App Store, Google Play and Stripe revenue live: today's sales, MRR, subscribers and a notification for every sale."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MoneyMaker affiche tes revenus App Store, Google Play et Stripe en direct : ventes du jour, MRR, abonnés et une notification à chaque vente."
+          }
+        }
+      }
+    },
+    "Connecter une app" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect an app"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connecter une app"
+          }
+        }
+      }
+    },
+    "Business introuvable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Business not found"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Business introuvable"
+          }
+        }
+      }
+    },
+    "Ce business a peut-être été supprimé, ou il appartient à un autre compte MoneyMaker." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This business may have been deleted, or it belongs to another MoneyMaker account."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce business a peut-être été supprimé, ou il appartient à un autre compte MoneyMaker."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

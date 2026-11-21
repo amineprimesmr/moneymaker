@@ -8,7 +8,7 @@ import { toAlpha2 } from "./countries";
 import { dropImportedDuplicates } from "./revenuecat";
 import { PRO_PRODUCT_ID, revokeAppStorePro } from "./billing";
 import { Purchase, PurchaseStatus, PurchaseType, HttpError } from "./engine";
-import { Project, getCredentials, lookupIndex, upsertPurchase, mergeCustomers } from "./store";
+import { Project, getCredentials, lookupIndex, upsertPurchase, mergeCustomers, recordEvent } from "./store";
 
 const ROOTS = APPLE_ROOT_CERTIFICATES;
 
@@ -151,11 +151,19 @@ export async function ingestAppleNotification(project: Project, signedPayload: s
     // Refund Control: answer Apple (12 h deadline) without touching the purchase state.
     const rc = await handleConsumptionRequest(project, env, String(tx.transactionId ?? purchase.id), purchase.id, appUserId,
       (data as any).consumptionRequestReason, purchase.productId);
+    // Le client a demandé un remboursement à Apple : notification et flux, comme chez RevenueCat.
+    await recordEvent(project, appUserId, purchase, "REFUND_REQUESTED", {
+      reason: (data as any).consumptionRequestReason ?? null, key: `apple:${tx.transactionId ?? purchase.id}:refund_requested`,
+    }).catch(e => console.error("refund_requested", e));
     return { notificationType: n.notificationType, appUserId, ...rc };
   }
   const result = await upsertPurchase(project, appUserId, purchase, [`apple:${purchase.id}`]);
   if (type === "REFUND" || type === "REFUND_DECLINED") {
     await recordRefundOutcome(project, String(tx.transactionId ?? purchase.id), type === "REFUND" ? "refunded" : "declined").catch(() => null);
+  }
+  if (type === "REFUND_DECLINED") {
+    await recordEvent(project, appUserId, purchase, "REFUND_DECLINED", { key: `apple:${tx.transactionId ?? purchase.id}:refund_declined` })
+      .catch(e => console.error("refund_declined", e));
   }
   return { notificationType: n.notificationType, subtype: n.subtype, appUserId, ...result };
 }

@@ -100,24 +100,33 @@ export interface ConfigureOptions {
   appUserId?: string;
   /** Defaults to https://usemoneymaker.com/v1 */
   baseUrl?: string;
+  /**
+   * Android only: Play one-time products that are consumable (coins, credits…). They are consumed after
+   * server validation so they can be bought again. On iOS StoreKit knows the product type.
+   */
+  consumableProductIds?: string[];
 }
 
 export interface PurchaseOptions {
-  /** Android only: subscription offer token (defaults to the first offer of the product). */
+  /** Android only: subscription offer token. Default: the base plan without offer. */
   offerToken?: string;
+  /** Android only: subscription offer id (e.g. a free-trial offer). Default: the base plan without offer. */
+  offerId?: string;
 }
 
 /**
  * Error codes thrown by the SDK (`error.code`):
- * `not_configured`, `product_not_found`, `unverified_transaction`, `network`,
- * `no_activity`, `billing_<n>` (Play Billing response code), or the server error code
- * (e.g. `invalid_api_key`) for HTTP errors.
+ * `not_configured`, `product_not_found`, `offer_not_found` (Android), `unverified_transaction`, `network`,
+ * `invalid_response`, `no_activity`, `billing_<n>` (Play Billing response code, e.g. `billing_3` = billing unavailable),
+ * `http_<status>` or the server error code (e.g. `invalid_api_key`) for HTTP errors.
  */
 export type MoneyMakerErrorCode =
   | 'not_configured'
   | 'product_not_found'
+  | 'offer_not_found'
   | 'unverified_transaction'
   | 'network'
+  | 'invalid_response'
   | 'no_activity'
   | (string & {});
 

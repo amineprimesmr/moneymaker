@@ -1,6 +1,6 @@
 # moneymaker_flutter
 
-Flutter plugin for [MoneyMaker](https://github.com/amineprimesmr/moneymaker) — subscriptions for the App Store, Google Play and Stripe on your own backend. It wraps the native SDKs (iOS: StoreKit 2, Android: Play Billing 7).
+Flutter plugin for [MoneyMaker](https://github.com/amineprimesmr/moneymaker) — subscriptions for the App Store, Google Play and Stripe on your own backend. It wraps the native SDKs (iOS: StoreKit 2, Android: Play Billing Library 8). Version **1.2.0** ([changelog](../CHANGELOG.md)).
 
 ## English
 
@@ -9,16 +9,18 @@ Flutter plugin for [MoneyMaker](https://github.com/amineprimesmr/moneymaker) —
 ```yaml
 dependencies:
   moneymaker_flutter:
-    git: { url: https://github.com/amineprimesmr/moneymaker, path: sdk/flutter, ref: 1.1.1 }
+    git: { url: https://github.com/amineprimesmr/moneymaker, path: sdk/flutter, ref: 1.2.0 }
 ```
 
+- Flutter 3.44+ / Dart 3.12+ (built-in Kotlin, AGP 9 compatible).
 - iOS 16+. The Swift SDK is vendored in the pod (`tool/sync_native_sources.sh`).
-- Android minSdk 23. The plugin pulls `com.github.amineprimesmr:moneymaker:1.1.1` from JitPack. If your app's `settings.gradle` uses `RepositoriesMode.FAIL_ON_PROJECT_REPOS`, add `maven { url 'https://jitpack.io' }` there.
+- Android minSdk 23. The plugin pulls `com.github.amineprimesmr:moneymaker:1.2.0` from JitPack. If your app's `settings.gradle` uses `RepositoriesMode.FAIL_ON_PROJECT_REPOS`, add `maven { url 'https://jitpack.io' }` there.
 
 **Use**
 
 ```dart
-await MoneyMaker.configure('mm_pub_…', appUserId: user?.id);
+await MoneyMaker.configure('mm_pub_…', appUserId: user?.id,
+    consumableProductIds: {'coins_100'}); // Android: consumed after validation
 final offerings = await MoneyMaker.getOfferings();
 final result = await MoneyMaker.purchasePackage(offerings.current!.packages.first);
 if (result case PurchaseSuccess(:final customerInfo)) { /* customerInfo.isEntitled('premium') */ }
@@ -27,7 +29,7 @@ MoneyMaker.customerInfoStream.listen((info) => print(info.activeEntitlements));
 
 API: `configure`, `logIn`, `logOut`, `getCustomerInfo`, `refreshCustomerInfo`, `isEntitled`, `customerInfoStream`, `setAttributes`, `getOfferings`, `purchasePackage`, `purchaseProduct`, `restorePurchases`, `syncPurchases` (iOS), `showManageSubscriptions`. Errors are thrown as `MoneyMakerException(code, message)`.
 
-Platform differences: on Android, `CustomerInfo.purchases`, `accountToken`, `requestedAt` and `Entitlement.purchasedAt` are not exposed by the native SDK (empty/null); `purchaseProduct` only works for products that belong to an offering.
+Platform differences: on Android, subscriptions buy the base plan without offer unless `offerToken` / `offerId` is passed to `purchasePackage`; `CustomerInfo.purchases`, `accountToken`, `requestedAt` and `Entitlement.purchasedAt` are not exposed by the native SDK (empty/null); `purchaseProduct` only works for products that belong to an offering.
 
 Full example: [`example/main.dart`](example/main.dart).
 

@@ -7,7 +7,7 @@ type Events = {
 
 declare class MoneyMakerNativeModule extends NativeModule<Events> {
   readonly defaultBaseUrl: string;
-  configure(apiKey: string, appUserId: string | null, baseUrl: string | null): void;
+  configure(apiKey: string, appUserId: string | null, baseUrl: string | null, consumableProductIds: string[] | null): void;
   isConfigured(): boolean;
   getAppUserId(): string;
   isAnonymous(): boolean;
@@ -19,8 +19,8 @@ declare class MoneyMakerNativeModule extends NativeModule<Events> {
   refreshCustomerInfo(): Promise<CustomerInfo>;
   setAttributes(attributes: Record<string, string | null>): Promise<void>;
   getOfferings(): Promise<Offerings>;
-  purchasePackage(offeringId: string, packageId: string, offerToken: string | null): Promise<PurchaseResult>;
-  purchaseProduct(productId: string, offerToken: string | null): Promise<PurchaseResult>;
+  purchasePackage(offeringId: string, packageId: string, offerToken: string | null, offerId: string | null): Promise<PurchaseResult>;
+  purchaseProduct(productId: string, offerToken: string | null, offerId: string | null): Promise<PurchaseResult>;
   restorePurchases(): Promise<CustomerInfo>;
   syncPurchases(): Promise<void>;
   showManageSubscriptions(): Promise<void>;

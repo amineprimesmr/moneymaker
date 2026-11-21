@@ -1,10 +1,11 @@
+import { isPublicUrl } from "./net";
 import { onRequest } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { createHmac } from "crypto";
 import { handle } from "./api";
-import { db, getProject, getCredentials } from "./store";
+import { db, getProject, getCredentials, loadFx, refreshFxFromEcb } from "./store";
 import { snapshotProject } from "./metrics";
 import { sendToAppsFlyer } from "./appsflyer";
 import { toRevenueCatEvent } from "./rccompat";
@@ -14,7 +15,7 @@ import { pushEvent, pushRanking, sendDailySummaries, pushInsight } from "./push"
 import { insightsForProject } from "./plan";
 import { anomaliesForProject, weeklySummaryForProject } from "./anomalies";
 import { resyncProject } from "./resync";
-import { syncDownloads } from "./downloads";
+import { syncAllDownloads } from "./downloads";
 import { refreshIcon } from "./icons";
 import { demoTick } from "./demo";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
@@ -25,10 +26,14 @@ import { scanRankings, scanRatings, scanReviews, countriesForRun, PRIORITY_COUNT
 
 setGlobalOptions({ region: "europe-west1", maxInstances: 20 });
 
-export const api = onRequest({ timeoutSeconds: 60, memory: "512MiB", concurrency: 80, cors: false }, handle);
+export const api = onRequest({ timeoutSeconds: 60, memory: "512MiB", concurrency: 80, cors: false }, async (req, res) => {
+  await loadFx().catch(() => undefined); // taux de change du jour
+  return handle(req, res);
+});
 
 /** Delivers every lifecycle event to the project's own backends, signed with HMAC-SHA256. Retried by Eventarc on failure. */
 export const deliverEvent = onDocumentCreated({ document: "projects/{pid}/events/{eid}", retry: true }, async event => {
+  await loadFx().catch(() => undefined);
   // Re-read: on retries the trigger payload is the creation snapshot, not the current delivery state.
   const data = event.data ? (await event.data.ref.get()).data() : undefined;
   if (!data || data.delivered) return;
@@ -63,6 +68,7 @@ export const deliverEvent = onDocumentCreated({ document: "projects/{pid}/events
     try {
       const isRc = (h as any).format === "revenuecat";
       if (isRc && !rcEvent) return; // no RevenueCat equivalent (e.g. GRANT)
+      if (!(await isPublicUrl(h.url))) { failures.push(`${h.id}:blocked_private_url`); return; }
       const payload = isRc ? JSON.stringify({ api_version: "1.0", event: rcEvent }) : body;
       const res = await fetch(h.url, {
         method: "POST", body: payload, redirect: "error", signal: AbortSignal.timeout(10000),
@@ -78,15 +84,21 @@ export const deliverEvent = onDocumentCreated({ document: "projects/{pid}/events
   if (failures.length) throw new Error(`Webhook delivery failed: ${failures.join(", ")}`);
 });
 
-export const dailySnapshot = onSchedule({ schedule: "5 0 * * *", timeZone: "UTC" }, async () => {
+export const dailySnapshot = onSchedule({ schedule: "5 0 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "512MiB" }, async () => {
+  await refreshFxFromEcb().catch(e => { console.error("fx", e); return loadFx(true); });
   const projects = await db.collection("projects").select().get();
-  for (const doc of projects.docs) {
-    try { await snapshotProject(await getProject(doc.id)); } catch (e) { console.error("snapshot", doc.id, e); }
-  }
+  // 5 business à la fois : tous doivent avoir leur instantané avant la coupure (sinon trous dans l'historique).
+  const ids = projects.docs.map(d => d.id);
+  await Promise.all(Array.from({ length: 5 }, async () => {
+    for (let id = ids.shift(); id; id = ids.shift()) {
+      try { await snapshotProject(await getProject(id)); } catch (e) { console.error("snapshot", id, e); }
+    }
+  }));
 });
 
 /** Ranking alerts → Slack/Discord + the project's own webhooks (type RANKING_*). */
 export const deliverAlert = onDocumentCreated({ document: "projects/{pid}/alerts/{aid}", retry: false }, async event => {
+  await loadFx().catch(() => undefined);
   const data = event.data?.data();
   if (!data || data.delivered) return;
   const project = await getProject(event.params.pid);
@@ -104,14 +116,17 @@ export const deliverAlert = onDocumentCreated({ document: "projects/{pid}/alerts
 
 /** 21:00 local recap — runs hourly, each device fires in its own timezone. */
 export const dailySummaryPush = onSchedule({ schedule: "0 * * * *", timeZone: "UTC" }, async () => {
+  await loadFx().catch(() => undefined);
   console.log("daily summaries", await sendDailySummaries());
 });
 
 /** Apple publishes yesterday's Sales report around 08:00 PT; fill the gaps every morning. */
-export const downloadsSync = onSchedule({ schedule: "30 17 * * *", timeZone: "UTC", timeoutSeconds: 540 }, async () => {
-  const projects = await db.collection("projects").where("config.apple.vendorNumber", "!=", null).select().get();
+export const downloadsSync = onSchedule({ schedule: "30 */6 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "512MiB" }, async () => {
+  // Tous les business avec une app App Store : rapport de ventes (numéro de fournisseur) ou rapports Analytics.
+  const projects = await db.collection("projects").where("config.apple.appAppleId", "!=", null).select("demo", "testData").get();
   for (const d of projects.docs) {
-    try { console.log("downloads", d.id, await syncDownloads(await getProject(d.id))); } catch (e) { console.error("downloads", d.id, e); }
+    if (d.get("demo") || d.get("testData")) continue;
+    try { console.log("downloads", d.id, await syncAllDownloads(await getProject(d.id))); } catch (e) { console.error("downloads", d.id, e); }
   }
 });
 
@@ -122,6 +137,7 @@ const quietInsight = (i: { type: string; metric?: string; direction?: string }) 
 
 /** Alertes intelligentes : chaque matin, la veille (jour de Paris) comparée aux jours précédents. */
 export const insightsDaily = onSchedule({ schedule: "0 7 * * *", timeZone: "Europe/Paris", timeoutSeconds: 300 }, async () => {
+  await loadFx().catch(() => undefined);
   for (const d of (await db.collection("projects").select("testData", "demo").get()).docs) {
     if (d.get("testData") || d.get("demo")) continue; // données fictives : aucune alerte
     try {
@@ -149,6 +165,7 @@ export const insightsDaily = onSchedule({ schedule: "0 7 * * *", timeZone: "Euro
 
 /** Synchro en direct, filet de sécurité : toutes les 15 min, Stripe et Apple relus sur 3 jours, ventes manquées rejouées (resync.ts). */
 export const storeResync = onSchedule({ schedule: "every 15 minutes", timeoutSeconds: 540, memory: "512MiB" }, async () => {
+  await loadFx().catch(() => undefined);
   for (const d of (await db.collection("projects").select("testData", "demo").get()).docs) {
     if (d.get("testData") || d.get("demo")) continue;
     try {
@@ -160,6 +177,7 @@ export const storeResync = onSchedule({ schedule: "every 15 minutes", timeoutSec
 
 /** Résumé hebdomadaire : lundi 8 h (Paris) — revenu vs semaine précédente, MRR, nouveaux abonnés, top pays. */
 export const weeklySummaryPush = onSchedule({ schedule: "0 8 * * 1", timeZone: "Europe/Paris", timeoutSeconds: 300 }, async () => {
+  await loadFx().catch(() => undefined);
   for (const d of (await db.collection("projects").select("testData", "demo").get()).docs) {
     if (d.get("testData") || d.get("demo")) continue;
     try {
@@ -192,9 +210,11 @@ export const iconOnConfigChange = onDocumentUpdated({ document: "projects/{pid}"
 
 /** First import (30 days) as soon as a vendor number is saved. */
 export const downloadsBackfill = onDocumentUpdated({ document: "projects/{pid}", timeoutSeconds: 540 }, async event => {
-  const before = event.data?.before.get("config.apple.vendorNumber"), after = event.data?.after.get("config.apple.vendorNumber");
-  if (!after || before === after) return;
-  console.log("downloads backfill", event.params.pid, await syncDownloads(await getProject(event.params.pid), 30));
+  const b = event.data?.before, a = event.data?.after;
+  const changed = (f: string) => !!a?.get(f) && JSON.stringify(a?.get(f)) !== JSON.stringify(b?.get(f)); // Timestamp : comparer les valeurs
+  // Numéro de fournisseur saisi, app App Store renseignée ou App Store Connect connecté : téléchargements tout de suite.
+  if (!changed("config.apple.vendorNumber") && !changed("config.apple.appAppleId") && !changed("connections.app_store.connectedAt")) return;
+  console.log("downloads backfill", event.params.pid, await syncAllDownloads(await getProject(event.params.pid), 365).catch(e => ({ error: (e as Error).message })));
 });
 
 const heavy = { timeoutSeconds: 540, memory: "1GiB" as const };
@@ -239,6 +259,7 @@ export const demoRefresh = onSchedule({ schedule: "20 * * * *", timeZone: "UTC",
 
 /** Scheduled data exports (S3 / GCS / webhook), incremental since each export's last successful run. */
 export const scheduledExports = onSchedule({ schedule: "0 3 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "1GiB" }, async () => {
+  await loadFx().catch(() => undefined);
   const { runProjectExports } = await import("./exports");
   const projects = await db.collection("projects").select("config.exports").get();
   for (const p of projects.docs) {
@@ -249,6 +270,7 @@ export const scheduledExports = onSchedule({ schedule: "0 3 * * *", timeZone: "U
 
 /** Benchmarks anonymisés inter-projets (benchmarks.ts) : percentiles par catégorie × palier de prix, chaque nuit. */
 export const benchmarksNightly = onSchedule({ schedule: "40 2 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "1GiB" }, async () => {
+  await loadFx().catch(() => undefined);
   const { runBenchmarks } = await import("./benchmarks");
   console.log("benchmarks", await runBenchmarks());
 });
@@ -261,6 +283,7 @@ export const cleanupMcpOAuth = onSchedule({ schedule: "every 24 hours", timeoutS
 
 // Garde le classement calculé d'avance : la page ne doit jamais attendre le calcul.
 export const leaderboardRefresh = onSchedule({ schedule: "every 60 minutes", timeoutSeconds: 300, memory: "512MiB" }, async () => {
+  await loadFx().catch(() => undefined);
   const { refreshLeaderboard } = await import("./leaderboard");
   const { PUBLIC_BASE } = await import("./api");
   await refreshLeaderboard(PUBLIC_BASE);

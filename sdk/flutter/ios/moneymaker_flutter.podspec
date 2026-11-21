@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'moneymaker_flutter'
-  s.version          = '1.0.0'
+  s.version          = '1.2.0'
   s.summary          = 'MoneyMaker subscriptions SDK for Flutter (StoreKit 2).'
   s.description      = 'Flutter plugin wrapping the MoneyMaker iOS SDK (vendored from sdk/ios).'
   s.homepage         = 'https://github.com/amineprimesmr/moneymaker'

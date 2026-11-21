@@ -203,6 +203,7 @@ public struct MoneyMakerPaywall<Header: View>: View {
     private func restore() async {
         busy = true; defer { busy = false }
         do { let info = try await mm.restorePurchases(); if !info.activeEntitlements.isEmpty { onPurchase(info); dismiss() } }
+        catch StoreKitError.userCancelled {} // App Store sign-in dismissed
         catch { self.error = error.localizedDescription }
     }
 }

@@ -122,6 +122,8 @@ final class PosthogStore: ObservableObject {
     }
 
     func forget(_ id: String) { summaries[id] = nil; connected.remove(id); loadedAt[id] = nil }
+    /// Déconnexion : rien de l'ancien compte ne reste.
+    func reset() { summaries = [:]; connected = []; loadedAt = [:] }
 
     /// Résumé cumulé sur les business du périmètre (les effectifs s'additionnent, les taux se recalculent).
     func combined(_ projectIds: [String]) -> PosthogSummary? {

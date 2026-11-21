@@ -14,6 +14,10 @@ import Network
 @MainActor
 public final class MoneyMaker: ObservableObject {
     nonisolated public static let defaultBaseURL = URL(string: "https://usemoneymaker.com/v1")!
+    /// Version of this SDK (sent in the User-Agent).
+    nonisolated public static let sdkVersion = "1.2.0"
+    /// Hosts serving the hosted API with the pinned signing key (usemoneymaker.com and the former Firebase domain).
+    nonisolated static let hostedHosts: Set<String> = ["usemoneymaker.com", "moneymaker-io.web.app"]
 
     private static var instance: MoneyMaker?
     public static var shared: MoneyMaker {
@@ -33,8 +37,8 @@ public final class MoneyMaker: ObservableObject {
     /// Ed25519 public key (base64 raw, from `GET /v1/signing-key`) pinned in the app. Set before `configure`.
     /// When nil, the key is fetched once and pinned on first launch (trust on first use).
     public static var signingPublicKey: String?
-    /// Key of the hosted MoneyMaker service (usemoneymaker.com), pinned by default for that host.
-    static let hostedSigningPublicKey = "9F7dzH51ASV9YKJmckzwJPTmNzoaefMzuOPPz2xXOBA="
+    /// Key of the hosted MoneyMaker service (usemoneymaker.com), pinned by default for the hosted hosts.
+    nonisolated static let hostedSigningPublicKey = "9F7dzH51ASV9YKJmckzwJPTmNzoaefMzuOPPz2xXOBA="
 
     /// Signature checking of customer-info responses (trusted entitlements).
     public let entitlementVerification: EntitlementVerificationMode
@@ -65,7 +69,7 @@ public final class MoneyMaker: ObservableObject {
         self.cache = Cache(namespace: String(apiKey.suffix(8)))
         self.entitlementVerification = verification
         self.isTestStore = apiKey.hasPrefix("mm_test_")
-        self.verifier = SignatureVerifier(api: api, hardcodedKey: Self.signingPublicKey ?? (baseURL.host == "usemoneymaker.com" ? Self.hostedSigningPublicKey : nil), namespace: String(apiKey.suffix(8)))
+        self.verifier = SignatureVerifier(api: api, hardcodedKey: Self.signingPublicKey ?? (Self.isHosted(baseURL) ? Self.hostedSigningPublicKey : nil), namespace: String(apiKey.suffix(8)))
         self.pending = PendingTransactionQueue(namespace: String(apiKey.suffix(8)))
         self.appUserID = appUserID ?? cache.anonymousID
         self.customerInfo = cache.customerInfo(for: self.appUserID)
@@ -95,6 +99,9 @@ public final class MoneyMaker: ObservableObject {
         pathMonitor.start(queue: DispatchQueue(label: "MoneyMaker.network"))
     }
 
+    /// True when `url` is the hosted API, whose signing key is pinned in the SDK.
+    nonisolated static func isHosted(_ url: URL) -> Bool { url.host.map { hostedHosts.contains($0.lowercased()) } ?? false }
+
     deinit {
         updatesTask?.cancel()
         pathMonitor.cancel()
@@ -105,18 +112,19 @@ public final class MoneyMaker: ObservableObject {
 
     public var isAnonymous: Bool { appUserID.hasPrefix("$anon:") }
 
-    /// Identifies the user. Purchases made while anonymous are moved to this id.
+    /// Identifies the user. Purchases made while anonymous are moved to this id, then StoreKit purchases are re-synced.
+    /// `appUserID` only changes once the server answered: on failure the SDK stays on the previous id.
     @discardableResult
     public func logIn(_ newAppUserID: String) async throws -> CustomerInfo {
         guard newAppUserID != appUserID else { return try await refreshCustomerInfo() }
         let previous = appUserID
-        appUserID = newAppUserID
         let info: CustomerInfo
         if previous.hasPrefix("$anon:") {
             info = try await fetchCustomerInfo("customers/\(previous.urlPath)/alias", body: ["newAppUserId": newAppUserID])
         } else {
             info = try await fetchCustomerInfo("customers/\(newAppUserID.urlPath)")
         }
+        appUserID = newAppUserID
         publish(info)
         await syncPurchases()
         return customerInfo ?? info
@@ -299,10 +307,12 @@ public final class MoneyMaker: ObservableObject {
     }
 
     /// Re-syncs every purchase the Apple ID owns (call from a "Restore purchases" button).
+    /// Throws the StoreKit error when `AppStore.sync()` fails (e.g. `StoreKitError.userCancelled` if the user
+    /// dismissed the App Store sign-in), instead of silently returning stale entitlements.
     @discardableResult
     public func restorePurchases() async throws -> CustomerInfo {
         if isTestStore { return try await refreshCustomerInfo() }
-        try? await AppStore.sync()
+        try await AppStore.sync()
         var last: CustomerInfo?
         for await verification in Transaction.currentEntitlements {
             last = try? await post(verification)
@@ -338,8 +348,18 @@ public final class MoneyMaker: ObservableObject {
     public func signPromotionalOffer(productID: String, offerID: String) async throws -> PromotionalOfferSignature {
         struct DTO: Decodable { let keyIdentifier: String; let nonce: String; let timestamp: Int; let signature: String }
         let r: DTO = try await api.send("customers/\(appUserID.urlPath)/offers/apple/sign", body: ["productId": productID, "offerId": offerID])
-        guard let nonce = UUID(uuidString: r.nonce), let sig = Data(base64Encoded: r.signature) else { throw MoneyMakerError.productNotFound(productID) }
-        return PromotionalOfferSignature(keyID: r.keyIdentifier, nonce: nonce, signature: sig, timestamp: r.timestamp)
+        return try Self.promotionalOfferSignature(keyIdentifier: r.keyIdentifier, nonce: r.nonce, signature: r.signature, timestamp: r.timestamp)
+    }
+
+    /// Validates the server's answer; a malformed nonce or signature is a server error, not a missing product.
+    nonisolated static func promotionalOfferSignature(keyIdentifier: String, nonce: String, signature: String, timestamp: Int) throws -> PromotionalOfferSignature {
+        guard let uuid = UUID(uuidString: nonce) else {
+            throw MoneyMakerError.server(status: 200, code: "invalid_offer_signature", message: "Invalid nonce in the promotional offer signature")
+        }
+        guard !keyIdentifier.isEmpty, let sig = Data(base64Encoded: signature), !sig.isEmpty else {
+            throw MoneyMakerError.server(status: 200, code: "invalid_offer_signature", message: "Invalid promotional offer signature")
+        }
+        return PromotionalOfferSignature(keyID: keyIdentifier, nonce: uuid, signature: sig, timestamp: timestamp)
     }
 
     // MARK: Internals
@@ -510,7 +530,7 @@ struct APIClient: Sendable {
         req.timeoutInterval = 20
         req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("MoneyMaker-iOS/1.0", forHTTPHeaderField: "User-Agent")
+        req.setValue("MoneyMaker-iOS/\(MoneyMaker.sdkVersion)", forHTTPHeaderField: "User-Agent")
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
         var lastError: Error = MoneyMakerError.network("unknown")
         for attempt in 0..<3 {

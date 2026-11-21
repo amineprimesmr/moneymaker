@@ -48,7 +48,23 @@ struct ProjectSummary: Codable, Identifiable, Hashable {
     var iconUrl: String? = nil
     /// Sources de revenus connectées : app_store, stripe, play_store…
     var stores: [String]? = nil
+    /// Ventes brutes de la période (jamais négatives) ; absent d'un ancien serveur → revenu net.
+    var revenueMicros: Int? = nil
+    /// Remboursements de la période (positif).
+    var refundsMicros: Int? = nil
+    /// Remboursements par jour, à côté de `revenueByDay` (qui ne contient plus que les ventes).
+    var refundsByDay: [String: Int]? = nil
     var id: String { projectId }
+
+    /// Revenu affiché en titre : ventes brutes, jamais négatives.
+    var grossRevenueMicros: Int { max(0, revenueMicros ?? netRevenueMicros) }
+    var refundNote: String? { refundsNote(refundsMicros, currency) }
+}
+
+/// « −12 € remboursé » quand des remboursements existent sur la période.
+func refundsNote(_ micros: Int?, _ currency: String) -> String? {
+    guard let m = micros, m > 0 else { return nil }
+    return String(localized: "−\(m.money(currency)) remboursé")
 }
 
 /// Mois calendaire : la période « 28 J » devient « depuis le 1er du mois » (réglage, mémorisé).
@@ -80,6 +96,14 @@ struct Overview: Codable, Hashable {
     var hasTrials: Bool? = nil
     /// Début imposé de la période (mois calendaire), en ms ; nil = N derniers jours glissants.
     var periodStart: Double? = nil
+    /// Remboursements de la période (positif) ; `revenueMicros` = ventes brutes (nouveau serveur).
+    var refundsMicros: Int? = nil
+    /// Ventes − remboursements.
+    var netRevenueMicros: Int? = nil
+
+    /// Revenu affiché en titre : ventes brutes, jamais négatives.
+    var grossRevenueMicros: Int { max(0, revenueMicros) }
+    var refundNote: String? { refundsNote(refundsMicros, currency) }
 
     static let placeholder = Overview(currency: "EUR", periodDays: 30, mrrMicros: 4_280_000_000, revenueMicros: 4_910_000_000,
         activeSubscriptions: 612, activeTrials: 48, newCustomers: 1_204, projects: [], generatedAt: Date().timeIntervalSince1970 * 1000)
@@ -191,21 +215,54 @@ struct EventItem: Codable, Identifiable, Hashable {
     let currency: String?
     let at: Double
     let isSandbox: Bool?
+    var isTrial: Bool? = nil
+    /// Nom lisible du produit (ex. nom du produit Stripe), quand le serveur le connaît.
+    var productName: String? = nil
 }
 
 struct APIError: LocalizedError {
     let message: String; var status: Int = 0; var errorDescription: String? { message }
 
     /// Le serveur écrit ses messages en français : l'app les affiche dans la langue de l'appareil, d'après leur code.
+    /// Un code brut (« route_not_found ») n'est jamais montré : message lisible selon le statut HTTP.
     static func server(_ data: Data, status: Int) -> APIError {
         let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        let text = localized(code: body?["error"] as? String) ?? body?["message"] as? String
-        return APIError(message: text ?? String(localized: "Erreur \(status)"), status: status)
+        let code = body?["error"] as? String
+        let raw = (body?["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Message du serveur (déjà traduit d'après Accept-Language) gardé s'il est rédigé, pas un identifiant
+        // technique ; sinon, texte générique traduit.
+        let readable = raw.flatMap { m -> String? in
+            guard !m.isEmpty, m != code, m.range(of: "^[a-z0-9_.:-]+$", options: .regularExpression) == nil else { return nil }
+            return m
+        }
+        return APIError(message: localized(code: code) ?? readable ?? generic(status), status: status)
+    }
+
+    /// Message lisible quand le code n'est pas connu de l'app.
+    static func generic(_ status: Int) -> String {
+        switch status {
+        case 401: return String(localized: "Ta session a expiré. Reconnecte-toi.")
+        case 403: return String(localized: "Tu n'as pas accès à cette action.")
+        case 404: return String(localized: "Cette fonction n'est pas encore disponible. Mets l'app à jour ou réessaie plus tard.")
+        case 408, 504: return String(localized: "Le serveur met trop de temps à répondre. Réessaie dans un instant.")
+        case 429: return String(localized: "Trop de requêtes, réessaie dans une minute.")
+        case 500...599: return String(localized: "Le serveur a rencontré un problème. Réessaie dans un instant.")
+        default: return String(localized: "Une erreur est survenue (code \(status)). Réessaie dans un instant.")
+        }
     }
 
     private static func localized(code: String?) -> String? {
         switch code {
-        case "demo_read_only": return String(localized: "Mode démo : cette action est désactivée.")
+        case "invalid_token": return String(localized: "Ta session a expiré. Reconnecte-toi.")
+        case "route_not_found": return String(localized: "Cette fonction n'est pas encore disponible. Mets l'app à jour ou réessaie plus tard.")
+        case "internal_error": return String(localized: "Le serveur a rencontré un problème. Réessaie dans un instant.")
+        case "forbidden": return String(localized: "Tu n'as pas accès à cette action.")
+        case "project_not_found": return String(localized: "Business introuvable. Il a peut-être été supprimé.")
+        case "too_many", "too_many_attempts": return String(localized: "Trop de requêtes, réessaie dans une minute.")
+        case "message_required": return String(localized: "Écris d'abord ton message.")
+        case "confirmation_required": return String(localized: "Confirmation requise pour cette action.")
+        case "not_supported": return String(localized: "Cette action n'est pas prise en charge.")
+        case "demo_read_only": return String(localized: "Mode démo : lecture seule. Cette action est désactivée.")
         case "pro_required": return String(localized: "Le plan gratuit inclut 1 business. MoneyMaker Pro les débloque tous.")
         case "rate_limited": return String(localized: "Trop de requêtes, réessaie dans une minute.")
         case "purchase_other_account": return String(localized: "Cet achat est rattaché à un autre compte MoneyMaker.")
@@ -251,6 +308,10 @@ struct MoneyMakerClient {
         return MoneyMakerClient(token: t)
     }
 
+    /// Ce client parle pour le compte enregistré : seul lui peut écrire les caches partagés avec les
+    /// widgets (une réponse arrivée après une déconnexion ou un changement de compte est ignorée).
+    var ownsSharedCache: Bool { token != nil && token == MoneyMakerClient.stored.token }
+
     static func save(token: String?) {
         MM.write("pat", token.map { Data($0.utf8) })
         tokenLock.lock(); cachedToken = .some(token); tokenLock.unlock()
@@ -294,7 +355,7 @@ struct MoneyMakerClient {
         let start = since.map { "&since=\(Int($0.timeIntervalSince1970 * 1000))" } ?? ""
         let o: Overview = try await get("overview?days=\(days)\(cur)\(start)")
         // Le cache des widgets reste sur 28 jours glissants.
-        if days == 28, since == nil, let data = try? JSONEncoder().encode(o) {
+        if days == 28, since == nil, ownsSharedCache, let data = try? JSONEncoder().encode(o) {
             MM.write("overview", data)
             // Un widget charge aussi cet aperçu : s'il relançait les widgets, ils se relanceraient sans fin.
             if !Bundle.main.bundlePath.hasSuffix(".appex") { WidgetCenter.shared.reloadAllTimelines() }
@@ -311,7 +372,7 @@ struct MoneyMakerClient {
     func alerts() async throws -> [RankingAlert] {
         struct R: Decodable { let alerts: [RankingAlert] }
         let r: R = try await get("alerts")
-        if let data = try? JSONEncoder().encode(Array(r.alerts.prefix(10))) { MM.write("alerts", data) }
+        if ownsSharedCache, let data = try? JSONEncoder().encode(Array(r.alerts.prefix(10))) { MM.write("alerts", data) }
         return r.alerts
     }
 

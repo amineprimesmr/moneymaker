@@ -1,3 +1,4 @@
+import { safeFetch } from "./net";
 // Logo d'un business — résolu, téléchargé et hébergé par MoneyMaker.
 //
 // Pourquoi héberger : les URL tierces cassent (hotlink, redirections, .ico/.svg illisibles par
@@ -53,8 +54,8 @@ async function getJson(url: string, headers: Record<string, string> = {}) {
 }
 
 async function getText(url: string) {
-  const r = await fetch(url, { headers: UA, redirect: "follow", signal: AbortSignal.timeout(10000) });
-  return r.ok ? (await r.text()).slice(0, 300_000) : null;
+  const r = await safeFetch(url, { headers: UA, signal: AbortSignal.timeout(10000) }).catch(() => null);
+  return r?.ok ? (await r.text()).slice(0, 300_000) : null;
 }
 
 const normalize = (u: string) => (/^https?:\/\//.test(u) ? u : `https://${u}`);
@@ -118,7 +119,7 @@ async function websiteCandidates(site: string): Promise<Candidate[]> {
 /** Télécharge une image et la ramène à un PNG carré 256 px sur fond noir (icônes transparentes comprises). */
 export async function fetchIcon(c: Candidate): Promise<Buffer | null> {
   try {
-    const r = await fetch(c.url, { headers: { ...UA, ...(c.headers ?? {}) }, redirect: "follow", signal: AbortSignal.timeout(10000) });
+    const r = await safeFetch(c.url, { headers: { ...UA, ...(c.headers ?? {}) }, signal: AbortSignal.timeout(10000) });
     if (!r.ok) return null;
     const type = r.headers.get("content-type") ?? "";
     if (!/^image\//.test(type) && !/octet-stream/.test(type)) return null;

@@ -3,6 +3,7 @@
 // (https://developer.paddle.com/webhooks/signature-verification). Several h1 may be present during rotation.
 import { createHmac, timingSafeEqual } from "crypto";
 import type { Purchase, PurchaseStatus } from "./engine";
+import { minorToMicros } from "./engine";
 
 export function verifyPaddleSignature(rawBody: Buffer | string, header: string | undefined, secret: string, now = Date.now(), toleranceSec = 300): boolean {
   if (!header || !secret) return false;
@@ -26,8 +27,7 @@ export function verifyPaddleSignature(rawBody: Buffer | string, header: string |
 }
 
 /** Paddle amounts are strings in the currency's lowest denomination; JPY/KRW have no minor unit. */
-const ZERO_DECIMAL = new Set(["JPY", "KRW"]);
-export const paddleMinorToMicros = (minor: unknown, currency: string) => Math.round(Number(minor ?? 0) * (ZERO_DECIMAL.has(currency.toUpperCase()) ? 1e6 : 1e4));
+export const paddleMinorToMicros = (minor: unknown, currency: string) => minorToMicros(minor, currency);
 const ms = (iso: unknown) => (typeof iso === "string" && iso ? Date.parse(iso) : NaN);
 const INTERVAL_MONTHS: Record<string, number> = { day: 1 / 30, week: 0.25, month: 1, year: 12 };
 export const periodMonthsOf = (cycle: any) => cycle?.interval ? (INTERVAL_MONTHS[cycle.interval] ?? 0) * Number(cycle.frequency ?? 1) : 0;

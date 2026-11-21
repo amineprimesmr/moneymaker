@@ -7,13 +7,13 @@ import { HttpError } from "./engine";
 import { Project, ProjectConfig, db, getCredentials, sha256, upsertPurchase } from "./store";
 import { storeSubscription, stripeOneTimePurchase, oneTimeOwner, isSubscriptionCharge, invoiceSubscription, isAffiliateSale, chargeIsAffiliate } from "./stripe";
 import { toAlpha2 } from "./countries";
-import { convertMicros } from "./engine";
+import { convertMicros, minorToMicros } from "./engine";
 import { syncTrackers } from "./appstore";
 
-const STRIPE_EVENTS: Stripe.WebhookEndpointCreateParams.EnabledEvent[] = [
+export const STRIPE_EVENTS: Stripe.WebhookEndpointCreateParams.EnabledEvent[] = [
   "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted",
   "customer.subscription.paused", "customer.subscription.resumed", "invoice.paid", "invoice.payment_failed",
-  "checkout.session.completed", "charge.succeeded", "charge.refunded",
+  "checkout.session.completed", "charge.succeeded", "charge.refunded", "charge.dispute.created",
 ];
 
 /** Stripe: validate key → create the webhook endpoint automatically → import subscriptions + 12 months of invoices. */
@@ -50,7 +50,7 @@ export async function connectStripe(project: Project, baseUrl: string, secretKey
 
 export async function importStripeHistory(project: Project, stripe: Stripe) {
   let subscriptions = 0, invoices = 0;
-  for await (const sub of stripe.subscriptions.list({ status: "all", limit: 100, expand: ["data.customer"] })) {
+  for await (const sub of stripe.subscriptions.list({ status: "all", limit: 100, expand: ["data.customer", "data.discounts", "data.items.data.price.product"] })) {
     const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
     await storeSubscription(project, { ...sub, customer: customerId } as Stripe.Subscription, stripe, { silent: true });
     subscriptions++;
@@ -65,7 +65,7 @@ export async function importStripeHistory(project: Project, stripe: Stripe) {
       ?? (await db.doc(`projects/${project.id}/index/${sha256(`stripe_cus:${inv.customer}`)}`).get()).get("appUserId")
       ?? `$stripe:${inv.customer}`;
     const currency = inv.currency.toUpperCase();
-    const amount = inv.amount_paid * 10000;
+    const amount = minorToMicros(inv.amount_paid, inv.currency);
     batch.set(db.doc(`projects/${project.id}/transactions/stripe_inv_${inv.id}`), {
       appUserId, store: "stripe", productId: inv.lines.data[0]?.pricing?.price_details?.price ?? (inv.lines.data[0] as any)?.price?.id ?? "stripe",
       purchaseId: subId, kind: inv.billing_reason === "subscription_cycle" ? "renewal" : "purchase",

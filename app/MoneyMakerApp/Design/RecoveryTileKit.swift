@@ -895,6 +895,8 @@ struct RecoveryWideTile<Chart: View>: View {
     let footerLead: String
     let footerStrong: String
     var dotsAnchor: UnitPoint = .topTrailing
+    /// Ligne secondaire discrète sous le chiffre (ex. « −12 € remboursé »).
+    var note: String? = nil
     @ViewBuilder var chart: Chart
 
     var body: some View {
@@ -907,6 +909,10 @@ struct RecoveryWideTile<Chart: View>: View {
                         .foregroundStyle(RecoveryTileTheme.value)
                         .lineLimit(1).minimumScaleFactor(0.55)
                         .padding(.top, 15)
+                    if let note {
+                        Text(note).font(V2Font.system(size: 11)).foregroundStyle(MMColor.ink3)
+                            .lineLimit(2).minimumScaleFactor(0.8).padding(.top, 2)
+                    }
                     Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

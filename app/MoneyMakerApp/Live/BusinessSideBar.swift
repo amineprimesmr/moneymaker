@@ -22,6 +22,9 @@ final class SetupCache: ObservableObject {
     @Published var byProject: [String: SetupStatus] = [:]
     private var loadedAt: Date?
 
+    /// Déconnexion : rien de l'ancien compte ne reste.
+    func reset() { byProject = [:]; loadedAt = nil }
+
     func load(_ projects: [ProjectSummary], client: MoneyMakerClient, force: Bool = false) async {
         if !force, let t = loadedAt, Date().timeIntervalSince(t) < 120 { return }
         loadedAt = Date()
@@ -214,15 +217,14 @@ struct BusinessSideBar: View, Equatable {
                     Rectangle().fill(ink.opacity(0.08)).frame(height: 1).padding(.vertical, 12)
                     VStack(alignment: .leading, spacing: 6) {
                     menuButton("plus.circle.fill", "Nouveau business") {
-                        // Au-delà du business gratuit : le paywall Pro ; sinon le dashboard web.
+                        // Ouvre la création du business sur usemoneymaker.com (tout est gratuit au lancement).
                         Task { await ProPaywall.shared.newBusiness(client: client) }
                     }
                     menuButton("gearshape.fill", "Réglages") { openSettings() }
-                    menuButton("safari.fill", "Dashboard web") {
-                        UIApplication.shared.open(URL(string: "https://usemoneymaker.com")!)
-                    }
                     }
                     .homeTutorialTarget(.menuActions)
+                    FeedbackMenuCard(ink: ink) { showFeedback = true }
+                        .padding(.top, 22)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 12)
@@ -245,9 +247,11 @@ struct BusinessSideBar: View, Equatable {
         }
         .sensoryFeedback(.selection, trigger: activeIds)
         .sensoryFeedback(.error, trigger: refused)
+        .sheet(isPresented: $showFeedback) { FeedbackSheet(client: client) }
     }
 
     @State private var refused = 0
+    @State private var showFeedback = false
     @State private var shake: String?
 
     /// Sélection multiple : le menu reste ouvert, l'Accueil se transforme derrière en direct.

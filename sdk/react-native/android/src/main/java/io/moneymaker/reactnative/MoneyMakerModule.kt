@@ -30,9 +30,10 @@ class MoneyMakerModule : Module() {
 
     Constants("defaultBaseUrl" to MoneyMaker.DEFAULT_BASE_URL)
 
-    Function("configure") { apiKey: String, appUserId: String?, baseUrl: String? ->
+    Function("configure") { apiKey: String, appUserId: String?, baseUrl: String?, consumableProductIds: List<String>? ->
       val context = appContext.reactContext ?: throw CodedException("no_context", "React context unavailable", null)
-      val mm = MoneyMaker.configure(context, apiKey, appUserId, baseUrl?.takeIf { it.isNotEmpty() } ?: MoneyMaker.DEFAULT_BASE_URL)
+      val mm = MoneyMaker.configure(context, apiKey, appUserId, baseUrl?.takeIf { it.isNotEmpty() } ?: MoneyMaker.DEFAULT_BASE_URL,
+        consumableProductIds = consumableProductIds.orEmpty().toSet())
       mm.onCustomerInfoUpdate = { info -> sendEvent("onCustomerInfoUpdated", encode(info)) }
     }
 
@@ -80,20 +81,20 @@ class MoneyMakerModule : Module() {
       wrap { encode(loadOfferings()) }
     }
 
-    AsyncFunction("purchasePackage") Coroutine { offeringId: String, packageId: String, offerToken: String? ->
+    AsyncFunction("purchasePackage") Coroutine { offeringId: String, packageId: String, offerToken: String?, offerId: String? ->
       wrap {
         val pkg = offerings?.get(offeringId)?.pkg(packageId) ?: loadOfferings()[offeringId]?.pkg(packageId)
           ?: throw CodedException("product_not_found", "Package $packageId not found in offering $offeringId", null)
-        purchase(pkg, offerToken)
+        purchase(pkg, offerToken, offerId)
       }
     }
 
-    AsyncFunction("purchaseProduct") Coroutine { productId: String, offerToken: String? ->
+    AsyncFunction("purchaseProduct") Coroutine { productId: String, offerToken: String?, offerId: String? ->
       wrap {
         fun find(o: Offerings?) = o?.all?.values?.flatMap { it.packages }?.firstOrNull { it.productIds["play_store"] == productId && it.product != null }
         val pkg = find(offerings) ?: find(loadOfferings())
           ?: throw CodedException("product_not_found", "Play product $productId is not part of any offering", null)
-        purchase(pkg, offerToken)
+        purchase(pkg, offerToken, offerId)
       }
     }
 
@@ -125,9 +126,9 @@ class MoneyMakerModule : Module() {
 
   private suspend fun loadOfferings(): Offerings = mm().loadOfferings().also { offerings = it }
 
-  private suspend fun purchase(pkg: Package, offerToken: String?): Map<String, Any?> {
+  private suspend fun purchase(pkg: Package, offerToken: String?, offerId: String?): Map<String, Any?> {
     val activity = appContext.currentActivity ?: throw CodedException("no_activity", "No foreground activity to launch the billing flow", null)
-    val result = withContext(Dispatchers.Main) { mm().purchase(activity, pkg, offerToken) }
+    val result = withContext(Dispatchers.Main) { mm().purchase(activity, pkg, offerToken, offerId) }
     return when (result) {
       is PurchaseResult.Success -> mapOf("status" to "success", "customerInfo" to encode(result.customerInfo))
       PurchaseResult.UserCancelled -> mapOf("status" to "userCancelled")
@@ -172,26 +173,25 @@ class MoneyMakerModule : Module() {
     "offeringId" to offeringId,
     "productIds" to p.productIds,
     "metadata" to p.metadata,
-    "product" to p.product?.let { encode(it) },
+    "product" to p.product?.let { encode(it, p) },
     "localizedPrice" to (p.formattedPrice ?: ""),
     "hasFreeTrial" to p.hasFreeTrial,
   )
 
-  private fun encode(d: ProductDetails): Map<String, Any?> {
+  /** Prices of the base plan bought by default (no offer), same as `MoneyMaker.purchase`. */
+  private fun encode(d: ProductDetails, p: Package): Map<String, Any?> {
     val isSub = d.productType == BillingClient.ProductType.SUBS
-    val phase = d.subscriptionOfferDetails?.firstOrNull()?.pricingPhases?.pricingPhaseList?.lastOrNull()
-    val oneTime = d.oneTimePurchaseOfferDetails
-    val micros = phase?.priceAmountMicros ?: oneTime?.priceAmountMicros ?: 0L
+    val consumable = !isSub && d.productId in mm().consumableProductIds
     return mapOf(
       "identifier" to d.productId,
       "title" to d.name,
       "description" to d.description,
-      "price" to micros / 1_000_000.0,
-      "priceString" to (phase?.formattedPrice ?: oneTime?.formattedPrice ?: ""),
-      "currencyCode" to (phase?.priceCurrencyCode ?: oneTime?.priceCurrencyCode ?: ""),
-      "type" to if (isSub) "subscription" else "non_consumable",
-      "subscriptionPeriod" to if (isSub) phase?.billingPeriod else null,
-      "hasFreeTrial" to (d.subscriptionOfferDetails?.any { o -> o.pricingPhases.pricingPhaseList.any { it.priceAmountMicros == 0L } } == true),
+      "price" to (p.priceAmountMicros ?: 0L) / 1_000_000.0,
+      "priceString" to (p.formattedPrice ?: ""),
+      "currencyCode" to (p.priceCurrencyCode ?: ""),
+      "type" to if (isSub) "subscription" else if (consumable) "consumable" else "non_consumable",
+      "subscriptionPeriod" to if (isSub) p.subscriptionPeriod else null,
+      "hasFreeTrial" to p.hasFreeTrial,
     )
   }
 

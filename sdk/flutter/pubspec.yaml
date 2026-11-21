@@ -1,6 +1,6 @@
 name: moneymaker_flutter
 description: Flutter plugin for MoneyMaker — subscriptions for App Store, Google Play and Stripe on your own backend. Wraps the native iOS (StoreKit 2) and Android (Play Billing) SDKs.
-version: 1.1.1
+version: 1.2.0
 homepage: https://github.com/amineprimesmr/moneymaker
 repository: https://github.com/amineprimesmr/moneymaker/tree/main/sdk/flutter
 

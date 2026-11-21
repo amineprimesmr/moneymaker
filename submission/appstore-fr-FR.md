@@ -1,10 +1,12 @@
 # MoneyMaker : fiche App Store, fr-FR
 
+Texte de la fiche fr-FR pour la version 1.1.1 (app id 6821596839).
+
 | Champ | Limite |
 |---|---|
 | Nom | 30 |
 | Sous-titre | 30 |
-| Mots-clés | 100 octets |
+| Mots-clés | 100 octets (utilisés : 100) |
 | Texte promotionnel | 170 |
 
 ## Nom
@@ -17,7 +19,7 @@ MRR, ventes et net en direct
 
 ## Mots-clés
 
-abonnements,indie,développeur,dashboard,widget,churn,saas,compta,urssaf,chiffre,affaires,startup
+abonnements,indie,développeur,dashboard,widget,churn,saas,compta,analytics,chiffre,affaires,startup
 
 ## Texte promotionnel
 
@@ -46,11 +48,17 @@ APP STORE
 CLASSEMENT
 • Compare tes revenus vérifiés à ceux d'autres business, si tu choisis d'y apparaître
 
-GRATUIT POUR COMMENCER
-• Le plan gratuit suit un business
-• MoneyMaker Pro débloque les business illimités, les graphiques, les notes et la santé de l'app, en un seul paiement, sans abonnement
+100 % GRATUIT
+• Pendant le lancement, tout est gratuit : business illimités, graphiques, notes et santé de l'app
+• Une idée, un bug ? Écris-nous directement depuis le menu de l'app
 
 Crée ton compte directement dans l'app, puis connecte tes sources de revenus en quelques minutes. Les estimations fiscales sont indicatives et ne remplacent pas un expert-comptable.
+
+## Nouveautés de la 1.1.1
+
+• MoneyMaker est désormais 100 % gratuit pour les premiers utilisateurs : business illimités et toutes les fonctions
+• Nouveau : donne ton avis depuis le menu, chaque message arrive directement chez nous
+• Petites corrections
 
 ## Nouveautés de la 1.1
 

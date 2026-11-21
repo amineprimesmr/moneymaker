@@ -1,6 +1,6 @@
 # MoneyMaker
 
-Alternative auto-hébergée à RevenueCat : un seul backend pour les abonnements **App Store (StoreKit 2)**, **Google Play Billing** et **Stripe**, avec dashboard multi-business, app iPhone + widgets, SDK iOS/Android et webhooks signés vers tes propres serveurs. 0 % de commission.
+Alternative hébergée à RevenueCat (service géré, rien à déployer de ton côté) : un seul backend pour les abonnements **App Store (StoreKit 2)**, **Google Play Billing** et **Stripe**, avec dashboard multi-business, app iPhone + widgets, SDK iOS/Android et webhooks signés vers tes propres serveurs. Gratuit pendant le lancement (business illimités), 0 % de commission.
 
 - Dashboard : https://usemoneymaker.com
 - API : `https://usemoneymaker.com/v1`
@@ -38,7 +38,7 @@ Alternative auto-hébergée à RevenueCat : un seul backend pour les abonnements
 | `backend/functions/src/metrics.ts` | Analytique : MRR, mouvements, pays, LTV, ARPPU, cohortes |
 | `dashboard/public` | Dashboard web (Firebase Hosting, sans build), `llms.txt`, `/docs` |
 | `sdk/ios` | Swift Package `MoneyMaker` (StoreKit 2, paywall SwiftUI, `.requiresEntitlement`) |
-| `sdk/android` | Bibliothèque Kotlin `io.moneymaker:moneymaker` (Play Billing 7) |
+| `sdk/android` | Bibliothèque Kotlin `io.moneymaker:moneymaker` (Play Billing 8) |
 | `app` | App iPhone MoneyMaker + widgets (écran d'accueil et écran verrouillé) |
 | `skills/moneymaker` | Skill Claude Code pour intégrer MoneyMaker dans n'importe quelle app |
 
@@ -59,10 +59,10 @@ cd sdk/android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Conte
 
 Déploiement : `firebase deploy --project moneymaker-io --only functions,hosting,firestore` (les tests tournent en predeploy).
 
-App iPhone (iPhone 14 Pro Max uniquement) :
+App iPhone :
 
 ```bash
-cd app && xcodegen generate && nice -n 15 xcodebuild -project MoneyMakerApp.xcodeproj -scheme MoneyMaker -destination 'id=00008120-0000158022D0C01E' -derivedDataPath ~/Library/Developer/Xcode/DerivedData/moneymaker-app -jobs 4 build
+cd app && xcodegen generate && xcodebuild -project MoneyMakerApp.xcodeproj -scheme MoneyMaker -destination 'generic/platform=iOS' -derivedDataPath ~/Library/Developer/Xcode/DerivedData/moneymaker-app -jobs 4 build
 ```
 
 ## Brancher une app

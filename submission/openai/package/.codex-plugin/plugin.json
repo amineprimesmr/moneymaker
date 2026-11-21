@@ -4,7 +4,7 @@
   "description": "Revenue and subscription analytics for your apps: MRR, subscribers, customers, App Store rankings, reviews and finance.",
   "author": {
     "name": "Process",
-    "email": "amine.ennasri.pro@gmail.com",
+    "email": "support@usemoneymaker.com",
     "url": "https://usemoneymaker.com"
   },
   "homepage": "https://usemoneymaker.com/mcp-docs",
@@ -92,7 +92,7 @@
         "commerce_description": "No purchases, checkout or payments in the plugin. It reads and configures the user's own MoneyMaker account."
       },
       "publication": {
-        "release_notes": "Initial submission: 68 tools (43 read-only, 20 write, 5 destructive requiring confirm=true), OAuth 2.1 with dynamic client registration and PKCE, read-only or read-write consent, revocation at /connect. Includes the moneymaker-data and moneymaker-setup skills.",
+        "release_notes": "Initial submission: 73 tools (44 read-only, 23 write, 6 destructive requiring confirm=true), OAuth 2.1 with dynamic client registration and PKCE, read-only or read-write consent, revocation at /connect. Includes the moneymaker-data and moneymaker-setup skills.",
         "translations": {
           "fr-FR": {
             "subtitle": "Les revenus de tes apps",

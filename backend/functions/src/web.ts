@@ -4,7 +4,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import Stripe from "stripe";
 import { HttpError, cleanId } from "./engine";
 import { db, getCredentials, mergeCustomers, touchCustomer, Project } from "./store";
-import { createCheckout, createPortal, storeSubscription } from "./stripe";
+import { createCheckout, createPortal, storeSubscription, SUB_EXPAND } from "./stripe";
 
 export interface WebConfig { enabled?: boolean; redemptionUrl?: string; successUrl?: string }
 
@@ -79,7 +79,8 @@ export function verifyManageToken(token: string, secret: string, now = Date.now(
 
 export async function manageLink(project: Project, appUserId: string, base: string) {
   const creds = await getCredentials(project.id);
-  return { url: `${base}/manage/${encodeURIComponent(project.id)}?token=${signManageToken(appUserId, creds.webhookSigningSecret)}` };
+  // Lien court (1 h) : il est généré à la demande par l'app, au moment où l'utilisateur veut gérer son abonnement.
+  return { url: `${base}/manage/${encodeURIComponent(project.id)}?token=${signManageToken(appUserId, creds.webhookSigningSecret, 3600000)}` };
 }
 
 export async function webPortal(project: Project, body: any, base: string) {
@@ -102,7 +103,7 @@ export async function webSuccess(project: Project, sessionId: string, base: stri
   const appUserId = cs.client_reference_id ?? "";
   if (!appUserId) throw new HttpError(409, "checkout_without_user");
   if (cs.subscription) {
-    const sub = await stripe.subscriptions.retrieve(typeof cs.subscription === "string" ? cs.subscription : cs.subscription.id);
+    const sub = await stripe.subscriptions.retrieve(typeof cs.subscription === "string" ? cs.subscription : cs.subscription.id, { expand: SUB_EXPAND });
     await storeSubscription(project, sub, stripe, { appUserId }).catch(e => console.error("web success sync", e));
   }
   const web = (project.config as any).web as WebConfig | undefined;

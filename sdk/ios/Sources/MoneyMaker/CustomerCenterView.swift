@@ -138,6 +138,8 @@ public struct MoneyMakerCustomerCenter: View {
         do {
             let info = try await mm.restorePurchases()
             message = info.activeEntitlements.isEmpty ? String(localized: "No purchases to restore.") : String(localized: "Purchases restored.")
+        } catch StoreKitError.userCancelled {
+            // The user dismissed the App Store sign-in: nothing to report.
         } catch { message = error.localizedDescription }
     }
 

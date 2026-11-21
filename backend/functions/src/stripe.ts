@@ -1,6 +1,6 @@
 import Stripe from "stripe";
-import { Purchase, PurchaseStatus, HttpError, readableProductId } from "./engine";
-import { Project, getCredentials, lookupIndex, upsertPurchase, db } from "./store";
+import { Purchase, PurchaseStatus, HttpError, readableProductId, minorToMicros } from "./engine";
+import { Project, getCredentials, lookupIndex, upsertPurchase, recordEvent, db } from "./store";
 import { toAlpha2 } from "./countries";
 
 const SUB_STATUS: Record<string, PurchaseStatus> = {
@@ -14,6 +14,25 @@ async function stripeFor(project: Project) {
   const creds = await getCredentials(project.id);
   if (!creds.stripe?.secretKey) throw new HttpError(400, "stripe_not_configured", "Upload a Stripe restricted/secret key");
   return { stripe: new Stripe(creds.stripe.secretKey), webhookSecret: creds.stripe.webhookSecret };
+}
+
+/** Montant mensuel facturé réellement : tous les articles, remises (pourcentage ou montant) déduites. Pure — unit-tested. */
+export function subscriptionAmountMinor(s: Stripe.Subscription): number {
+  let total = 0;
+  for (const it of s.items?.data ?? []) {
+    const unit = it.price?.unit_amount ?? (it.price?.unit_amount_decimal ? Number(it.price.unit_amount_decimal) : null);
+    if (unit !== null && unit !== undefined) total += unit * (it.quantity ?? 1);
+  }
+  const discounts = [...((s as any).discounts ?? []), ...((s as any).discount ? [(s as any).discount] : [])]
+    .filter(d => d && typeof d === "object");
+  for (const d of discounts) {
+    const c = d.coupon ?? d.source?.coupon;
+    if (!c || typeof c !== "object") continue;
+    if (c.duration === "once") continue; // une remise ponctuelle ne change pas le revenu récurrent
+    if (typeof c.percent_off === "number") total = total * (1 - c.percent_off / 100);
+    else if (typeof c.amount_off === "number") total = Math.max(0, total - c.amount_off);
+  }
+  return Math.round(total);
 }
 
 export function stripeSubscriptionPurchase(s: Stripe.Subscription, now = Date.now()): Purchase {
@@ -35,15 +54,19 @@ export function stripeSubscriptionPurchase(s: Stripe.Subscription, now = Date.no
     willRenew: !s.cancel_at_period_end && !s.cancel_at && status !== "expired",
     isTrial: s.status === "trialing",
     isSandbox: !s.livemode,
-    priceMicros: (price?.unit_amount ?? 0) * 10000 * (item?.quantity ?? 1),
+    priceMicros: minorToMicros(subscriptionAmountMinor(s), price?.currency ?? "eur"),
     currency: (price?.currency ?? "eur").toUpperCase(),
     periodMonths: months,
     billingIssue: status === "billing_retry",
     updatedAt: now,
     country: toAlpha2((s.customer as any)?.address?.country ?? s.metadata?.country),
     affiliate: isAffiliateSale(s.metadata),
+    productName: typeof price?.product === "object" && price.product && !("deleted" in price.product && price.product.deleted) ? (price.product as Stripe.Product).name : (price?.nickname ?? null),
   };
 }
+
+/** Développements utiles à la lecture d'un abonnement : remises (MRR exact) et produit (nom lisible). */
+export const SUB_EXPAND = ["discounts", "items.data.price.product"];
 
 /** Metadata keys apps commonly use to store their own user id on Stripe objects. */
 /** Métadonnées qui signalent une vente apportée par un affilié (Process : sk_ref ; Rewardful, Tolt, FirstPromoter…). */
@@ -82,7 +105,7 @@ export function stripeOneTimePurchase(ch: Stripe.Charge, now = Date.now(), produ
     id: String(ch.payment_intent ?? ch.id), store: "stripe",
     productId: String(ch.metadata?.product_id ?? productName ?? ch.description ?? "stripe_payment").slice(0, 200), type: "non_consumable",
     status: ch.refunded ? "refunded" : "active", purchasedAt: ch.created * 1000, latestPurchaseAt: ch.created * 1000,
-    expiresAt: null, willRenew: false, isTrial: false, isSandbox: !ch.livemode, priceMicros: Math.max(0, net) * 10000,
+    expiresAt: null, willRenew: false, isTrial: false, isSandbox: !ch.livemode, priceMicros: minorToMicros(Math.max(0, net), ch.currency),
     currency: ch.currency.toUpperCase(), periodMonths: 0, billingIssue: false, updatedAt: now,
     country: toAlpha2(ch.billing_details?.address?.country ?? (ch.payment_method_details as any)?.card?.country),
     affiliate: isAffiliateSale(ch.metadata, typeof ch.payment_intent === "object" ? (ch.payment_intent as any)?.metadata : null),
@@ -160,7 +183,7 @@ export async function ingestStripeWebhook(project: Project, rawBody: Buffer, sig
     case "customer.subscription.paused":
     case "customer.subscription.resumed": {
       // Always re-read the live object so out-of-order events can't regress state.
-      const sub = stripe ? await stripe.subscriptions.retrieve((event.data.object as Stripe.Subscription).id) : event.data.object as Stripe.Subscription;
+      const sub = stripe ? await stripe.subscriptions.retrieve((event.data.object as Stripe.Subscription).id, { expand: SUB_EXPAND }) : event.data.object as Stripe.Subscription;
       result = await storeSubscription(project, sub, stripe);
       break;
     }
@@ -168,7 +191,7 @@ export async function ingestStripeWebhook(project: Project, rawBody: Buffer, sig
     case "invoice.payment_failed": {
       const inv = event.data.object as any;
       const subId = invoiceSubscription(inv);
-      if (stripe && subId) result = await storeSubscription(project, await stripe.subscriptions.retrieve(String(subId)), stripe);
+      if (stripe && subId) result = await storeSubscription(project, await stripe.subscriptions.retrieve(String(subId), { expand: SUB_EXPAND }), stripe);
       break;
     }
     case "checkout.session.completed": {
@@ -182,12 +205,12 @@ export async function ingestStripeWebhook(project: Project, rawBody: Buffer, sig
         result = await upsertPurchase(project, appUserId, {
           id: String(s.payment_intent ?? s.id), store: "stripe", productId, type: "non_consumable", status: "active",
           purchasedAt: s.created * 1000, latestPurchaseAt: s.created * 1000, expiresAt: null, willRenew: false,
-          isTrial: false, isSandbox: !s.livemode, priceMicros: (s.amount_total ?? 0) * 10000,
+          isTrial: false, isSandbox: !s.livemode, priceMicros: minorToMicros(s.amount_total ?? 0, s.currency ?? "eur"),
           currency: (s.currency ?? "eur").toUpperCase(), periodMonths: 0, billingIssue: false, updatedAt: Date.now(),
           country: toAlpha2(s.customer_details?.address?.country), affiliate: isAffiliateSale(s.metadata),
         }, [`stripe:${s.payment_intent ?? s.id}`, ...(s.customer ? [`stripe_cus:${s.customer}`] : [])]);
       } else if (s.subscription && stripe) {
-        const sub = await stripe.subscriptions.retrieve(String(s.subscription));
+        const sub = await stripe.subscriptions.retrieve(String(s.subscription), { expand: SUB_EXPAND });
         if (appUserId && !sub.metadata?.app_user_id) await stripe.subscriptions.update(sub.id, { metadata: { ...sub.metadata, app_user_id: appUserId } });
         result = await storeSubscription(project, { ...sub, metadata: { ...sub.metadata, ...(appUserId ? { app_user_id: appUserId } : {}) } }, stripe);
       }
@@ -205,11 +228,41 @@ export async function ingestStripeWebhook(project: Project, rawBody: Buffer, sig
       const ch = event.data.object as Stripe.Charge;
       const key = String(ch.payment_intent ?? "");
       const owner = key ? await lookupIndex(project.id, `stripe:${key}`) : null;
-      if (owner && ch.refunded) {
-        const ref = db.doc(`projects/${project.id}/customers/${owner}/purchases/${key}`);
-        const prev = (await ref.get()).data() as Purchase | undefined;
-        if (prev) result = await upsertPurchase(project, owner, { ...prev, status: "refunded", updatedAt: Date.now() });
+      const ref = owner ? db.doc(`projects/${project.id}/customers/${owner}/purchases/${key}`) : null;
+      const prev = ref ? (await ref.get()).data() as Purchase | undefined : undefined;
+      if (prev && ch.refunded && prev.type !== "subscription") {
+        // Achat unique remboursé en entier : l'achat passe en « remboursé » (événement REFUND + transaction négative).
+        result = await upsertPurchase(project, owner!, { ...prev, status: "refunded", updatedAt: Date.now() });
+        break;
       }
+      // Remboursement partiel, ou facture d'abonnement remboursée : l'abonnement garde son état,
+      // mais le remboursement est notifié et retiré du revenu.
+      const before = Number((event.data as any).previous_attributes?.amount_refunded ?? 0);
+      const delta = Math.max(0, (ch.amount_refunded ?? 0) - before);
+      if (!delta) break;
+      const subId = invoiceSubscription((ch as any).invoice && typeof (ch as any).invoice === "object" ? (ch as any).invoice : null)
+        ?? (typeof (ch as any).invoice === "string" && stripe ? invoiceSubscription(await stripe.invoices.retrieve((ch as any).invoice).catch(() => null)) : null);
+      const who = owner ?? (subId ? await lookupIndex(project.id, `stripe:${subId}`) : null)
+        ?? (ch.customer ? await lookupIndex(project.id, `stripe_cus:${ch.customer}`) : null) ?? `$stripe:${ch.customer ?? ch.id}`;
+      const sub = subId ? (await db.doc(`projects/${project.id}/customers/${who}/purchases/${subId}`).get()).data() as Purchase | undefined : undefined;
+      const base = sub ?? prev ?? { id: subId ?? key ?? ch.id, productId: String(ch.metadata?.product_id ?? ch.description ?? "stripe_payment"), store: "stripe" as const };
+      result = await recordEvent(project, who, { ...base, currency: ch.currency.toUpperCase(), isSandbox: !ch.livemode }, "REFUND", {
+        refundMicros: minorToMicros(delta, ch.currency), key: `stripe:${ch.id}:${ch.amount_refunded}`,
+      }) as any;
+      break;
+    }
+    case "charge.dispute.created": {
+      // Litige (rétrofacturation) : l'équivalent d'une demande de remboursement.
+      const dp = event.data.object as Stripe.Dispute;
+      const chId = typeof dp.charge === "string" ? dp.charge : dp.charge?.id;
+      const ch = stripe && chId ? await stripe.charges.retrieve(chId).catch(() => null) : null;
+      const key = String(ch?.payment_intent ?? "");
+      const who = (key ? await lookupIndex(project.id, `stripe:${key}`) : null)
+        ?? (ch?.customer ? await lookupIndex(project.id, `stripe_cus:${ch.customer}`) : null) ?? `$stripe:${ch?.customer ?? chId}`;
+      result = await recordEvent(project, who, {
+        id: key || chId || dp.id, productId: String(ch?.metadata?.product_id ?? ch?.description ?? "stripe_payment"), store: "stripe",
+        currency: dp.currency.toUpperCase(), priceMicros: minorToMicros(dp.amount, dp.currency), isSandbox: !dp.livemode,
+      }, "REFUND_REQUESTED", { reason: `dispute:${dp.reason}`, key: `stripe:dispute:${dp.id}` }) as any;
       break;
     }
   }
@@ -227,7 +280,7 @@ export async function ingestStripeFetchToken(project: Project, appUserId: string
     subId = typeof cs.subscription === "string" ? cs.subscription : cs.subscription?.id ?? "";
   }
   if (!subId.startsWith("sub_")) throw new HttpError(400, "invalid_fetch_token", "Stripe fetch_token must be sub_… or cs_…");
-  const sub = await stripe.subscriptions.retrieve(subId);
+  const sub = await stripe.subscriptions.retrieve(subId, { expand: SUB_EXPAND });
   await storeSubscription(project, sub, stripe, { appUserId });
 }
 
@@ -240,7 +293,12 @@ export async function createCheckout(project: Project, appUserId: string, body: 
     if (typeof u !== "string" || !/^https:\/\/|^[a-z][a-z0-9+.-]*:\/\//i.test(u)) throw new HttpError(400, "invalid_redirect_url");
     return u;
   };
-  const meta = { app_user_id: appUserId, product_id: String(body?.productId ?? price.lookup_key ?? price.id) };
+  if (!price.active) throw new HttpError(400, "price_inactive");
+  // Le produit débloqué est déduit du prix côté serveur : un client (clé publique) ne doit pas pouvoir
+  // payer le prix le moins cher en déclarant un produit plus cher.
+  const allowed = [price.lookup_key, price.id].filter(Boolean) as string[];
+  const productId = typeof body?.productId === "string" && allowed.includes(body.productId) ? body.productId : (price.lookup_key ?? price.id);
+  const meta = { app_user_id: appUserId, product_id: productId };
   const session = await stripe.checkout.sessions.create({
     mode: price.recurring ? "subscription" : "payment",
     line_items: [{ price: priceId, quantity: 1 }],
@@ -262,12 +320,16 @@ async function promoDiscount(stripe: Stripe, code: unknown): Promise<Partial<Str
   return { discounts: [{ promotion_code: found.id }] };
 }
 
+/** Identifiants devinables (e-mail, client Stripe…) : jamais de portail ouvert avec une simple clé publique. */
+export const guessableCustomerId = (id: string) => id.startsWith("$") && !/^\$(anon:|RCAnonymousID:)/.test(id) || /@/.test(id);
+
 export async function createPortal(project: Project, appUserId: string, returnUrl: string) {
+  if (returnUrl && !/^https:\/\/|^[a-z][a-z0-9+.-]*:\/\//i.test(returnUrl)) throw new HttpError(400, "invalid_return_url");
   const { stripe } = await stripeFor(project);
   const customerId = (await db.collection(`projects/${project.id}/customers/${appUserId}/purchases`).where("store", "==", "stripe").limit(1).get())
     .docs[0]?.id;
   if (!customerId) throw new HttpError(404, "no_stripe_customer");
-  const sub = customerId.startsWith("sub_") ? await stripe.subscriptions.retrieve(customerId) : null;
+  const sub = customerId.startsWith("sub_") ? await stripe.subscriptions.retrieve(customerId, { expand: SUB_EXPAND }) : null;
   if (!sub) throw new HttpError(404, "no_stripe_subscription");
   const portal = await stripe.billingPortal.sessions.create({ customer: String(sub.customer), return_url: returnUrl });
   return { url: portal.url };

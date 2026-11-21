@@ -1,7 +1,16 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8">
 <script src="/i18n.js"></script><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MoneyMaker dans Claude</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<title>MoneyMaker dans Claude</title>
+<link rel="canonical" href="https://usemoneymaker.com/mcp-docs">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="MoneyMaker">
+<meta property="og:url" content="https://usemoneymaker.com/mcp-docs">
+<meta property="og:title" content="MoneyMaker dans Claude">
+<meta property="og:description" content="Connecte MoneyMaker à Claude : revenus, abonnés, clients, classements et finance de tes apps dans ton assistant.">
+<meta property="og:image" content="https://usemoneymaker.com/icon-512.png">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/icon-180.png">
 <meta name="theme-color" content="#000000">
 <meta name="description" content="Connecte MoneyMaker à Claude : revenus, abonnés, clients, classements et finance de tes apps dans ton assistant.">
@@ -25,8 +34,9 @@
 <h2>Sécurité</h2>
 <ul>
 <li>L'assistant agit avec <b>tes</b> droits sur chaque business (owner, admin, developer, viewer) et chaque modification apparaît dans le journal d'audit.</li>
-<li>Les clés des stores (Stripe, App Store Connect, Google Play, PostHog) ne sont jamais lues ni modifiées par l'assistant.</li>
-<li>Les suppressions (membre, invitation, dépense, app suivie, PostHog, retrait d'accès) demandent ta confirmation explicite.</li>
+<li>Les outils de connexion envoient tes clés (Stripe, App Store Connect, Google Play, PostHog, autres stores) au serveur, qui les enregistre : elles ne sont jamais relues, renvoyées ni affichées dans la conversation.</li>
+<li>Une connexion en lecture seule ne voit aucun outil de modification.</li>
+<li>Les suppressions (business, membre, invitation, dépense, app suivie, PostHog, retrait d'accès) ne font rien sans ta confirmation explicite.</li>
 <li>Accès valable 90 jours, révocable à tout moment sur <a href="/connect">/connect</a>.</li>
 </ul>
 
@@ -38,8 +48,10 @@
 <p><b>Finance</b> : <code>get_finance</code> (TVA, commissions, net, versements), <code>get_finance_plan</code>, <code>get_accounting_export</code>, <code>list_expenses</code>.</p>
 <p><b>App Store</b> : <code>list_tracked_apps</code>, <code>get_app_rankings</code>, <code>get_app_ratings</code>, <code>list_app_reviews</code>, <code>translate_review</code>, <code>search_app_store</code>.</p>
 <p><b>PostHog</b> : <code>get_posthog</code>, <code>list_posthog_events</code>.</p>
-<p><b>Configuration et équipe</b> : <code>get_project</code> (produits, entitlements, webhooks, connecteurs Stripe / App Store / Google Play / RevenueCat / Paddle / AppsFlyer / Amazon / Roku), <code>get_setup_checklist</code>, <code>get_offerings</code>, <code>get_public_listing</code>, <code>get_leaderboard</code>, <code>list_members</code>, <code>get_audit_log</code>.</p>
-<p><b>Modifications</b> (avec ton accord) : <code>create_project</code>, <code>update_project</code>, <code>update_offerings</code>, <code>set_alert_preferences</code>, <code>add_tracked_app</code>, <code>refresh_app_store</code>, <code>grant_entitlement</code>, <code>send_test_webhook</code>, <code>update_public_listing</code>, <code>update_finance_settings</code>, <code>upsert_expense</code>, <code>invite_member</code>, <code>update_member_role</code>.</p>
+<p><b>Configuration et équipe</b> : <code>get_project</code> (produits, entitlements, webhooks, connecteurs Stripe / App Store / Google Play / RevenueCat / Paddle / AppsFlyer / Amazon / Roku), <code>get_setup_checklist</code>, <code>get_offerings</code>, <code>get_public_listing</code>, <code>get_leaderboard</code>, <code>list_members</code>, <code>get_audit_log</code>, <code>get_pro_status</code>.</p>
+<p><b>Modifications</b> (avec ton accord) : <code>create_project</code>, <code>update_project</code>, <code>refresh_icon</code>, <code>set_icon</code>, <code>update_offerings</code>, <code>set_alert_preferences</code>, <code>add_tracked_app</code>, <code>refresh_app_store</code>, <code>grant_entitlement</code>, <code>redeem_code</code>, <code>send_test_webhook</code>, <code>update_public_listing</code>, <code>update_finance_settings</code>, <code>upsert_expense</code>, <code>invite_member</code>, <code>update_member_role</code>.</p>
 <p><b>Connexions</b> (installation guidée : demande à Claude « configure MoneyMaker ») : <code>connect_app_store</code>, <code>connect_google_play</code>, <code>connect_stripe</code>, <code>import_revenuecat</code>, <code>get_import_status</code>, <code>connect_posthog</code>, <code>set_store_credentials</code>, <code>send_test_push</code>. Les clés vont directement au serveur et ne sont jamais réaffichées.</p>
-<p><b>Suppressions</b> (confirmation explicite) : <code>remove_tracked_app</code>, <code>delete_expense</code>, <code>remove_member</code>, <code>revoke_invite</code>, <code>disconnect_posthog</code>.</p>
+<p><b>Suppressions</b> (confirmation explicite) : <code>delete_project</code>, <code>remove_tracked_app</code>, <code>delete_expense</code>, <code>remove_member</code>, <code>revoke_invite</code>, <code>disconnect_posthog</code>.</p>
+<p><code>delete_project</code> supprime définitivement un business (propriétaire seulement) : métriques, clients, réglages, clés d'API et logo. Irréversible : sans <code>confirm=true</code>, l'outil ne fait rien et demande ton accord.</p>
+<p>73 outils au total (44 en lecture, 29 en modification).</p>
 </main></body></html>

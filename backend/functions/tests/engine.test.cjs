@@ -94,7 +94,9 @@ test("window summary: revenue split, refunds, countries, MRR movement", () => {
   const w = summarizeWindow(txs, evs, "EUR");
   assert.equal(w.revenueMicros, 80e6); assert.equal(w.refundsMicros, 60e6); assert.equal(w.netRevenueMicros, 20e6);
   assert.equal(w.newRevenueMicros, 70e6); assert.equal(w.renewalRevenueMicros, 10e6);
-  assert.equal(w.payingCustomers, 2); assert.equal(w.revenueByCountry.FR, 20e6); assert.equal(w.revenueByCountry.US, 0);
+  assert.equal(w.payingCustomers, 2); assert.equal(w.revenueByCountry.FR, 20e6); assert.equal(w.revenueByCountry.US, 60e6); // ventes brutes par pays
+  assert.ok(Object.values(w.revenueByDay).every(v => v >= 0)); assert.equal(Object.values(w.refundsByDay).reduce((a, b) => a + b, 0), 60e6);
+  assert.equal(w.paidExpirations, 1);
   assert.equal(w.mrrMovement.newMicros, 10e6); assert.equal(w.mrrMovement.churnedMicros, 5e6);
   assert.deepEqual(w.trialsByProduct.m, { started: 1, converted: 0 });
 });
@@ -203,4 +205,46 @@ test("RevenueCat-compatible subscriber + events", () => {
   const trial = toRevenueCatEvent({ type: "TRIAL_STARTED", appUserId: "u1", productId: "p", at: now, isTrial: true, priceMicros: 0 }, "e2", []);
   assert.equal(trial.type, "INITIAL_PURCHASE"); assert.equal(trial.period_type, "TRIAL");
   assert.equal(toRevenueCatEvent({ type: "GRANT", appUserId: "u1", at: now }, "e3", []), null);
+});
+
+test("currencies: zero-decimal and three-decimal minor units, wider FX table", () => {
+  const { minorToMicros, convertMicros } = require("../lib/engine");
+  assert.equal(minorToMicros(500, "jpy"), 500e6); assert.equal(minorToMicros(999, "EUR"), 9.99e6); assert.equal(minorToMicros(1500, "KWD"), 1.5e6);
+  assert.ok(convertMicros(1000e6, "TWD", "EUR") > 0); assert.ok(convertMicros(100e6, "PHP", "EUR") > 0);
+});
+
+test("diffEvents: refund reversed, no reactivation right after purchase", () => {
+  const { diffEvents } = require("../lib/engine");
+  const base = { id: "t", store: "app_store", productId: "m", type: "subscription", status: "active", purchasedAt: 0, latestPurchaseAt: 1000, expiresAt: Date.now() + 86400000, willRenew: false, isTrial: false, isSandbox: false, priceMicros: 9.99e6, currency: "EUR", periodMonths: 1, billingIssue: false, updatedAt: 2000 };
+  assert.deepEqual(diffEvents({ ...base, status: "refunded" }, { ...base, updatedAt: 3000 }), ["REFUND_REVERSED"]);
+  assert.deepEqual(diffEvents(base, { ...base, willRenew: true, updatedAt: 1000 + 60000 }), []);
+  assert.deepEqual(diffEvents(base, { ...base, willRenew: true, updatedAt: 1000 + 3600000 }), ["UNCANCELLATION"]);
+});
+
+test("stripe: MRR with several items and discounts", () => {
+  const { subscriptionAmountMinor } = require("../lib/stripe");
+  const sub = { items: { data: [{ price: { unit_amount: 1000 }, quantity: 2 }, { price: { unit_amount: 500 }, quantity: 1 }] }, discounts: [{ coupon: { percent_off: 20, duration: "forever" } }] };
+  assert.equal(subscriptionAmountMinor(sub), 2000);
+  assert.equal(subscriptionAmountMinor({ ...sub, discounts: [{ coupon: { amount_off: 300, duration: "repeating" } }] }), 2200);
+  assert.equal(subscriptionAmountMinor({ ...sub, discounts: [{ coupon: { percent_off: 50, duration: "once" } }] }), 2500);
+});
+
+test("downloads: analytics report keeps first-time downloads by day and territory", () => {
+  const { parseAnalyticsDownloads } = require("../lib/downloads");
+  const tsv = ["Date\tApp Name\tApp Apple Identifier\tDownload Type\tTerritory\tCounts",
+    "2026-11-19\tV2\t6807027760\tFirst-time download\tFR\t12", "2026-11-19\tV2\t6807027760\tRedownload\tFR\t5",
+    "2026-11-19\tV2\t6807027760\tFirst-time download\tUS\t3", "2026-11-20\tV2\t6807027760\tAuto-update\tFR\t40",
+    "2026-11-20\tV2\t6807027760\tFirst-time download\tBE\t2", "2026-11-20\tOther\t1\tFirst-time download\tFR\t99"].join("\n");
+  const d = parseAnalyticsDownloads(tsv, 6807027760);
+  assert.deepEqual(d["2026-11-19"], { units: 15, byCountry: { FR: 12, US: 3 } });
+  assert.deepEqual(d["2026-11-20"], { units: 2, byCountry: { BE: 2 } });
+});
+
+test("net: private and metadata addresses are refused", async () => {
+  const { isPrivateAddress, isPublicUrl } = require("../lib/net");
+  for (const ip of ["127.0.0.1", "10.1.2.3", "169.254.169.254", "192.168.1.1", "172.20.0.1", "::1", "fd00::1", "::ffff:10.0.0.1"]) assert.equal(isPrivateAddress(ip), true, ip);
+  assert.equal(isPrivateAddress("8.8.8.8"), false);
+  assert.equal(await isPublicUrl("http://169.254.169.254/computeMetadata/v1/"), false);
+  assert.equal(await isPublicUrl("http://metadata.google.internal/"), false);
+  assert.equal(await isPublicUrl("file:///etc/passwd"), false);
 });

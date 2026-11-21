@@ -17,9 +17,12 @@ export function summarizeWindow(txs: Tx[], events: Ev[], currency: string, campa
   const revenueByDay: Record<string, number> = {}, revenueByCountry: Record<string, number> = {};
   const revenueByStore: Record<string, number> = {}, revenueByProduct: Record<string, number> = {};
   const revenueByCampaign: Record<string, number> = {}; // Apple Search Ads campaign id, "organic" otherwise
+  const refundsByDay: Record<string, number> = {};
   for (const t of txs) {
     if (t.isSandbox) continue;
     const v = t.amountMicrosProject;
+    // Les remboursements sont comptés à part : un jour ou un pays n'affiche jamais un revenu négatif.
+    if (v < 0) { refunds += -v; refundsByDay[dayKey(t.at)] = (refundsByDay[dayKey(t.at)] ?? 0) - v; continue; }
     revenueByDay[dayKey(t.at)] = (revenueByDay[dayKey(t.at)] ?? 0) + v;
     const cc = t.country ?? "??";
     revenueByCountry[cc] = (revenueByCountry[cc] ?? 0) + v;
@@ -27,14 +30,13 @@ export function summarizeWindow(txs: Tx[], events: Ev[], currency: string, campa
     revenueByProduct[t.productId] = (revenueByProduct[t.productId] ?? 0) + v;
     const camp = campaignOf[t.appUserId] ?? "organic";
     revenueByCampaign[camp] = (revenueByCampaign[camp] ?? 0) + v;
-    if (v < 0) { refunds += -v; continue; }
     revenue += v;
     payers.add(t.appUserId);
     if (t.kind === "renewal") renewalRevenue += v; else newRevenue += v;
   }
   const counts: Record<string, number> = {};
   const trialsByProduct: Record<string, { started: number; converted: number }> = {};
-  let newMrr = 0, churnedMrr = 0;
+  let newMrr = 0, churnedMrr = 0, paidExpirations = 0;
   const monthly = (e: Ev) => e.periodMonths ? convertMicros(e.priceMicros ?? 0, e.currency ?? currency, currency) / e.periodMonths : 0;
   for (const e of events) {
     if (e.isSandbox) continue;
@@ -45,14 +47,15 @@ export function summarizeWindow(txs: Tx[], events: Ev[], currency: string, campa
     }
     if (e.type === "INITIAL_PURCHASE" || e.type === "TRIAL_CONVERTED" || e.type === "UNCANCELLATION") newMrr += monthly(e);
     if ((e.type === "EXPIRATION" || e.type === "REFUND" || e.type === "REVOKED") && !e.isTrial) churnedMrr += monthly(e);
+    if (e.type === "EXPIRATION" && !e.isTrial) paidExpirations++;
   }
   return {
     revenueMicros: revenue, refundsMicros: refunds, netRevenueMicros: revenue - refunds,
     newRevenueMicros: newRevenue, renewalRevenueMicros: renewalRevenue,
     payingCustomers: payers.size, arppuMicros: payers.size ? Math.round(revenue / payers.size) : 0,
     refundRate: ratio(refunds, revenue),
-    revenueByDay, revenueByCountry, revenueByStore, revenueByProduct, revenueByCampaign,
-    eventCounts: counts, trialsByProduct,
+    revenueByDay, refundsByDay, revenueByCountry, revenueByStore, revenueByProduct, revenueByCampaign,
+    eventCounts: counts, trialsByProduct, paidExpirations,
     mrrMovement: { newMicros: Math.round(newMrr), churnedMicros: Math.round(churnedMrr), netMicros: Math.round(newMrr - churnedMrr) },
   };
 }
@@ -101,7 +104,8 @@ export async function projectMetrics(project: Project, days = 30, sinceAt?: numb
   const prev = summarizeWindow(txs.filter(t => t.at < since), evs.filter(e => e.at < since), project.config.currency, campaignOf);
 
   const started = cur.eventCounts.TRIAL_STARTED ?? 0, converted = cur.eventCounts.TRIAL_CONVERTED ?? 0;
-  const churned = cur.eventCounts.EXPIRATION ?? 0;
+  // Un essai gratuit qui se termine sans paiement n'est pas un abonné perdu : seules les expirations payantes comptent.
+  const churned = cur.paidExpirations ?? cur.eventCounts.EXPIRATION ?? 0;
   const base = current.activeSubscriptions + churned;
   const churnRate = ratio(churned, base);
   const monthlyChurn = churnRate === null ? null : 1 - Math.pow(1 - churnRate, 30 / days);
@@ -130,7 +134,7 @@ export async function projectMetrics(project: Project, days = 30, sinceAt?: numb
     },
     /** Revenu publicitaire (ads.ts, devise du projet) et revenu « pub incluse ». */
     adRevenueMicros: ads.revenueMicros, adImpressions: ads.impressions,
-    revenueInclAdsMicros: cur.netRevenueMicros + ads.revenueMicros,
+    revenueInclAdsMicros: cur.revenueMicros + ads.revenueMicros, // ventes brutes + pub (remboursements à part)
     downloads: dl.available ? dl.total : null,
     downloadsByDay: dl.byDay,
     downloadsByCountry: dl.byCountry,

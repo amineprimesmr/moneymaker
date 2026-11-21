@@ -149,10 +149,10 @@ export function sliderTrack(fraction, small = false) {
   const g = `linear-gradient(90deg,transparent,rgba(86,56,199,.75) ${p(Math.min(.12, f))},var(--violet) ${p(f)},rgba(86,56,199,.55) ${p(Math.min(1, f + .12))},transparent ${p(Math.min(1, f + .3))})`;
   return `<div class="track ${small ? "sm" : ""}"><i style="background:${g}"></i><b style="left:${p(f)}"></b></div>`;
 }
-export function wideTile({ icon, title, value, chart, anchor = "topTrailing", seed = 0, href, i = 0, attrs = "" }) {
+export function wideTile({ icon, title, value, sub = "", chart, anchor = "topTrailing", seed = 0, href, i = 0, attrs = "" }) {
   const tag = href ? "button" : "div";
   return `<${tag} class="tile anim-in plain-tile ${href ? "" : "static"}" ${href ? `data-href="${esc(href)}"` : ""} style="--i:${i}" ${attrs}>${dotsCanvas(anchor, seed)}
-    <div class="tile-wide"><div class="l">${tileHead(icon, title)}<div class="v">${esc(value)}</div></div><div class="r">${chart}</div></div></${tag}>`;
+    <div class="tile-wide"><div class="l">${tileHead(icon, title)}<div class="v">${esc(value)}</div>${sub ? `<div class="tw-sub">${esc(sub)}</div>` : ""}</div><div class="r">${chart}</div></div></${tag}>`;
 }
 
 // ── Grille de points (MetricDots) : même algorithme que l'app ───────────────────────────
@@ -312,20 +312,31 @@ export function ringSvg(frac, color = "var(--accent)", size = 42, lw = 5) {
 
 // ── Badges des ventes (MMBadge.swift) ───────────────────────────────────────────────────
 const C = { purple: "184,140,255", blue: "115,148,255", green: "51,217,128", teal: "77,204,217", orange: "255,158,64", red: "255,97,97", grey: "255,255,255" };
+// Libellés en français (traduits par i18n-en.js), affichés en capitales par le CSS (.tbadge).
+// [libellé, couleur, gratuit ?] — un type inconnu s'affiche en clair, en gris, sans casser.
+const EVENT_BADGES = {
+  NON_RENEWING_PURCHASE: ["Achat unique", "purple", 1], TRIAL_STARTED: ["Essai", "teal", 1], TRIAL_CONVERTED: ["Conversion", "green"], RENEWAL: ["Renouvellement", "green", 1],
+  UNCANCELLATION: ["Réactivé", "green"], BILLING_RECOVERED: ["Paiement rétabli", "green"], PRODUCT_CHANGE: ["Changement d'offre", "blue"], CANCELLATION: ["Annulé", "orange"],
+  BILLING_ISSUE: ["Problème de paiement", "orange"], PAUSED: ["En pause", "grey"], EXPIRATION: ["Expiré", "grey"], REFUND: ["Remboursement", "red"], REVOKED: ["Remboursement", "red"],
+  REFUND_REQUESTED: ["Remboursement demandé", "orange"], REFUND_DECLINED: ["Remboursement refusé", "blue"], REFUND_REVERSED: ["Remboursement annulé", "green"], GRANT: ["Promo", "purple", 1],
+};
 export function eventBadge(e) {
-  const m = {
-    NON_RENEWING_PURCHASE: ["ONE TIME", "purple", 1], TRIAL_STARTED: ["TRIAL", "teal", 1], TRIAL_CONVERTED: ["CONVERSION", "green"], RENEWAL: ["RENEWAL", "green", 1],
-    UNCANCELLATION: ["REACTIVATED", "green"], BILLING_RECOVERED: ["RECOVERED", "green"], PRODUCT_CHANGE: ["PLAN CHANGE", "blue"], CANCELLATION: ["CANCELLED", "orange"],
-    BILLING_ISSUE: ["BILLING ISSUE", "orange"], PAUSED: ["PAUSED", "grey"], EXPIRATION: ["EXPIRED", "grey"], REFUND: ["REFUND", "red"], REVOKED: ["REFUND", "red"], GRANT: ["PROMO", "purple", 1],
-  };
-  if (e.type === "INITIAL_PURCHASE") return e.isTrial ? { label: "TRIAL", color: C.teal, free: true } : { label: "NEW SUB", color: C.blue, free: true };
-  const [label, color, free] = m[e.type] ?? [String(e.type ?? "").replace(/_/g, " "), "grey"];
+  if (e.type === "INITIAL_PURCHASE") return e.isTrial ? { label: "Essai", color: C.teal, free: true } : { label: "Nouvel abonné", color: C.blue, free: true };
+  if (e.type === "CANCELLATION" && e.isTrial) return { label: "Essai annulé", color: C.orange, free: false, grey: false };
+  const raw = String(e.type ?? "").replace(/_/g, " ").toLowerCase();
+  const [label, color, free] = EVENT_BADGES[e.type] ?? [raw ? raw[0].toUpperCase() + raw.slice(1) : "—", "grey"];
   return { label, color: C[color], free: Boolean(free), grey: color === "grey" };
 }
+/** Nom lisible du produit d'un événement : productName (envoyé par le serveur) avant l'identifiant technique. */
+export const productLabel = e => e?.productName || e?.productId || null;
+/** Remboursement effectif (montant à déduire). */
+export const isRefundEvent = e => e.type === "REFUND" || e.type === "REVOKED";
 export const tbadge = (b, on = .16) => `<span class="tbadge" style="color:rgba(${b.color},${b.grey ? .6 : 1});background:rgba(${b.color},${b.grey ? .1 : on})">${esc(b.label)}</span>`;
 const STORE_LABEL = { app_store: "App Store", play_store: "Google Play", stripe: "Stripe", promotional: "Promo", web: "Web", mac_app_store: "Mac App Store", amazon: "Amazon" };
 export const storeLabel = s => s ? STORE_LABEL[s] ?? String(s).replace(/_/g, " ") : null;
-export const isRevenueEvent = e => (e.priceMicros ?? 0) > 0 && !["TRIAL_STARTED", "CANCELLATION", "EXPIRATION", "BILLING_ISSUE", "PAUSED", "REFUND", "REVOKED", "PRODUCT_CHANGE"].includes(e.type);
+// Même liste que REVENUE_EVENTS côté serveur (store.ts) : seules ces ventes comptent comme du revenu.
+const REVENUE_TYPES = ["INITIAL_PURCHASE", "RENEWAL", "TRIAL_CONVERTED", "NON_RENEWING_PURCHASE"];
+export const isRevenueEvent = e => (e.priceMicros ?? 0) > 0 && REVENUE_TYPES.includes(e.type) && !(e.type === "INITIAL_PURCHASE" && e.isTrial);
 
 // ── Divers ──────────────────────────────────────────────────────────────────────────────
 export const stars = v => { const n = Math.round(v); return `<span class="stars">${[1, 2, 3, 4, 5].map(i => `<span style="opacity:${i <= n ? 1 : .25}">${ic("star", 11)}</span>`).join("")}</span>`; };

@@ -30,19 +30,56 @@ struct Today: Codable, Hashable {
     let renewals: Int
     let trials: Int
     let newSubscribers: Int
-    /// Revenu net cumulé par heure locale (24 valeurs, micros).
+    /// Revenu cumulé par heure locale (24 valeurs, micros). Jamais négatif une fois décodé :
+    /// un remboursement en début de journée ne fait pas plonger la courbe sous zéro.
     let hourly: [Int]
     let last: Last?
     let generatedAt: Double?
 
     var netMicros: Int { revenueMicros - refundsMicros }
+    /// Chiffre affiché en titre : ventes brutes du jour, jamais négatives (les remboursements
+    /// s'affichent à part, sur une ligne discrète).
+    var grossMicros: Int { max(0, revenueMicros) }
+    /// « −12 € remboursé », seulement s'il y a eu des remboursements aujourd'hui.
+    var refundNote: String? {
+        refundsNote(refundsMicros, currency)
+    }
     var transactions: Int { sales + renewals }
+    /// Données d'aujourd'hui (un cache d'hier ne doit pas passer pour la journée en cours).
+    var isForToday: Bool { Calendar.current.isDateInToday(Date(timeIntervalSince1970: dayStart / 1000)) }
 
+    /// Journée sans donnée : zéro honnête, jamais de faux chiffres hors des aperçus de la galerie.
+    static func empty(currency: String? = nil) -> Today {
+        Today(currency: currency ?? MoneyMakerClient.displayCurrency ?? "EUR", tz: TimeZone.current.identifier,
+              dayStart: Calendar.current.startOfDay(for: Date()).timeIntervalSince1970 * 1000, revenueMicros: 0, refundsMicros: 0,
+              sales: 0, renewals: 0, trials: 0, newSubscribers: 0, hourly: Array(repeating: 0, count: 24), last: nil, generatedAt: nil)
+    }
+
+    /// Faux chiffres réservés aux aperçus de la galerie de widgets (`context.isPreview`).
     static let placeholder = Today(currency: "EUR", tz: "Europe/Paris", dayStart: Date().timeIntervalSince1970 * 1000, revenueMicros: 1_284_000_000,
         refundsMicros: 0, sales: 38, renewals: 21, trials: 14, newSubscribers: 31,
         hourly: [0, 0, 9, 9, 18, 18, 40, 88, 130, 190, 260, 340, 420, 470, 560, 640, 720, 790, 880, 960, 1040, 1150, 1230, 1284].map { $0 * 1_000_000 },
         last: Last(projectName: String(localized: "Mon app"), amountMicros: 59_990_000, currency: "EUR", productId: "annual", country: "FR", at: Date().timeIntervalSince1970 * 1000),
         generatedAt: nil)
+}
+
+extension Today {
+    /// Décodage tolérant : courbe horaire bornée à zéro, champs facultatifs absents acceptés.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        currency = try c.decode(String.self, forKey: .currency)
+        tz = try c.decodeIfPresent(String.self, forKey: .tz) ?? TimeZone.current.identifier
+        dayStart = try c.decode(Double.self, forKey: .dayStart)
+        revenueMicros = try c.decodeIfPresent(Int.self, forKey: .revenueMicros) ?? 0
+        refundsMicros = try c.decodeIfPresent(Int.self, forKey: .refundsMicros) ?? 0
+        sales = try c.decodeIfPresent(Int.self, forKey: .sales) ?? 0
+        renewals = try c.decodeIfPresent(Int.self, forKey: .renewals) ?? 0
+        trials = try c.decodeIfPresent(Int.self, forKey: .trials) ?? 0
+        newSubscribers = try c.decodeIfPresent(Int.self, forKey: .newSubscribers) ?? 0
+        hourly = (try c.decodeIfPresent([Int].self, forKey: .hourly) ?? []).map { max(0, $0) }
+        last = try c.decodeIfPresent(Last.self, forKey: .last)
+        generatedAt = try c.decodeIfPresent(Double.self, forKey: .generatedAt)
+    }
 }
 
 struct FeedEvent: Codable, Identifiable, Hashable {
@@ -65,14 +102,42 @@ struct FeedEvent: Codable, Identifiable, Hashable {
     var expiresAt: Double? = nil
     var displayMicros: Int? = nil
     var displayCurrency: String? = nil
+    /// Nom lisible du produit (ex. nom du produit Stripe), envoyé par le serveur quand il le connaît.
+    var productName: String? = nil
 
     var date: Date { Date(timeIntervalSince1970: at / 1000) }
     var isRevenue: Bool { ["INITIAL_PURCHASE", "NON_RENEWING_PURCHASE", "TRIAL_CONVERTED", "RENEWAL"].contains(type) && isTrial != true && (priceMicros ?? 0) > 0 }
-    var title: String {
-        ["INITIAL_PURCHASE": String(localized: "Nouvel abonné"), "RENEWAL": String(localized: "Renouvellement"), "TRIAL_STARTED": String(localized: "Essai démarré"), "TRIAL_CONVERTED": String(localized: "Essai converti"),
-         "CANCELLATION": String(localized: "Annulation"), "UNCANCELLATION": String(localized: "Réactivation"), "EXPIRATION": String(localized: "Expiration"), "BILLING_ISSUE": String(localized: "Problème de paiement"),
-         "BILLING_RECOVERED": String(localized: "Paiement récupéré"), "REFUND": String(localized: "Remboursement"), "PRODUCT_CHANGE": String(localized: "Changement d'offre"),
-         "NON_RENEWING_PURCHASE": String(localized: "Achat"), "GRANT": String(localized: "Accès offert"), "REVOKED": String(localized: "Révoqué"), "PAUSED": String(localized: "En pause")][type] ?? type
+    /// Produit à afficher : son nom lisible s'il existe, sinon son identifiant.
+    var productLabel: String? { productName.flatMap { $0.isEmpty ? nil : $0 } ?? productId }
+    var title: String { Self.label(type, isTrial: isTrial) }
+    /// Mauvaise nouvelle (remboursement, échec de paiement, résiliation) : affichée en rouge.
+    var isNegative: Bool { Self.negativeTypes.contains(type) }
+    static let negativeTypes: Set<String> = ["REFUND", "REVOKED", "REFUND_REQUESTED", "BILLING_ISSUE", "CANCELLATION", "EXPIRATION"]
+
+    /// Libellé d'un type d'événement, dans la langue de l'app. Un type inconnu reste lisible.
+    static func label(_ type: String, isTrial: Bool? = nil) -> String {
+        switch type {
+        case "INITIAL_PURCHASE": return String(localized: "Nouvel abonné")
+        case "RENEWAL": return String(localized: "Renouvellement")
+        case "TRIAL_STARTED": return String(localized: "Essai démarré")
+        case "TRIAL_CONVERTED": return String(localized: "Essai converti")
+        case "CANCELLATION": return isTrial == true ? String(localized: "Essai annulé") : String(localized: "Annulation")
+        case "UNCANCELLATION": return String(localized: "Réabonné")
+        case "EXPIRATION": return String(localized: "Expiration")
+        case "BILLING_ISSUE": return String(localized: "Problème de paiement")
+        case "BILLING_RECOVERED": return String(localized: "Paiement récupéré")
+        case "REFUND": return String(localized: "Remboursement")
+        case "REFUND_REQUESTED": return String(localized: "Demande de remboursement")
+        case "REFUND_DECLINED": return String(localized: "Remboursement refusé")
+        case "REFUND_REVERSED": return String(localized: "Remboursement annulé")
+        case "PRODUCT_CHANGE": return String(localized: "Changement d'offre")
+        case "NON_RENEWING_PURCHASE": return String(localized: "Achat")
+        case "GRANT": return String(localized: "Accès offert")
+        case "REVOKED": return String(localized: "Révoqué")
+        case "PAUSED": return String(localized: "En pause")
+        case "TEST": return String(localized: "Test")
+        default: return type.replacingOccurrences(of: "_", with: " ").capitalized
+        }
     }
     var symbol: String {
         switch type {
@@ -80,7 +145,13 @@ struct FeedEvent: Codable, Identifiable, Hashable {
         case "RENEWAL", "BILLING_RECOVERED", "UNCANCELLATION": return "arrow.clockwise"
         case "TRIAL_STARTED": return "sparkles"
         case "REFUND", "REVOKED": return "arrow.uturn.backward"
+        case "REFUND_REQUESTED": return "exclamationmark.bubble"
+        case "REFUND_DECLINED", "REFUND_REVERSED": return "checkmark.shield"
         case "BILLING_ISSUE": return "exclamationmark.triangle"
+        case "CANCELLATION": return "xmark.circle"
+        case "EXPIRATION": return "clock.badge.xmark"
+        case "PRODUCT_CHANGE": return "arrow.left.arrow.right"
+        case "PAUSED": return "pause.circle"
         default: return "circle"
         }
     }
@@ -95,6 +166,7 @@ struct FeedEvent: Codable, Identifiable, Hashable {
         return (type == "REFUND" ? -m : m).money(c)
     }
 
+    /// Faux événements réservés aux aperçus de la galerie de widgets (`context.isPreview`).
     static let samples: [FeedEvent] = [
         .init(id: "1", projectId: "p", projectName: String(localized: "Mon app"), type: "INITIAL_PURCHASE", productId: "annual", priceMicros: 59_990_000, currency: "EUR", country: "FR", store: "app_store", isSandbox: false, isTrial: false, periodMonths: 12, at: Date().timeIntervalSince1970 * 1000 - 60_000),
         .init(id: "2", projectId: "p", projectName: String(localized: "Mon app"), type: "RENEWAL", productId: "monthly", priceMicros: 9_990_000, currency: "USD", country: "US", store: "app_store", isSandbox: false, isTrial: false, periodMonths: 1, at: Date().timeIntervalSince1970 * 1000 - 600_000),
@@ -104,12 +176,14 @@ struct FeedEvent: Codable, Identifiable, Hashable {
 }
 
 struct PushPrefs: Codable, Hashable {
-    var sales = true, renewals = true, trials = true, churn = false, billing = true, refunds = true, rankings = true
+    var sales = true, renewals = true, trials = true, churn = true, billing = true, refunds = true, rankings = true
     var insights = true
     var dailySummary = true, sandbox = false, sound = true, liveActivityAuto = true
     /// Son des ventes : cash | levelup | none (default : ancien réglage « son système »).
     var saleSound = "cash" { didSet { sound = saleSound != "none" } }
     var mutedProjects: [String] = []
+    /// 2 : « Résiliations et expirations » a son propre réglage, activé par défaut.
+    var version = 2
 
     init() {}
 
@@ -133,6 +207,11 @@ struct PushPrefs: Codable, Hashable {
         // Pièce, Carillon et Pop ont été retirés : ceux qui les avaient choisis passent au cha-ching.
         saleSound = ["coin", "chime", "pop"].contains(stored) ? "cash" : stored
         mutedProjects = try c.decodeIfPresent([String].self, forKey: .mutedProjects) ?? d.mutedProjects
+        // Avant la version 2, les résiliations étaient éteintes par défaut et partageaient l'interrupteur
+        // des paiements : sans refus explicite (paiements et remboursements actifs), on les active.
+        let storedVersion = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        if storedVersion < 2, !churn, billing, refunds { churn = true }
+        version = 2
     }
 
     private static let defaults = PushPrefs()
@@ -166,6 +245,21 @@ enum MMShared {
 
     static var cachedFeed: [FeedEvent] {
         MM.read("feed").flatMap { try? JSONDecoder().decode([FeedEvent].self, from: $0) } ?? []
+    }
+
+    /// Le jour en cache s'il date bien d'aujourd'hui, sinon une journée à zéro.
+    static var todayOrEmpty: Today {
+        cachedToday.flatMap { $0.isForToday ? $0 : nil } ?? .empty()
+    }
+
+    /// Déconnexion ou sortie de la démo : plus rien de l'ancien compte dans le trousseau partagé
+    /// avec les widgets (jeton, chiffres, flux, alertes, historique, objectifs, business suivi).
+    /// L'identifiant de l'appareil, la devise et les réglages des notifications restent.
+    static func clearAccountData() {
+        for key in ["pat", "overview", "today", "feed", "alerts", "history365", "liveExtras", "widgetProject", "mrrGoal", "dailyGoal", "liveRunning"] {
+            MM.write(key, nil)
+        }
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     static var apnsEnvironment: String {
@@ -202,14 +296,14 @@ extension MoneyMakerClient {
     func today(projectIds: [String]? = nil) async throws -> Today {
         let tz = TimeZone.current.identifier.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "UTC"
         let t: Today = try await get("today?tz=\(tz)" + (MoneyMakerClient.displayCurrency.map { "&currency=\($0)" } ?? "") + (projectIds.map { "&projectIds=\($0.joined(separator: ","))" } ?? ""))
-        if projectIds == nil, let data = try? JSONEncoder().encode(t) { MM.write("today", data) }
+        if projectIds == nil, ownsSharedCache, let data = try? JSONEncoder().encode(t) { MM.write("today", data) }
         return t
     }
 
     func feed(limit: Int = 30, projectIds: [String]? = nil) async throws -> [FeedEvent] {
         struct R: Decodable { let events: [FeedEvent] }
         let r: R = try await get("feed?limit=\(limit)" + (MoneyMakerClient.displayCurrency.map { "&currency=\($0)" } ?? "") + (projectIds.map { "&projectIds=\($0.joined(separator: ","))" } ?? ""))
-        if projectIds == nil, let data = try? JSONEncoder().encode(Array(r.events.prefix(20))) { MM.write("feed", data) }
+        if projectIds == nil, ownsSharedCache, let data = try? JSONEncoder().encode(Array(r.events.prefix(20))) { MM.write("feed", data) }
         return r.events
     }
 
@@ -264,7 +358,8 @@ struct RevenueActivityAttributes: ActivityAttributes {
         var lastSaleAt: Int? = nil
 
         init(today t: Today) {
-            revenueMicros = t.netMicros; currency = t.currency; sales = t.transactions; trials = t.trials
+            // Ventes brutes du jour, comme le serveur (jamais un total négatif sur l'écran verrouillé).
+            revenueMicros = t.grossMicros; currency = t.currency; sales = t.transactions; trials = t.trials
             lastProject = t.last?.projectName; lastAmountMicros = t.last?.amountMicros ?? 0; lastCurrency = t.last?.currency ?? t.currency; lastCountry = t.last?.country
             lastSaleAt = t.last.map { Int($0.at / 1000) }
             hourly = t.hourly.map { Double($0) / 1e6 }; updatedAt = Int(Date().timeIntervalSince1970)

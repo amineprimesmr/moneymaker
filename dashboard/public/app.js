@@ -1,10 +1,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword,
-  createUserWithEmailAndPassword, signOut, connectAuthEmulator,
+  createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, connectAuthEmulator,
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import { tabGrowth } from "./growth.js";
-import { ic, money as kitMoney, glowChart, hydrate, ringSvg, deltaBadge, halfOverHalf, projectIcon, storeBadges } from "./kit.js";
+import { ic, money as kitMoney, glowChart, hydrate, ringSvg, deltaBadge, halfOverHalf, projectIcon, storeBadges, eventBadge, tbadge, productLabel } from "./kit.js";
 import { initScreens, leave, renderTabbar, renderSide, closeMenu, toggleMenu, allProjects, ensureStore, invalidateStore, desktop, renderHome, renderMetric, renderFeed, renderTx, renderCustomer, renderApps, renderAppDetail, renderBoard, renderPlanet } from "./screens.js";
 
 const $ = s => document.querySelector(s);
@@ -12,6 +12,9 @@ const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 const local = ["localhost", "127.0.0.1"].includes(location.hostname);
 const config = await fetch("/__/firebase/init.json").then(r => r.json()).catch(() => ({ apiKey: "demo", projectId: "demo-moneymaker", authDomain: "localhost" }));
 const auth = getAuth(initializeApp(config));
+auth.languageCode = MM_LANG; // e-mails Firebase (réinitialisation du mot de passe) dans la langue du site
+/** Adresse de support unique du site (même valeur dans terms, privacy, support, legal). */
+const SUPPORT_EMAIL = "support@usemoneymaker.com";
 if (local) connectAuthEmulator(auth, "http://127.0.0.1:9199", { disableWarnings: true });
 
 // Mesure d'audience du site : sans cookie ni stockage, désactivée en local.
@@ -42,14 +45,61 @@ const date = t => t ? new Date(t).toLocaleString(MM_LOCALE, { dateStyle: "short"
 function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.append(t); setTimeout(() => t.remove(), 2600); }
 async function copy(text) { await navigator.clipboard.writeText(text); toast("Copié"); }
 window.mmCopy = copy;
+/** URL à jeton : masquée pour un lecteur (l'API renvoie null aux membres « viewer »). */
+const secretRow = value => value ? copyRow(value, true) : `<p class="muted"><i>Réservé aux développeurs et admins</i></p>`;
 const copyRow = (value, secret = false) =>
   `<div class="copy"><code>${esc(secret ? value.slice(0, 12) + "•••••••" : value)}</code><button type="button" class="small" onclick='mmCopy(${esc(JSON.stringify(value))})'>Copier</button></div>`;
 
 // ── Auth ────────────────────────────────────────────────────────────────
-$("#google").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e => $("#loginError").textContent = e.message);
-const loginFail = e => { $("#loginError").textContent = e.message; document.querySelectorAll(".wl-field").forEach(f => { f.classList.remove("is-shake"); void f.offsetWidth; f.classList.add("is-shake"); }); };
-$("#emailForm").onsubmit = e => { e.preventDefault(); signInWithEmailAndPassword(auth, $("#email").value, $("#password").value).catch(loginFail); };
-$("#signup").onclick = () => createUserWithEmailAndPassword(auth, $("#email").value, $("#password").value).catch(loginFail);
+// Erreurs Firebase en clair (même table que app-login.html et connect.html), traduites par i18n-en.js.
+const AUTH_ERRORS = {
+  "auth/invalid-credential": "E-mail ou mot de passe incorrect.", "auth/wrong-password": "E-mail ou mot de passe incorrect.", "auth/user-not-found": "E-mail ou mot de passe incorrect.",
+  "auth/invalid-login-credentials": "E-mail ou mot de passe incorrect.", "auth/email-already-in-use": "Un compte existe déjà avec cet e-mail : connecte-toi.",
+  "auth/weak-password": "Mot de passe trop court (8 caractères minimum).", "auth/invalid-email": "Adresse e-mail invalide.", "auth/missing-password": "Entre ton mot de passe.",
+  "auth/too-many-requests": "Trop d'essais, réessaie dans un instant.", "auth/network-request-failed": "Connexion impossible. Vérifie ton réseau et réessaie.",
+  "auth/user-disabled": "Ce compte est désactivé. Écris-nous pour le réactiver.", "auth/popup-closed-by-user": "Fenêtre de connexion fermée.",
+  "auth/cancelled-popup-request": "Fenêtre de connexion fermée.", "auth/popup-blocked": "Le navigateur a bloqué la fenêtre de connexion : autorise les fenêtres pour ce site.",
+};
+const authMessage = e => AUTH_ERRORS[e?.code] ?? "Connexion impossible, réessaie.";
+const showLoginError = (msg, shake = true) => {
+  $("#loginError").textContent = msg;
+  if (shake) document.querySelectorAll(".wl-field").forEach(f => { f.classList.remove("is-shake"); void f.offsetWidth; f.classList.add("is-shake"); });
+};
+const loginFail = e => showLoginError(authMessage(e));
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+// Deux modes pour le même formulaire : connexion (current-password) et création de compte (new-password, 8 caractères minimum).
+let signupMode = false;
+function setSignupMode(on) {
+  signupMode = on;
+  $("#password").setAttribute("autocomplete", on ? "new-password" : "current-password");
+  $("#emailSubmit").textContent = on ? "Créer mon compte" : "Connexion";
+  $("#signup").textContent = on ? "J'ai déjà un compte" : "Créer un compte";
+  $("#forgot").classList.toggle("hidden", on);
+  $("#loginError").textContent = "";
+}
+$("#google").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e => { if (e?.code !== "auth/popup-closed-by-user" && e?.code !== "auth/cancelled-popup-request") loginFail(e); });
+$("#emailForm").onsubmit = e => {
+  e.preventDefault();
+  const email = $("#email").value.trim(), password = $("#password").value;
+  if (!EMAIL_RE.test(email)) return showLoginError("Adresse e-mail invalide.");
+  if (signupMode && password.length < 8) return showLoginError("Mot de passe trop court (8 caractères minimum).");
+  if (!password) return showLoginError("Entre ton mot de passe.");
+  (signupMode ? createUserWithEmailAndPassword : signInWithEmailAndPassword)(auth, email, password).catch(loginFail);
+};
+$("#signup").onclick = () => { setSignupMode(!signupMode); $(signupMode && $("#email").value ? "#password" : "#email").focus(); };
+$("#forgot").onclick = async () => {
+  const email = $("#email").value.trim();
+  if (!EMAIL_RE.test(email)) { showLoginError("Entre ton e-mail ci-dessus, puis touche « Mot de passe oublié ? »."); $("#email").focus(); return; }
+  $("#forgot").disabled = true;
+  try {
+    await sendPasswordResetEmail(auth, email);
+    showLoginError("Si un compte existe pour cette adresse, un e-mail pour choisir un nouveau mot de passe vient de partir. Pense à regarder les spams.", false);
+  } catch (e) {
+    // Ne dit pas si l'adresse a un compte : même message qu'en cas de succès.
+    if (e?.code === "auth/user-not-found") showLoginError("Si un compte existe pour cette adresse, un e-mail pour choisir un nouveau mot de passe vient de partir. Pense à regarder les spams.", false);
+    else loginFail(e);
+  } finally { $("#forgot").disabled = false; }
+};
 
 onAuthStateChanged(auth, async user => {
   $("#login").classList.toggle("hidden", Boolean(user));
@@ -156,6 +206,13 @@ function bindDays() { document.querySelectorAll("[data-days]").forEach(b => b.on
 
 // ── Project ─────────────────────────────────────────────────────────────
 const TABS = { start: "Démarrage", metrics: "Métriques", map: "Carte", cohorts: "Cohortes", charts: "Graphiques", appstore: "App Store", reviews: "Avis", alerts: "Alertes", customers: "Clients", events: "Événements", products: "Produits & accès", growth: "Paywalls & tests", connect: "Connexions", settings: "Réglages" };
+/** Ordinateur : les onglets utiles en barre, le reste rangé dans « Plus ». */
+const MAIN_TABS = ["metrics", "charts", "customers", "appstore", "connect", "settings"];
+function deskTabs() {
+  const more = Object.keys(TABS).filter(k => !MAIN_TABS.includes(k)), inMore = more.includes(state.tab);
+  return `<div class="bz-tabs">${MAIN_TABS.map(k => `<button class="${state.tab === k ? "on" : ""}" data-tab="${k}">${TABS[k]}</button>`).join("")}
+    <label class="bz-more ${inMore ? "on" : ""}"><select id="bzMore" aria-label="Plus d'onglets"><option value="">${inMore ? TABS[state.tab] : "Plus"}</option>${more.filter(k => k !== state.tab).map(k => `<option value="${k}">${TABS[k]}</option>`).join("")}</select>${ic("down", 11)}</label></div>`;
+}
 async function renderProject(main) {
   const p = state.projects.find(x => x.id === state.projectId);
   if (!TABS[state.tab]) state.tab = "metrics";
@@ -166,9 +223,10 @@ async function renderProject(main) {
   const admin = ["settings", "connect", "start"].includes(state.tab);
   main.innerHTML = `<div class="page wide"><div class="dt-top"><button class="back glass" id="bzBack" aria-label="Retour">${ic("left", 19)}</button>${["metrics", "map"].includes(state.tab) ? daysPicker() : ""}</div>
     <div class="bz-head">${projectIcon(o, 56)}<div style="min-width:0"><h1 class="page-title"><bdi>${esc(p?.name)}</bdi></h1><div class="sb">${storeBadges(o.stores, 14)}</div>${admin ? `<div class="muted mono" style="font-size:12px;margin-top:4px">${esc(state.projectId)}</div>` : ""}</div></div>
-    <div class="chips">${Object.entries(TABS).map(([k, v]) => `<button class="${state.tab === k ? "on" : ""}" data-tab="${k}">${v}</button>`).join("")}</div><div id="tab" style="display:flex;flex-direction:column;gap:12px"></div></div>`;
+    ${desktop() ? deskTabs() : `<div class="chips">${Object.entries(TABS).map(([k, v]) => `<button class="${state.tab === k ? "on" : ""}" data-tab="${k}">${v}</button>`).join("")}</div>`}<div id="tab" style="display:flex;flex-direction:column;gap:12px"></div></div>`;
   $("#bzBack").onclick = back;
   document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => go({ tab: b.dataset.tab }));
+  $("#bzMore")?.addEventListener("change", e => { if (e.target.value) go({ tab: e.target.value }); });
   if (!desktop()) main.querySelector(".chips .on")?.scrollIntoView({ block: "nearest", inline: "center" });
   bindDays();
   await ({ start: tabStart, metrics: tabMetrics, map: tabMap, cohorts: tabCohorts, charts: tabCharts, appstore: tabAppStore, reviews: tabReviews, alerts: tabAlerts, customers: tabCustomers, events: tabEvents, products: tabProducts, growth: el => tabGrowth(el, { api, esc, toast, money, pct, date, projectId: state.projectId, reload: loadProjects }), connect: tabConnect, settings: tabSettings }[state.tab] ?? tabMetrics)($("#tab"));
@@ -208,7 +266,7 @@ async function tabMetrics(el) {
     <div class="bz-side"><div class="rates"><div class="rate">${ringSvg(conv)}<div><div class="lb2">Conversion essais</div><div class="v2">${pct(m.trialConversionRate)}</div></div></div><div class="rate">${ringSvg(churn, churn > .1 ? "var(--red)" : "var(--orange)")}<div><div class="lb2">Churn mensuel</div><div class="v2">${pct(m.monthlyChurnRate)}</div></div></div></div>
     ${m.billingIssues > 0 ? `<div class="card glow-orange"><div style="display:flex;align-items:center;gap:12px"><span style="color:var(--orange)">${ic("warning", 22)}</span><div><b style="font-weight:500">${m.billingIssues} problème${m.billingIssues > 1 ? "s" : ""} de paiement</b><div class="page-sub" style="font-size:13px">En période de grâce ou nouvelle tentative en cours.</div></div></div></div>` : ""}</div></div>
     <div class="kpis">
-    ${kpi(`Revenu ${state.days} j`, money(m.netRevenueMicros, c) + delta(m.netRevenueMicros, pv.netRevenueMicros), m.refundsMicros ? `remboursé ${money(m.refundsMicros, c)} (${pct(m.refundRate)})` : "aucun remboursement")}
+    ${kpi(`Revenu ${state.days} j`, money(m.revenueMicros ?? m.netRevenueMicros, c) + delta(m.revenueMicros ?? m.netRevenueMicros, pv.revenueMicros ?? pv.netRevenueMicros), m.refundsMicros ? `−${money(m.refundsMicros, c)} remboursé (${pct(m.refundRate)}) · net ${money(m.netRevenueMicros, c)}` : "aucun remboursement")}
     ${kpi("Abonnés actifs", m.activeSubscriptions, `${m.willNotRenew} ne renouvelleront pas`)}
     ${kpi("Essais", m.activeTrials, `conversion ${pct(m.trialConversionRate)}`)}
     ${kpi("Nouveaux abonnés", m.newSubscriptions + delta(m.newSubscriptions, pv.newSubscriptions), `${m.trialsStarted} essais démarrés`)}
@@ -391,7 +449,7 @@ async function tabReviews(el) {
   $("#rRating").onchange = e => { state.reviewRating = e.target.value; tabReviews(el); };
   el.querySelectorAll("[data-tr]").forEach(b => b.onclick = async () => {
     const t = await api(`/v1/projects/${state.projectId}/appstore/${state.reviewApp}/reviews/${b.dataset.tr}/translate`, { method: "POST", body: { target: MM_LANG } });
-    const card = b.closest(".review"); card.querySelector("b").lastChild.textContent = " " + t.title; card.querySelector(".rtext").textContent = t.content; b.disabled = true; b.textContent = `Traduit (${t.from ?? "?"} → fr)`;
+    const card = b.closest(".review"); card.querySelector("b").lastChild.textContent = " " + t.title; card.querySelector(".rtext").textContent = t.content; b.disabled = true; b.textContent = `Traduit (${t.from ?? "?"} → ${MM_LANG})`;
   });
   el.querySelectorAll("[data-sr]").forEach(b => b.onclick = () => reviewCard(app, reviews.find(r => r.id === b.dataset.sr), b.closest(".review")));
 }
@@ -474,7 +532,7 @@ Replace any existing RevenueCat/StoreKit logic, call MoneyMaker.configure at lau
     <div class="card"><h2>Google Play ${ok(p.credentials.google)}</h2><p class="muted">Compte de service avec accès « Finances » dans Play Console. MoneyMaker vérifie l'accès et importe les abonnements.</p>
       <input id="gPkg" placeholder="com.example.app" value="${esc(p.config.google?.packageName ?? "")}"><textarea id="gSa2" style="min-height:70px;margin-top:8px" placeholder='{"type":"service_account",…}'></textarea>
       <button class="primary" id="cGoogle" style="margin-top:8px">Connecter</button><div id="gOut"></div>
-      <p class="muted" style="margin-top:10px">Notifications en temps réel : crée un abonnement Pub/Sub <b>push</b> vers :</p>${copyRow(p.endpoints.googleRtdn, true)}</div>
+      <p class="muted" style="margin-top:10px">Notifications en temps réel : crée un abonnement Pub/Sub <b>push</b> vers :</p>${secretRow(p.endpoints.googleRtdn)}</div>
     <div class="card"><h2>Migrer depuis RevenueCat</h2><p class="muted">Importe les abonnements et achats en cours de tous tes clients. Clé secrète RevenueCat (Project settings → API keys). Avec une clé v2, tout est listé automatiquement ; avec une ancienne clé v1, colle la liste de tes ids utilisateurs (un par ligne).</p>
       <input id="rcKey" placeholder="sk_…" autocomplete="off"><textarea id="rcIds" style="min-height:60px;margin-top:8px" placeholder="ids utilisateurs (seulement pour une clé v1)"></textarea>
       <button class="primary" id="rcImport" style="margin-top:8px">Importer</button><div id="rcOut"></div></div>
@@ -484,7 +542,7 @@ Replace any existing RevenueCat/StoreKit logic, call MoneyMaker.configure at lau
       <label class="row" style="gap:8px;margin:8px 0"><input type="checkbox" id="pdSandbox" style="width:auto;flex:0"> Environnement sandbox</label>
       <button class="primary" id="cPaddle">Enregistrer</button><div id="pdOut"></div></div>
     <div class="card"><h2>Amazon Appstore ${ok(p.credentials.amazon)}</h2><p class="muted">Clé partagée (Developer Console → Shared Key) : MoneyMaker vérifie chaque reçu auprès du Receipt Verification Service. Notifications en temps réel : App Services → Real-Time Notifications → ajoute l'URL ci-dessous, puis colle dans la console le jeton de confirmation qui s'affiche ici à réception.</p>
-      ${copyRow(p.endpoints.amazonNotifications ?? "", true)}${p.amazonConfirmationToken ? `<p class="muted" style="margin-top:8px">Jeton de confirmation :</p>${copyRow(p.amazonConfirmationToken)}` : ""}
+      ${secretRow(p.endpoints.amazonNotifications)}${p.amazonConfirmationToken ? `<p class="muted" style="margin-top:8px">Jeton de confirmation :</p>${copyRow(p.amazonConfirmationToken)}` : ""}
       <input id="amzSecret" placeholder="Clé partagée" autocomplete="off" style="margin-top:8px"><input id="amzPkg" placeholder="com.example.app (optionnel)" style="margin-top:8px">
       <label class="row" style="gap:8px;margin:8px 0"><input type="checkbox" id="amzSandbox" style="width:auto;flex:0"> Accepter le sandbox (App Tester)</label>
       <button class="primary" id="cAmazon">Enregistrer</button><div id="amzOut"></div></div>
@@ -492,7 +550,7 @@ Replace any existing RevenueCat/StoreKit logic, call MoneyMaker.configure at lau
       <input id="gsSa" placeholder="Service account ID" autocomplete="off"><input id="gsPkg" placeholder="com.example.app" style="margin-top:8px"><textarea id="gsKey" style="min-height:60px;margin-top:8px" placeholder="-----BEGIN PRIVATE KEY-----"></textarea>
       <button class="primary" id="cGalaxy" style="margin-top:8px">Enregistrer</button><div id="gsOut"></div></div>
     <div class="card"><h2>Roku Pay ${ok(p.credentials.roku)}</h2><p class="muted">Developer Dashboard → Roku Pay web services → clé API. Colle l'URL ci-dessous comme endpoint des notifications push.</p>
-      ${copyRow(p.endpoints.rokuNotifications ?? "", true)}
+      ${secretRow(p.endpoints.rokuNotifications)}
       <input id="rkKey" placeholder="Clé API web services" autocomplete="off" style="margin-top:8px">
       <button class="primary" id="cRoku" style="margin-top:8px">Enregistrer</button><div id="rkOut"></div></div>
     <div class="card"><h2>Tes backends ${ok(p.config.webhooks.length)}</h2><p class="muted">Webhooks signés <code>MoneyMaker-Signature</code> pour chaque événement d'abonnement et chaque alerte de classement (<code>RANKING_*</code>). URLs dans Réglages. Secret de signature :</p>${copyRow(p.webhookSigningSecret, true)}</div>
@@ -519,7 +577,7 @@ Replace any existing RevenueCat/StoreKit logic, call MoneyMaker.configure at lau
     <div class="row">${["transactions", "events", "customers", "subscriptions"].map(d => `<label class="row" style="gap:6px;flex:0;white-space:nowrap"><input type="checkbox" data-exds="${d}" checked style="width:auto"> ${d}</label>`).join("")}</div>
     <div class="row"><input id="exBucket" placeholder="bucket (S3 / GCS)"><input id="exRegion" placeholder="région S3 (eu-west-3)"><input id="exPrefix" placeholder="préfixe (optionnel)"></div>
     <div class="row"><input id="exAk" placeholder="S3 Access key ID" autocomplete="off"><input id="exSk" placeholder="S3 Secret access key" autocomplete="off"></div>
-    <input id="exUrl" placeholder="URL webhook https://… (signée MoneyMaker-Signature)"><input id="exTo" placeholder="e-mail destinataire">
+    <input id="exUrl" placeholder="URL webhook https://… (signée MoneyMaker-Signature)">
     <textarea id="exSa" style="min-height:60px" placeholder='GCS : compte de service {"type":"service_account",…}'></textarea>
     <button class="primary" id="exAdd">Ajouter l'export</button></div>`;
   const out = (id, html) => $(id).innerHTML = `<div class="notice">${html}</div>`;
@@ -609,7 +667,6 @@ Replace any existing RevenueCat/StoreKit logic, call MoneyMaker.configure at lau
     if (dest === "s3") x.s3 = { bucket: v("#exBucket"), region: v("#exRegion"), prefix: v("#exPrefix") };
     if (dest === "gcs") x.gcs = { bucket: v("#exBucket"), prefix: v("#exPrefix") };
     if (dest === "webhook") x.webhook = { url: v("#exUrl") };
-    if (dest === "email") x.email = { to: v("#exTo") };
     const secrets = {};
     if (dest === "s3" && v("#exAk")) secrets.s3 = { accessKeyId: v("#exAk"), secretAccessKey: v("#exSk") };
     if (dest === "gcs" && v("#exSa")) secrets.gcs = { serviceAccount: v("#exSa") };
@@ -641,6 +698,8 @@ const MM_CONNECTORS = [
   ["telemetrydeck", "TelemetryDeck", [["appId", "App ID", "XXXXXXXX-…"], ["namespace", "Namespace (optionnel)", "com.monapp"]]],
 ];
 
+/** Devise de reporting du business ouvert : totalSpentMicros est stocké dans cette devise. */
+const projectCurrency = () => state.projects.find(x => x.id === state.projectId)?.config?.currency ?? "EUR";
 const statusPill = s => `<span class="pill ${["active"].includes(s) ? "ok" : ["grace", "billing_retry", "paused"].includes(s) ? "warn" : "bad"}">${esc(s)}</span>`;
 async function tabCustomers(el) {
   el.innerHTML = `<div id="audBox" class="card section"></div><div class="row section"><input id="cid" placeholder="Rechercher un appUserId exact…"><button class="primary" style="flex:0" id="find">Ouvrir</button>
@@ -651,7 +710,7 @@ async function tabCustomers(el) {
   const load = async () => {
     const { customers } = await api(`/v1/projects/${state.projectId}/customers?limit=100${$("#paying").checked ? "&paying=true" : ""}`);
     $("#list").innerHTML = customers.length ? `<table><thead><tr><th>Client</th><th>Accès</th><th>Payant</th><th>Dépensé</th><th>Vu</th></tr></thead><tbody>${customers.map(c =>
-      `<tr class="click" data-c="${esc(c.id)}"><td class="mono">${esc(c.id)}</td><td>${(c.activeEntitlements ?? []).map(e => `<span class="pill ok">${esc(e)}</span>`).join(" ") || "—"}</td><td>${c.isPaying ? "✓" : ""}</td><td>${c.totalSpentMicros ? money(c.totalSpentMicros) : "—"}</td><td>${date(c.lastSeenAt)}</td></tr>`).join("")}</tbody></table>`
+      `<tr class="click" data-c="${esc(c.id)}"><td class="mono">${esc(c.id)}</td><td>${(c.activeEntitlements ?? []).map(e => `<span class="pill ok">${esc(e)}</span>`).join(" ") || "—"}</td><td>${c.isPaying ? "✓" : ""}</td><td>${c.totalSpentMicros ? money(c.totalSpentMicros, projectCurrency()) : "—"}</td><td>${date(c.lastSeenAt)}</td></tr>`).join("")}</tbody></table>`
       : `<div class="empty">Aucun client pour l'instant. Ils apparaissent dès que le SDK est branché.</div>`;
     document.querySelectorAll("[data-c]").forEach(r => r.onclick = () => customerDialog(r.dataset.c));
   };
@@ -702,7 +761,7 @@ async function audiencesSection(box) {
   $("#audPrev").onclick = async () => {
     const r = await api(`/v1/projects/${pid}/audiences/preview`, { method: "POST", body: { filters: read() } });
     $("#audOut").innerHTML = `<p><b>${r.count}</b> clients${r.truncated ? " (sur les 20 000 plus récents)" : ""}.</p>${r.customers.length ? `<table><thead><tr><th>Client</th><th>Statut</th><th>Pays</th><th>Dépensé</th><th>Produits</th></tr></thead><tbody>${r.customers.map(c =>
-      `<tr class="click" data-c="${esc(c.id)}"><td class="mono">${esc(c.id)}</td><td>${esc(AUD_STATUS[c.status] ?? c.status)}</td><td>${flag(c.country)} ${esc(c.country ?? "")}</td><td>${c.totalSpentMicros ? money(c.totalSpentMicros) : "—"}</td><td class="mono">${esc(c.products.join(", "))}</td></tr>`).join("")}</tbody></table>` : ""}`;
+      `<tr class="click" data-c="${esc(c.id)}"><td class="mono">${esc(c.id)}</td><td>${esc(AUD_STATUS[c.status] ?? c.status)}</td><td>${flag(c.country)} ${esc(c.country ?? "")}</td><td>${c.totalSpentMicros ? money(c.totalSpentMicros, projectCurrency()) : "—"}</td><td class="mono">${esc(c.products.join(", "))}</td></tr>`).join("")}</tbody></table>` : ""}`;
     box.querySelectorAll("[data-c]").forEach(r => r.onclick = () => customerDialog(r.dataset.c));
   };
   $("#audSave").onclick = async () => {
@@ -730,7 +789,7 @@ async function customerDialog(id) {
     <h3>Accès</h3><p>${Object.values(c.entitlements).map(e => `<span class="pill ${e.active ? "ok" : "bad"}">${esc(e.id)} ${e.active ? "actif" : "inactif"}</span> <span class="muted">jusqu'au ${e.expiresAt ? date(e.expiresAt) : "à vie"}</span>`).join("<br>") || "Aucun"}</p>
     <h3>Achats</h3><table>${c.purchases.map(x => `<tr><td>${esc(x.store)}</td><td class="mono">${esc(x.productId)}</td><td>${statusPill(x.status)}${x.isSandbox ? ' <span class="pill">sandbox</span>' : ""}</td><td>${x.expiresAt ? date(x.expiresAt) : "à vie"}</td></tr>`).join("") || `<tr><td class="muted">Aucun</td></tr>`}</table>
     ${c.appleAds?.attribution ? `<h3 style="margin-top:14px">Apple Search Ads</h3><p class="mono">campagne ${esc(c.appleAds.campaignId)} · groupe ${esc(c.appleAds.adGroupId)} · mot-clé ${esc(c.appleAds.keywordId ?? "—")} · ${esc(c.appleAds.countryOrRegion ?? "")}</p>` : ""}
-    <h3 style="margin-top:14px">Historique</h3><table>${c.events.slice(0, 30).map(e => `<tr><td>${esc(e.type)}</td><td class="mono">${esc(e.productId)}</td><td>${date(e.at)}</td></tr>`).join("") || `<tr><td class="muted">—</td></tr>`}</table>
+    <h3 style="margin-top:14px">Historique</h3><table>${c.events.slice(0, 30).map(e => `<tr><td>${tbadge(eventBadge(e))}${e.isSandbox ? ' <span class="pill">sandbox</span>' : ""}</td><td><bdi>${esc(productLabel(e) ?? "")}</bdi></td><td>${date(e.at)}</td></tr>`).join("") || `<tr><td class="muted">—</td></tr>`}</table>
     ${ents.length ? `<h3 style="margin-top:14px">Offrir un accès</h3><div class="row"><select id="gEnt">${ents.map(e => `<option>${esc(e)}</option>`).join("")}</select><input id="gDays" type="number" placeholder="jours (vide = à vie, 0 = retirer)"><button type="button" class="primary" id="grant">Appliquer</button></div>` : ""}
     <div class="row" style="margin-top:16px"><button>Fermer</button></div>`);
   if (ents.length) $("#grant").onclick = async () => {
@@ -743,7 +802,7 @@ async function customerDialog(id) {
 async function tabEvents(el) {
   const { events } = await api(`/v1/projects/${state.projectId}/events?limit=200`);
   el.innerHTML = `<div class="card">${events.length ? `<table><thead><tr><th>Événement</th><th>Client</th><th>Produit</th><th>Store</th><th>Montant</th><th>Date</th><th>Webhook</th></tr></thead><tbody>${events.map(e =>
-    `<tr><td><b>${esc(e.type)}</b>${e.isSandbox ? ' <span class="pill">sandbox</span>' : ""}</td><td class="mono click" data-c="${esc(e.appUserId)}">${esc(e.appUserId)}</td><td class="mono">${esc(e.productId)}</td><td>${esc(e.store)}</td><td>${e.priceMicros ? money(e.priceMicros, e.currency) : ""}</td><td>${date(e.at)}</td><td>${e.delivered ? "✓" : e.deliveryErrors?.length ? `<span class="pill bad" title="${esc(e.deliveryErrors.join(", "))}">échec</span>` : "…"}</td></tr>`).join("")}</tbody></table>`
+    `<tr><td>${tbadge(eventBadge(e))}${e.isSandbox ? ' <span class="pill">sandbox</span>' : ""}</td><td class="mono click" data-c="${esc(e.appUserId)}">${esc(e.appUserId)}</td><td${e.productName ? ` title="${esc(e.productId)}"` : ' class="mono"'}><bdi>${esc(productLabel(e) ?? "")}</bdi></td><td>${esc(e.store)}</td><td>${e.priceMicros ? money(e.priceMicros, e.currency) : ""}</td><td>${date(e.at)}</td><td>${e.delivered ? "✓" : e.deliveryErrors?.length ? `<span class="pill bad" title="${esc(e.deliveryErrors.join(", "))}">échec</span>` : "…"}</td></tr>`).join("")}</tbody></table>`
     : `<div class="empty">Aucun événement. Achats, renouvellements, annulations et remboursements s'afficheront ici en temps réel.</div>`}</div>`;
   document.querySelectorAll("td[data-c]").forEach(r => r.onclick = () => customerDialog(r.dataset.c));
 }
@@ -777,7 +836,8 @@ async function tabSettings(el) {
     <div class="field"><label>Bundle ID iOS</label><input id="bundle" value="${esc(c.apple?.bundleId ?? "")}" placeholder="com.example.app"></div>
     <div class="field"><label>Apple ID de l'app (numérique, requis en production)</label><input id="appleId" value="${esc(c.apple?.appAppleId ?? "")}" placeholder="6123456789"></div>
     <div class="field"><label>Site web (sert aussi d'icône au business quand il n'a pas d'app sur l'App Store)</label><input id="website" type="url" value="${esc(c.website ?? "")}" placeholder="https://monapp.com"></div>
-    <div class="field"><label>Numéro de fournisseur App Store (téléchargements) — App Store Connect → Paiements et rapports financiers, en haut à gauche</label><input id="vendor" inputmode="numeric" value="${esc(c.apple?.vendorNumber ?? "")}" placeholder="87654321"></div>
+    <div class="field"><label>Numéro de fournisseur App Store (facultatif) — App Store Connect → Paiements et rapports financiers, en haut à gauche</label><input id="vendor" inputmode="numeric" value="${esc(c.apple?.vendorNumber ?? "")}" placeholder="87654321">
+      <p class="muted" style="margin:6px 0 0;font-size:13px">Sans lui, les téléchargements arrivent sous 48 h après la connexion App Store Connect. Avec lui, tout l'historique des téléchargements est importé tout de suite.</p></div>
     <div class="field"><label>Package Android</label><input id="pkg" value="${esc(c.google?.packageName ?? "")}" placeholder="com.example.app"></div>
     <div class="field"><label>Webhooks sortants (une URL https par ligne)</label><textarea id="hooks" style="min-height:70px">${esc(c.webhooks.map(w => w.url).join("\n"))}</textarea></div>
     <div class="row"><button class="primary" id="saveS">Enregistrer</button><button id="testHook">Tester les webhooks</button></div></div>
@@ -830,6 +890,9 @@ async function assistantCard(el, { banner = false } = {}) {
     <p class="muted">« Combien j'ai gagné cette semaine ? », « Pourquoi mon MRR baisse ? »… Clique, puis <b>Connecter</b> → <b>Autoriser</b>.</p>
     <div class="row" style="flex-wrap:wrap">${ASSISTANTS.map(([id, label]) => `<button class="primary" data-assistant="${id}">${label}</button>`).join("")}${banner ? `<button data-hide>Plus tard</button>` : ""}</div>
     <div id="assistantHelp" style="margin-top:10px"></div>
+    <details style="margin-top:10px"><summary class="muted" style="cursor:pointer">La fiche ne s'ouvre pas, ou tu utilises un autre client MCP ?</summary>
+      <p class="muted" style="margin:8px 0">Ajoute un connecteur personnalisé avec cette adresse de serveur MCP (connexion OAuth, lecture seule possible) :</p>${copyRow(MCP_URL)}
+      <p class="muted" style="margin:8px 0 0"><a href="/mcp-docs">Documentation du connecteur →</a></p></details>
     ${live.length ? `<p class="muted" style="margin-top:10px">Connecté : ${live.map(g => esc(g.name)).join(", ")} · <a href="/connect">gérer</a></p>` : ""}`;
   const copy = async text => { try { await navigator.clipboard.writeText(text); toast("Adresse copiée"); } catch {} };
   el.querySelectorAll("[data-assistant]").forEach(b => b.onclick = async () => {
@@ -868,7 +931,7 @@ async function renderSettings(main) {
       <div class="row"><input id="label" placeholder="Nom du jeton (ex. iPhone)"><button class="primary" style="flex:0;white-space:nowrap" id="mk">Créer un jeton</button></div><div id="tok" style="margin-top:12px"></div></div></div>
     <div><p class="set-title">API</p><div class="set-card"><div class="set-pane" style="padding-bottom:6px"><p class="muted" style="margin:0 0 8px;font-size:14px">Base URL</p>${copyRow(location.origin + "/v1")}</div>
       ${linkRow("doc", "Guide pas à pas", "/guide")}${linkRow("key", "Référence API", "/docs")}${linkRow("sparkles", "llms.txt (pour agents)", "/llms.txt")}</div></div>
-    <div><p class="set-title">Assistance</p><div class="set-card">${linkRow("life", "Aide et contact", "/support")}${linkRow("chat", "Envoyer un avis", "mailto:amine.ennasri.pro@gmail.com?subject=MoneyMaker%20-%20avis")}${linkRow("doc", "Conditions d'utilisation", "/terms")}${linkRow("shield", "Confidentialité", "/privacy")}</div></div></div>
+    <div><p class="set-title">Assistance</p><div class="set-card">${linkRow("life", "Aide et contact", "/support")}${linkRow("chat", "Envoyer un avis", `mailto:${SUPPORT_EMAIL}?subject=MoneyMaker%20-%20avis`)}${linkRow("doc", "Conditions d'utilisation", "/terms")}${linkRow("shield", "Confidentialité", "/privacy")}${linkRow("doc", "Mentions légales", "/legal")}</div></div></div>
     <button class="set-danger" id="logout">${ic("logout", 18)} Se déconnecter</button>
     <button class="set-link" id="delAccount">Supprimer mon compte</button>
   </div>`;
@@ -910,19 +973,21 @@ async function proCard(el) {
   const origin = (b.sources ?? []).map(s => where[s] ?? s).join(" et ");
   el.innerHTML = `<p class="set-title">MoneyMaker Pro</p><div class="set-card">${b.pro
     ? setRow("crown", "Pro à vie", "Actif")
-    : setRow("crown", "Business illimités", `<span class="set-badge">29 € À VIE</span><span class="chev">${ic("right", 12)}</span>`, 'id="proBuy" role="button" tabindex="0"')}</div>
+    : setRow("crown", "Business illimités", `<span class="set-badge">${esc(proPrice(b))} · à vie</span><span class="chev">${ic("right", 12)}</span>`, 'id="proBuy" role="button" tabindex="0"')}</div>
     <p class="set-foot">${b.pro ? `Business illimités, à vie, ici et dans l'app iPhone.${origin ? ` Acheté ${esc(origin)}.` : ""}` : `Le plan gratuit inclut ${b.freeProjects} business. Paiement unique, sans abonnement.`}</p>`;
   if (!b.pro) $("#proBuy").onclick = () => proDialog(b);
 }
 function openModal(html) { $("#modalBody").innerHTML = html; if (!$("#modal").open) $("#modal").showModal(); }
-/** MoneyMaker Pro : 29 € une fois, business illimités. Le plan gratuit en compte un. */
+/** Prix de Pro tel que le serveur le renvoie (b.price = { amount, currency }), jamais en dur. */
+const proPrice = b => b?.price?.amount != null ? new Intl.NumberFormat(MM_LOCALE, { style: "currency", currency: b.price.currency ?? "EUR", maximumFractionDigits: b.price.amount % 1 ? 2 : 0 }).format(b.price.amount) : "";
+/** MoneyMaker Pro : paiement unique, business illimités (fermé pendant le lancement gratuit : FREE_LAUNCH côté serveur). */
 function proDialog(b) {
   openModal(`<h2>Passe à MoneyMaker Pro</h2>
     <p class="muted">Le plan gratuit inclut ${b.freeProjects} business. Pro les débloque tous, pour toujours.</p>
-    <div class="card" style="margin:14px 0"><h2 style="margin:0">29 €<span class="muted" style="font-size:15px;font-weight:500"> · une fois, à vie</span></h2>
+    <div class="card" style="margin:14px 0"><h2 style="margin:0">${esc(proPrice(b))}<span class="muted" style="font-size:15px;font-weight:500"> · une fois, à vie</span></h2>
       <p class="muted" style="margin:8px 0 0">Business illimités · toutes les fonctions · mises à jour incluses</p></div>
     <p class="muted">Lié à ton compte : actif aussi dans l'app iPhone. Déjà acheté dans l'app ? Il est déjà actif ici.</p>
-    <div class="row"><button value="cancel">Plus tard</button><button type="button" class="primary" id="goPro">Payer 29 €</button></div>`);
+    <div class="row"><button value="cancel">Plus tard</button><button type="button" class="primary" id="goPro">Payer ${esc(proPrice(b))}</button></div>`);
   $("#goPro").onclick = async () => {
     $("#goPro").disabled = true;
     try { const { url } = await api("/v1/billing/checkout", { method: "POST", body: { returnUrl: location.origin + "/" } }); location.href = url; }
@@ -932,7 +997,7 @@ function proDialog(b) {
 
 async function newProjectDialog() {
   const b = await api("/v1/billing").catch(() => null);
-  if (b && !b.pro && b.ownedProjects >= b.freeProjects) return proDialog(b);
+  if (b && b.available && !b.pro && b.ownedProjects >= b.freeProjects) return proDialog(b);
   openModal(`<h2>Nouveau business</h2>
     <div class="field"><label>Ton app sur l'App Store (optionnel — remplit tout automatiquement)</label><div class="row"><input id="pSearch" placeholder="Nom de l'app…"><button type="button" id="pFind" style="flex:0">Chercher</button></div><div id="pResults"></div></div>
     <div class="field"><label>Nom du business</label><input id="pName" placeholder="ex. V2" required></div>
@@ -1149,5 +1214,7 @@ async function acceptPendingInvite() {
   } catch (e) { toast(`Invitation : ${e.message}`); }
 }
 
+// Accueil : adresse du serveur MCP à copier (repli si la fiche de l'annuaire Claude ne s'ouvre pas).
+if ($("#mcpUrl")) { $("#mcpUrl").textContent = MCP_URL; $("#mcpCopy").onclick = () => copy(MCP_URL).catch(() => {}); }
 initScreens({ api, state, go, back, toast, openModal, newProjectDialog, assistantCard, countryName, alertRow, openProject });
 markReady();

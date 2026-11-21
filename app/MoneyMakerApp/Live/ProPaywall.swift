@@ -16,6 +16,9 @@ import UIKit
 final class ProPaywall: ObservableObject {
     static let shared = ProPaywall()
     static let productId = "io.moneymaker.pro.lifetime"
+    /// Lancement : l'app est entièrement gratuite, rien n'est verrouillé et aucun achat n'est proposé.
+    /// Le serveur applique la même règle (billing.ts, FREE_LAUNCH). Remettre à false pour rouvrir Pro.
+    static let freeLaunch = true
     @Published var isPresented = false
     @Published private(set) var status: BillingStatus?
     /// Produit de l'App Store : son prix local s'affiche sur le paywall.
@@ -73,6 +76,10 @@ final class ProPaywall: ObservableObject {
     /// Transaction vérifiée par le serveur (Pro activé ou retiré), puis terminée. En cas d'échec réseau
     /// elle reste en attente et StoreKit la redonne au prochain lancement.
     private func redeem(_ result: VerificationResult<StoreKit.Transaction>, client: MoneyMakerClient) async throws {
+        // Achat que l'App Store n'a pas pu vérifier : jamais ignoré en silence, l'acheteur voit pourquoi.
+        if case .unverified(let t, _) = result, t.productID == Self.productId {
+            throw APIError(message: String(localized: "L'App Store n'a pas pu vérifier cet achat. Rien n'a été activé : réessaie, ou touche « Restaurer » plus tard."))
+        }
         guard case .verified(let t) = result, t.productID == Self.productId else { return }
         store(try await client.redeemAppStorePurchase(result.jwsRepresentation))
         await t.finish()
@@ -105,6 +112,7 @@ final class ProPaywall: ObservableObject {
     /// « Nouveau business » : au-delà du quota gratuit, le paywall (tout de suite, depuis le cache) ;
     /// sinon le dashboard web.
     func newBusiness(client: MoneyMakerClient) async {
+        if Self.freeLaunch { await UIApplication.shared.open(URL(string: "https://usemoneymaker.com")!); return }
         if status == nil { await refresh(client: client) }
         if let s = status, !s.pro, s.available, s.ownedProjects >= s.freeProjects {
             isPresented = true

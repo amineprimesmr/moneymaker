@@ -118,8 +118,9 @@ async function compute(publicBase: string): Promise<LeaderboardEntry[]> {
   const { convertMicros } = await import("./engine");
   // Un business n'y figure que si son propriétaire l'a inscrit (listed: true) ;
   // les business de démonstration en sont exclus.
-  const all = await db.collection("projects").limit(MAX_ENTRIES * 2).get();
-  const docs = all.docs.filter(d => d.get("publicListing.listed") === true && !(d.get("members") ?? []).includes(DEMO_UID)).slice(0, MAX_ENTRIES);
+  // Seulement les business inscrits (sinon, au-delà de quelques centaines de business, des inscrits seraient oubliés).
+  const all = await db.collection("projects").where("publicListing.listed", "==", true).limit(MAX_ENTRIES * 2).get();
+  const docs = all.docs.filter(d => d.get("publicListing.listed") === true && !d.get("testData") && !d.get("demo") && !(d.get("members") ?? []).includes(DEMO_UID)).slice(0, MAX_ENTRIES);
   const rows = await Promise.all(docs.map(async d => {
     try {
       const pr = await getProject(d.id);

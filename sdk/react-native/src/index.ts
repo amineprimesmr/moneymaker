@@ -35,7 +35,7 @@ const MoneyMaker = {
   /** Configures the shared instance. Call once, as early as possible. Later calls are ignored. */
   configure(options: ConfigureOptions): void {
     if (!options?.apiKey) throw new Error('MoneyMaker.configure: apiKey is required');
-    Native.configure(options.apiKey, options.appUserId ?? null, options.baseUrl ?? null);
+    Native.configure(options.apiKey, options.appUserId ?? null, options.baseUrl ?? null, options.consumableProductIds ?? null);
   },
 
   isConfigured(): boolean {
@@ -97,7 +97,7 @@ const MoneyMaker = {
   },
 
   purchasePackage(pkg: Package, options: PurchaseOptions = {}): Promise<PurchaseResult> {
-    return Native.purchasePackage(pkg.offeringId, pkg.id, options.offerToken ?? null);
+    return Native.purchasePackage(pkg.offeringId, pkg.id, options.offerToken ?? null, options.offerId ?? null);
   },
 
   /**
@@ -105,7 +105,7 @@ const MoneyMaker = {
    * (Play product details are resolved through `getOfferings`).
    */
   purchaseProduct(productId: string, options: PurchaseOptions = {}): Promise<PurchaseResult> {
-    return Native.purchaseProduct(productId, options.offerToken ?? null);
+    return Native.purchaseProduct(productId, options.offerToken ?? null, options.offerId ?? null);
   },
 
   /** Re-syncs every purchase owned by the Apple ID / Google account ("Restore purchases" button). */

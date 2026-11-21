@@ -5,6 +5,9 @@ import Charts
 struct RootView: View {
     @StateObject private var store = Store()
     @ObservedObject private var paywall = ProPaywall.shared
+    /// Jeton reçu par lien alors qu'un compte est déjà connecté : changement de compte à confirmer.
+    @State private var pendingSwitch: String?
+    @State private var switchError: String?
     var body: some View {
         ZStack {
             if store.token == nil {
@@ -22,7 +25,24 @@ struct RootView: View {
         .environmentObject(store)
         .onReceive(Router.shared.$pendingToken.compactMap { $0 }) { t in
             Router.shared.pendingToken = nil
-            Task { await store.signIn(t) }
+            // Personne de connecté : connexion directe. Sinon, on demande avant de changer de compte.
+            if store.token == nil { Task { await store.signIn(t) } }
+            else if t.trimmingCharacters(in: .whitespacesAndNewlines) != store.token { pendingSwitch = t }
+        }
+        .alert("Changer de compte ?", isPresented: Binding(get: { pendingSwitch != nil }, set: { if !$0 { pendingSwitch = nil } })) {
+            Button("Changer de compte") {
+                guard let t = pendingSwitch else { return }
+                pendingSwitch = nil
+                Task { switchError = await store.switchAccount(to: t) }
+            }
+            Button("Annuler", role: .cancel) { pendingSwitch = nil }
+        } message: {
+            Text("Ce lien ouvre un autre compte MoneyMaker. Tu seras déconnecté du compte actuel.")
+        }
+        .alert("Connexion impossible", isPresented: Binding(get: { switchError != nil }, set: { if !$0 { switchError = nil } })) {
+            Button("OK", role: .cancel) { switchError = nil }
+        } message: {
+            Text(switchError ?? "")
         }
         .task {
             #if DEBUG
@@ -335,7 +355,11 @@ struct OverviewView: View {
                     if !TourFlags.isOn { EnableAlertsCard().mmAppear(1) }
                     // Tout ce qui suit dépend du business choisi : changer d'identité rejoue la cascade
                     // avec les nouvelles données — l'Accueil se transforme au lieu d'ouvrir une page.
-                    if let o = store.scoped {
+                    if store.overview?.projects.isEmpty == true {
+                        // Nouveau compte sans business : une seule chose à faire, la dire clairement.
+                        FirstBusinessCard { Task { await ProPaywall.shared.newBusiness(client: store.client) } }
+                            .mmAppear(1)
+                    } else if let o = store.scoped {
                         let scope = store.viewIds
                         // Grille de tuiles reprise de la page Effort de V2 ; toucher ouvre le détail.
                         Group { if !PerfProbe.isOff("tiles") { HomeTiles(o: o, today: store.today).mmDataSwap(scope) } }
@@ -366,9 +390,14 @@ struct OverviewView: View {
             .navigationDestination(for: HomeMetric.self) { HomeMetricDetail(metric: $0).modifier(ZoomDestination(id: $0, ns: zoomNS)) }
             .navigationDestination(for: PosthogRoute.self) { _ in PosthogFunnelDetail() }
             .navigationDestination(for: Router.Destination.self) { d in
-                if case .project(let id) = d, let p = store.overview?.projects.first(where: { $0.projectId == id }) { ProjectView(p: p) }
-                else if case .charts(let id) = d, let pid = id ?? store.selectedProject?.projectId ?? store.overview?.projects.first?.projectId {
-                    ChartsScreen(projectId: pid)
+                if case .project(let id) = d {
+                    if let p = store.overview?.projects.first(where: { $0.projectId == id }) { ProjectView(p: p) } else { UnknownBusinessView() }
+                }
+                else if case .charts(let id) = d {
+                    if let pid = id ?? store.selectedProject?.projectId ?? store.overview?.projects.first?.projectId,
+                       store.overview?.projects.contains(where: { $0.projectId == pid }) == true {
+                        ChartsScreen(projectId: pid)
+                    } else { UnknownBusinessView() }
                 }
                 else if case .globe = d { GlobeExplorer().modifier(GlobeZoomDestination(ns: zoomNS)) }
             }
@@ -491,7 +520,7 @@ struct OverviewView: View {
 
     private func stats(_ o: Overview) -> some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
-            StatTile(icon: "eurosign", title: o.periodStart != nil ? String(localized: "Revenu de \(CalendarMonth.name)") : String(localized: "Revenu \(o.periodDays) j"), value: o.revenueMicros.money(o.currency, compact: true))
+            StatTile(icon: "eurosign", title: o.periodStart != nil ? String(localized: "Revenu de \(CalendarMonth.name)") : String(localized: "Revenu \(o.periodDays) j"), value: o.grossRevenueMicros.money(o.currency, compact: true))
             StatTile(icon: "creditcard", title: String(localized: "Users payants"), value: (o.payingCustomers ?? o.activeSubscriptions).formatted())
             if let dl = o.downloads { StatTile(icon: "arrow.down.app", title: String(localized: "Téléchargements"), value: dl.formatted()) }
             if o.hasTrials ?? (o.activeTrials > 0) { StatTile(icon: "hourglass", title: String(localized: "Essais"), value: o.activeTrials.formatted()) }
@@ -513,26 +542,6 @@ struct OverviewView: View {
             .scrollIndicators(.hidden)
             .mmRail()
             .scrollClipDisabled()
-        }
-    }
-
-    private func businesses(_ o: Overview) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            MMLabel(text: String(localized: "Business"), trailing: "\(o.projects.count)").padding(.horizontal, 4).padding(.top, 8)
-            if o.projects.isEmpty {
-                MMCard { Text("Aucun business. Crée-en un sur le dashboard.").font(MMFont.system(14)).foregroundStyle(MMColor.ink2) }
-            } else {
-                MMCard(padding: 0) {
-                    VStack(spacing: 0) {
-                        ForEach(Array(o.projects.enumerated()), id: \.element.id) { i, p in
-                            if i > 0 { Rectangle().fill(MMColor.hairline).frame(height: 1).padding(.leading, 18) }
-                            Button { store.only(p.projectId) } label: { ProjectRow(p: p) }
-                                .buttonStyle(MMPressStyle(scale: 0.98))
-                                .contextMenu { NavigationLink(value: p) { Label("Voir le détail", systemImage: "chart.bar.doc.horizontal") } }
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -630,7 +639,7 @@ struct ProjectView: View {
                 hero.mmAppear(1)
                 ProHealthCard(p: p).mmAppear(2)
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
-                    StatTile(icon: "eurosign", title: String(localized: "Revenu"), value: p.netRevenueMicros.money(p.currency, compact: true))
+                    StatTile(icon: "eurosign", title: String(localized: "Revenu"), value: p.grossRevenueMicros.money(p.currency, compact: true))
                     StatTile(icon: "person.2", title: String(localized: "Abonnés"), value: "\(p.activeSubscriptions)")
                     StatTile(icon: "hourglass", title: String(localized: "Essais"), value: "\(p.activeTrials)")
                     StatTile(icon: "sparkle", title: String(localized: "Nouveaux"), value: "\(p.newCustomers)")
@@ -745,7 +754,7 @@ struct EventRow: View {
             .frame(width: 10)
             VStack(alignment: .leading, spacing: 3) {
                 Text(label).font(MMFont.system(14, .medium))
-                Text([e.productId, e.appUserId].compactMap { $0 }.joined(separator: " · "))
+                Text([e.productName ?? e.productId, e.appUserId].compactMap { $0 }.joined(separator: " · "))
                     .font(MMFont.system(11)).foregroundStyle(MMColor.ink3).lineLimit(1)
             }
             Spacer(minLength: 8)
@@ -760,18 +769,14 @@ struct EventRow: View {
         .padding(.horizontal, 18).padding(.vertical, 8)
     }
 
-    private var label: String {
-        ["INITIAL_PURCHASE": String(localized: "Nouvel abonné"), "RENEWAL": String(localized: "Renouvellement"), "TRIAL_STARTED": String(localized: "Essai démarré"), "TRIAL_CONVERTED": String(localized: "Essai converti"),
-         "CANCELLATION": String(localized: "Annulation"), "UNCANCELLATION": String(localized: "Réactivation"), "EXPIRATION": String(localized: "Expiration"), "BILLING_ISSUE": String(localized: "Problème de paiement"),
-         "BILLING_RECOVERED": String(localized: "Paiement récupéré"), "REFUND": String(localized: "Remboursement"), "PRODUCT_CHANGE": String(localized: "Changement d'offre"),
-         "NON_RENEWING_PURCHASE": String(localized: "Achat"), "GRANT": String(localized: "Accès offert"), "REVOKED": String(localized: "Révoqué"), "PAUSED": String(localized: "En pause"), "TEST": String(localized: "Test")][e.type] ?? e.type
-    }
+    private var label: String { FeedEvent.label(e.type, isTrial: e.isTrial) }
+    /// Vert pour les ventes, rouge pour remboursements, échecs de paiement et résiliations.
     private var color: Color {
         switch e.type {
-        case "INITIAL_PURCHASE", "TRIAL_CONVERTED", "RENEWAL", "NON_RENEWING_PURCHASE", "BILLING_RECOVERED": return MMColor.accent
-        case "TRIAL_STARTED", "UNCANCELLATION", "GRANT": return MMColor.blue
-        case "BILLING_ISSUE", "CANCELLATION": return MMColor.orange
-        default: return MMColor.red
+        case "INITIAL_PURCHASE", "TRIAL_CONVERTED", "RENEWAL", "NON_RENEWING_PURCHASE", "BILLING_RECOVERED", "REFUND_DECLINED", "REFUND_REVERSED": return MMColor.accent
+        case "TRIAL_STARTED", "UNCANCELLATION", "GRANT", "PRODUCT_CHANGE": return MMColor.blue
+        case _ where FeedEvent.negativeTypes.contains(e.type): return MMColor.red
+        default: return MMColor.ink3
         }
     }
 }
@@ -881,5 +886,49 @@ enum LaunchSync {
             HealthSyncStatus.shared.finish(succeeded: store.error == nil)
             finished = true
         }
+    }
+}
+
+// MARK: - Accueil sans business
+
+/// Nouveau compte : rien à afficher encore. Une phrase dit ce que fait MoneyMaker, un bouton crée
+/// le premier business (même action que « Nouveau business » du menu latéral).
+struct FirstBusinessCard: View {
+    let action: () -> Void
+    var body: some View {
+        MMCard(padding: 20, glow: MMColor.accent) {
+            VStack(alignment: .leading, spacing: 12) {
+                Image(systemName: "plus.app.fill").font(.system(size: 26, weight: .semibold)).foregroundStyle(MMColor.accent)
+                Text("Connecte ta première app").font(MMFont.system(22, .bold)).tracking(-0.4)
+                Text("MoneyMaker affiche tes revenus App Store, Google Play et Stripe en direct : ventes du jour, MRR, abonnés et une notification à chaque vente.")
+                    .font(MMFont.system(14)).foregroundStyle(MMColor.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(action: action) {
+                    Label("Connecter une app", systemImage: "plus")
+                        .font(MMFont.system(15, .semibold)).foregroundStyle(.black)
+                        .frame(maxWidth: .infinity).padding(.vertical, 13)
+                        .background(MMColor.accent, in: Capsule())
+                }
+                .buttonStyle(MMPressStyle())
+                .padding(.top, 4)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// Lien moneymaker://project/<id> vers un business inconnu (supprimé, ou d'un autre compte).
+struct UnknownBusinessView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "questionmark.app.dashed").font(.system(size: 40, weight: .semibold)).foregroundStyle(MMColor.ink3)
+            Text("Business introuvable").font(MMFont.system(20, .semibold))
+            Text("Ce business a peut-être été supprimé, ou il appartient à un autre compte MoneyMaker.")
+                .font(MMFont.system(14)).foregroundStyle(MMColor.ink2).multilineTextAlignment(.center)
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .toolbar(.visible, for: .navigationBar)
+        .mmPage()
     }
 }

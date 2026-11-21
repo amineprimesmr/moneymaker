@@ -90,6 +90,7 @@
 		ED2ECE641415901FA314EA93 /* DashboardWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 911E11FF37AB7E13CD4D68BF /* DashboardWidget.swift */; };
 		EDE35245B27EBBFD0BB59F83 /* AppsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26A2CBF5C8FBEBB912567FC6 /* AppsScreen.swift */; };
 		F30CF2AE63540FA201FF523B /* WidgetGlobeData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC7F69770847ED8FCED312B /* WidgetGlobeData.swift */; };
+		F35306F41249411469CCB21B /* Feedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FE648BA236ABC3D5505E9B1 /* Feedback.swift */; };
 		F8CBAA134547ECEA85DA0F72 /* LiveWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1097A42E4D78F9B3FE75803 /* LiveWidgets.swift */; };
 		F96F2ACCCAAC127BB1C54F40 /* Leaderboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C21C1B609F5745CA0CD1EC26 /* Leaderboard.swift */; };
 		FF26D9AD5986E9E2601C40D2 /* WidgetStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 633E91254F00E8FE65CDD502 /* WidgetStyle.swift */; };
@@ -155,6 +156,7 @@
 		54CD905EF7FAA79055ECAA90 /* ProLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProLock.swift; sourceTree = "<group>"; };
 		583537DA60712D1E76FD440A /* HomeMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeMetrics.swift; sourceTree = "<group>"; };
 		5A389B5ED64940A8BC40C6A3 /* MoneyMakerWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MoneyMakerWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5FE648BA236ABC3D5505E9B1 /* Feedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Feedback.swift; sourceTree = "<group>"; };
 		633E91254F00E8FE65CDD502 /* WidgetStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetStyle.swift; sourceTree = "<group>"; };
 		6DE8E73C1CFBA597DB41064A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		6FEDDB5B290C751F9B01CBDA /* IGShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IGShell.swift; sourceTree = "<group>"; };
@@ -301,6 +303,7 @@
 				31F1C0E48C5404311EC16885 /* Analytics.swift */,
 				26A2CBF5C8FBEBB912567FC6 /* AppsScreen.swift */,
 				2B505E5DB6CC437E02CFFDC2 /* BusinessSideBar.swift */,
+				5FE648BA236ABC3D5505E9B1 /* Feedback.swift */,
 				F9CEEAB6A0F6F975061B40D2 /* Finance.swift */,
 				EA6EDB0BDEE53E198B5CA131 /* Globe.swift */,
 				51041CC235D80D28C955E179 /* GlobeExplorer.swift */,
@@ -547,6 +550,7 @@
 				2CF983620AD73848582EF209 /* AutoTour.swift in Sources */,
 				AF79FEB78C3C31BD156BF1D8 /* BusinessSideBar.swift in Sources */,
 				DD055D734B50B18D7BDBA8A8 /* CachedImage.swift in Sources */,
+				F35306F41249411469CCB21B /* Feedback.swift in Sources */,
 				0E0DF9F55F63CCCFC43BAF97 /* Finance.swift in Sources */,
 				9E22F7E452E61C7687F22A70 /* Globe.swift in Sources */,
 				0D0CC3F6E9FC91FECA924EBF /* GlobeExplorer.swift in Sources */,
@@ -691,7 +695,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = F2CJGJ69XU;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -720,10 +724,10 @@
 		27F6D7DD600B6F5C87EA6CC1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				DEVELOPMENT_LANGUAGE = en;
 				APS_ENVIRONMENT = production;
 				CODE_SIGN_ENTITLEMENTS = Widgets/Widgets.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Distribution";
+				DEVELOPMENT_LANGUAGE = en;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Widgets/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MoneyMaker;
@@ -847,9 +851,9 @@
 		F7F44DF69D389F6494DE9CAD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				DEVELOPMENT_LANGUAGE = en;
 				APS_ENVIRONMENT = development;
 				CODE_SIGN_ENTITLEMENTS = Widgets/Widgets.entitlements;
+				DEVELOPMENT_LANGUAGE = en;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Widgets/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MoneyMaker;
@@ -931,7 +935,7 @@
 				CODE_SIGN_STYLE = Manual;
 				COMPILER_INDEX_STORE_ENABLE = NO;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = F2CJGJ69XU;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

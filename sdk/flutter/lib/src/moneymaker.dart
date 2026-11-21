@@ -19,11 +19,16 @@ abstract final class MoneyMaker {
   static Stream<CustomerInfo>? _stream;
 
   /// Configures the shared instance. Calling it again is a no-op (same as native).
-  static Future<void> configure(String apiKey, {String? appUserId, String? baseUrl}) =>
+  ///
+  /// [consumableProductIds]: Android only. Play one-time products that are consumable (coins, credits…):
+  /// consumed after server validation so they can be bought again. On iOS StoreKit knows the product type.
+  static Future<void> configure(String apiKey,
+          {String? appUserId, String? baseUrl, Set<String> consumableProductIds = const {}}) =>
       _invoke<void>('configure', {
         'apiKey': apiKey,
         'appUserId': appUserId,
         'baseUrl': baseUrl ?? defaultBaseUrl,
+        'consumableProductIds': consumableProductIds.toList(),
       });
 
   static Future<bool> get isConfigured async => await _invoke<bool>('isConfigured') ?? false;
@@ -66,19 +71,21 @@ abstract final class MoneyMaker {
       Offerings.fromMap(await _map('getOfferings'));
 
   /// Purchases a package from [getOfferings].
-  /// [offerToken]: Android only, picks a specific Play subscription offer.
-  static Future<PurchaseResult> purchasePackage(Package package, {String? offerToken}) async =>
+  /// [offerToken] / [offerId]: Android only, buy a specific Play subscription offer
+  /// (default: the base plan without offer).
+  static Future<PurchaseResult> purchasePackage(Package package, {String? offerToken, String? offerId}) async =>
       PurchaseResult.fromMap(await _map('purchasePackage', {
         'packageId': package.id,
         'productIds': package.productIds,
         'offerToken': offerToken,
+        'offerId': offerId,
       }));
 
   /// Purchases a store product by id (App Store / Play product id).
   /// On Android the product must belong to an offering.
-  static Future<PurchaseResult> purchaseProduct(String productId, {String? offerToken}) async =>
-      PurchaseResult.fromMap(
-          await _map('purchaseProduct', {'productId': productId, 'offerToken': offerToken}));
+  static Future<PurchaseResult> purchaseProduct(String productId, {String? offerToken, String? offerId}) async =>
+      PurchaseResult.fromMap(await _map(
+          'purchaseProduct', {'productId': productId, 'offerToken': offerToken, 'offerId': offerId}));
 
   /// Re-syncs every purchase the store account owns ("Restore purchases" button).
   static Future<CustomerInfo> restorePurchases() => _customerInfo('restorePurchases');

@@ -1,7 +1,8 @@
 # moneymaker-react-native
 
 React Native + Expo SDK for **MoneyMaker** (self-hosted RevenueCat alternative). It wraps the native
-SDKs: StoreKit 2 on iOS (`sdk/ios`) and Google Play Billing on Android (`sdk/android`).
+SDKs: StoreKit 2 on iOS (`sdk/ios`) and Google Play Billing Library 8 on Android (`sdk/android`).
+Current version: **1.2.0** (see [`../CHANGELOG.md`](../CHANGELOG.md)). Default API: `https://usemoneymaker.com/v1`.
 
 Requirements: Expo SDK 52+ (or bare React Native with `expo-modules-core`), iOS 16+, Android minSdk 23.
 Not supported in Expo Go: use a development build.
@@ -11,7 +12,7 @@ Not supported in Expo Go: use a development build.
 **Expo (managed / prebuild)**
 
 ```sh
-npx expo install moneymaker-react-native
+npx expo install moneymaker-react-native@1.2.0
 npx expo prebuild   # or: eas build
 ```
 
@@ -22,7 +23,7 @@ Set `ios.deploymentTarget` to `16.0` with `expo-build-properties` if your projec
 
 ```sh
 npx install-expo-modules@latest   # once, if expo-modules-core is not set up yet
-npm install moneymaker-react-native
+npm install moneymaker-react-native@1.2.0
 cd ios && pod install
 ```
 
@@ -53,7 +54,7 @@ function Gate() {
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `configure({ apiKey, appUserId?, baseUrl? })` | `void` | Once. Anonymous `$anon:…` id if no `appUserId`. |
+| `configure({ apiKey, appUserId?, baseUrl?, consumableProductIds? })` | `void` | Once. Anonymous `$anon:…` id if no `appUserId`. Android: list consumable one-time products (consumed after validation, can be re-bought). |
 | `logIn(appUserId)` / `logOut()` | `Promise<CustomerInfo>` / `Promise<void>` | Anonymous purchases are aliased to the new id. |
 | `getCustomerInfo()` | `Promise<CustomerInfo>` | Cache if < 5 min, else network. |
 | `refreshCustomerInfo()` | `Promise<CustomerInfo>` | Always network. |
@@ -62,15 +63,16 @@ function Gate() {
 | `addCustomerInfoListener(fn)` | `{ remove() }` | Purchases, renewals, refunds, login. |
 | `setAttributes(record)` | `Promise<void>` | `null` deletes a key. |
 | `getOfferings()` | `Promise<Offerings>` | Dashboard paywall with store prices. |
-| `purchasePackage(pkg, { offerToken? })` | `Promise<PurchaseResult>` | `{ status: 'success' \| 'userCancelled' \| 'pending' }` |
-| `purchaseProduct(productId, { offerToken? })` | `Promise<PurchaseResult>` | Android: product must be in an offering. |
+| `purchasePackage(pkg, { offerToken?, offerId? })` | `Promise<PurchaseResult>` | `{ status: 'success' \| 'userCancelled' \| 'pending' }`. Android: base plan without offer unless `offerToken` / `offerId`. |
+| `purchaseProduct(productId, { offerToken?, offerId? })` | `Promise<PurchaseResult>` | Android: product must be in an offering. |
 | `restorePurchases()` | `Promise<CustomerInfo>` | "Restore" button. |
 | `syncPurchases()` | `Promise<void>` | iOS: silent StoreKit sync. Android: silent re-post. |
 | `showManageSubscriptions()` | `Promise<void>` | iOS sheet / Play Store subscriptions page. |
 
 Hooks: `useCustomerInfo()`, `useEntitlement(id)`. Helper: `isEntitled(info, id)`.
 Dates are epoch milliseconds. Errors carry `error.code` (`not_configured`, `product_not_found`,
-`unverified_transaction`, `network`, `no_activity`, `billing_<n>`, or the server error code).
+`offer_not_found`, `unverified_transaction`, `network`, `invalid_response`, `no_activity`, `billing_<n>`,
+`http_<status>` or the server error code).
 
 ## FR — en bref
 

@@ -4,21 +4,21 @@ plugins {
 }
 
 group = 'io.moneymaker.reactnative'
-version = '1.1.1'
+version = '1.2.0'
 
 android {
   namespace "io.moneymaker.reactnative"
   defaultConfig {
-    versionCode 2
-    versionName "1.1.1"
+    versionCode 3
+    versionName "1.2.0"
   }
-  lintOptions {
+  lint {
     abortOnError false
   }
 }
 
 dependencies {
   // Same versions as sdk/android/moneymaker/build.gradle.kts (sources in src/main/java/io/moneymaker).
-  api "com.android.billingclient:billing-ktx:7.1.1"
+  api "com.android.billingclient:billing-ktx:8.3.0"
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0"
 }

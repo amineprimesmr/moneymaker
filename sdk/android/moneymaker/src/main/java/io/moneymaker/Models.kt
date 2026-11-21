@@ -55,11 +55,24 @@ data class Package(
     val isTestStore: Boolean = false,
 ) {
     val isAvailable: Boolean get() = product != null || isTestStore
+    /** Base plan bought by default (`play_store` id `productId:basePlanId`, else the first base plan), without offer. */
+    internal val defaultOffer: OfferCandidate?
+        get() = product?.offerCandidates()?.let { selectOffer(it, basePlanId = productIds["play_store"]?.let(::playBasePlanId)) }
+    /** Recurring price of the default base plan (subscriptions) or the one-time price. */
     val formattedPrice: String?
-        get() = product?.subscriptionOfferDetails?.firstOrNull()?.pricingPhases?.pricingPhaseList?.lastOrNull()?.formattedPrice
-            ?: product?.oneTimePurchaseOfferDetails?.formattedPrice
+        get() = defaultOffer?.formattedPrice ?: product?.oneTimePurchaseOfferDetails?.formattedPrice
+    val priceAmountMicros: Long?
+        get() = defaultOffer?.priceMicros ?: product?.oneTimePurchaseOfferDetails?.priceAmountMicros
+    val priceCurrencyCode: String?
+        get() = defaultOffer?.currency ?: product?.oneTimePurchaseOfferDetails?.priceCurrencyCode
+    /** ISO 8601 billing period of the default base plan (`P1M`, `P1Y`…), null for one-time products. */
+    val subscriptionPeriod: String? get() = defaultOffer?.billingPeriod
+    /** A free-trial offer exists on the default base plan (the trial is bought by passing its offerId / offerToken). */
     val hasFreeTrial: Boolean
-        get() = product?.subscriptionOfferDetails?.any { o -> o.pricingPhases.pricingPhaseList.any { it.priceAmountMicros == 0L } } == true
+        get() = product?.offerCandidates()?.let { c ->
+            val plan = defaultOffer?.basePlanId
+            c.any { (plan == null || it.basePlanId == plan) && it.hasFreePhase }
+        } == true
 }
 
 data class Offering(

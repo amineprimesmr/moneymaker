@@ -2,7 +2,7 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue, Firestore, Transaction } from "firebase-admin/firestore";
 import { createHash, randomBytes } from "crypto";
 import {
-  Purchase, EventType, computeEntitlements, diffEvents, convertMicros, HttpError, isPurchaseActive, StoreName,
+  Purchase, EventType, computeEntitlements, diffEvents, convertMicros, HttpError, isPurchaseActive, StoreName, applyFxRates,
 } from "./engine";
 import { walletOpsFor, readWalletOps, writeWalletOps } from "./wallet";
 
@@ -64,7 +64,7 @@ export const sha256 = (s: string) => createHash("sha256").update(s).digest("hex"
 export const token = (prefix: string, bytes = 24) => `${prefix}_${randomBytes(bytes).toString("base64url")}`;
 
 export type KeyKind = "public" | "secret" | "pat" | "test";
-export interface KeyRecord { kind: KeyKind; projectId?: string; uid?: string; }
+export interface KeyRecord { kind: KeyKind; projectId?: string; uid?: string; issuedBy?: string; }
 
 export async function resolveKey(raw: string): Promise<KeyRecord | null> {
   const snap = await db.doc(`apiKeys/${sha256(raw)}`).get();
@@ -76,6 +76,15 @@ export async function issueKey(rec: KeyRecord & { label?: string }): Promise<str
   const raw = token(prefix);
   await db.doc(`apiKeys/${sha256(raw)}`).set({ ...rec, hint: raw.slice(0, 10) + "…" + raw.slice(-4), createdAt: FieldValue.serverTimestamp() });
   return raw;
+}
+
+/** Clés d'un business émises par un membre (révoquées quand il quitte l'équipe). */
+export async function revokeKeysIssuedBy(projectId: string, uid: string) {
+  const snap = await db.collection("apiKeys").where("projectId", "==", projectId).where("issuedBy", "==", uid).get();
+  const batch = db.batch();
+  snap.docs.forEach(d => batch.delete(d.ref));
+  await batch.commit();
+  return snap.size;
 }
 
 export async function revokeProjectKeys(projectId: string, kind: KeyKind) {
@@ -182,17 +191,17 @@ export async function upsertPurchase(
     for (const type of events) {
       const eventRef = db.collection(`projects/${pid}/events`).doc();
       tx.set(eventRef, {
-        type, appUserId, productId: purchase.productId, store: purchase.store, purchaseId: purchase.id,
+        type, appUserId, productId: purchase.productId, productName: purchase.productName ?? null, store: purchase.store, purchaseId: purchase.id,
         priceMicros: purchase.priceMicros, currency: purchase.currency, isSandbox: purchase.isSandbox,
         isTrial: purchase.isTrial, expiresAt: purchase.expiresAt, country: purchase.country ?? null, periodMonths: purchase.periodMonths, at: now, delivered: false,
         purchasedAt: purchase.latestPurchaseAt, // date réelle de l'achat : un événement rattrapé (webhook en retard, resync) n'est pas une vente du jour
       });
       const isRevenue = REVENUE_EVENTS.includes(type) && !purchase.isTrial && purchase.priceMicros > 0;
-      if (isRevenue || type === "REFUND") {
-        const sign = type === "REFUND" ? -1 : 1;
+      if (isRevenue || type === "REFUND" || (type === "REFUND_REVERSED" && purchase.priceMicros > 0)) {
+        const sign = type === "REFUND" ? -1 : 1; // remboursement annulé : le montant revient
         const amountProject = sign * convertMicros(purchase.priceMicros, purchase.currency, project.config.currency);
-        tx.set(db.doc(`projects/${pid}/transactions/${sha256(`${purchase.id}:${purchase.latestPurchaseAt}:${type === "REFUND" ? "r" : "p"}`)}`), {
-          appUserId, store: purchase.store, productId: purchase.productId, purchaseId: purchase.id,
+        tx.set(db.doc(`projects/${pid}/transactions/${sha256(`${purchase.id}:${purchase.latestPurchaseAt}:${type === "REFUND" ? "r" : type === "REFUND_REVERSED" ? `rr${now}` : "p"}`)}`), {
+          appUserId, store: purchase.store, productId: purchase.productId, productName: purchase.productName ?? null, purchaseId: purchase.id,
           kind: type === "REFUND" ? "refund" : type === "RENEWAL" ? "renewal" : "purchase",
           amountMicros: sign * purchase.priceMicros, currency: purchase.currency, amountMicrosProject: amountProject,
           isSandbox: purchase.isSandbox, country: purchase.country ?? null, periodMonths: purchase.periodMonths, at: type === "REFUND" ? now : purchase.latestPurchaseAt,
@@ -215,6 +224,34 @@ export async function upsertPurchase(
     writeWalletOps(tx, customerRef, walletOps, now);
     return { events, entitlements };
   });
+}
+
+/** Événement sans changement d'état de l'achat (demande de remboursement, refus d'Apple, litige Stripe,
+ *  remboursement partiel) : écrit dans le flux, il part en notification et vers les webhooks comme les autres.
+ *  `refundMicros` > 0 enregistre aussi la transaction négative correspondante (idempotente via `key`). */
+export async function recordEvent(project: Project, appUserId: string, purchase: Partial<Purchase> & { id: string; productId: string },
+  type: EventType, extra: { reason?: string | null; refundMicros?: number; key?: string } = {}) {
+  const pid = project.id, now = Date.now();
+  const key = extra.key ?? `${purchase.id}:${type}:${now}`;
+  const eventRef = db.doc(`projects/${pid}/events/${sha256(`ev:${key}`).slice(0, 40)}`);
+  if ((await eventRef.get()).exists) return { duplicate: true };
+  const batch = db.batch();
+  batch.set(eventRef, {
+    type, appUserId, productId: purchase.productId, productName: purchase.productName ?? null, store: purchase.store ?? null, purchaseId: purchase.id,
+    priceMicros: extra.refundMicros ?? purchase.priceMicros ?? 0, currency: purchase.currency ?? project.config.currency, isSandbox: !!purchase.isSandbox,
+    isTrial: !!purchase.isTrial, expiresAt: purchase.expiresAt ?? null, country: purchase.country ?? null, periodMonths: purchase.periodMonths ?? 0,
+    at: now, delivered: false, ...(extra.reason ? { reason: extra.reason } : {}),
+  });
+  if (extra.refundMicros && extra.refundMicros > 0) {
+    const cur = purchase.currency ?? project.config.currency;
+    batch.set(db.doc(`projects/${pid}/transactions/${sha256(`refund:${key}`)}`), {
+      appUserId, store: purchase.store ?? null, productId: purchase.productId, productName: purchase.productName ?? null, purchaseId: purchase.id,
+      kind: "refund", amountMicros: -extra.refundMicros, currency: cur, amountMicrosProject: -convertMicros(extra.refundMicros, cur, project.config.currency),
+      isSandbox: !!purchase.isSandbox, country: purchase.country ?? null, periodMonths: purchase.periodMonths ?? 0, at: now,
+    });
+  }
+  await batch.commit();
+  return { recorded: type };
 }
 
 export async function customerInfo(project: Project, appUserId: string) {
@@ -240,8 +277,12 @@ export async function customerInfo(project: Project, appUserId: string) {
 }
 
 /** Moves every purchase from `fromId` (e.g. anonymous) to `toId` (logged-in) and re-points indexes. */
+/** Anonymous ids generated by the SDKs (MoneyMaker `$anon:`, RevenueCat `$RCAnonymousID:`). */
+export const isAnonymousId = (id: string) => /^\$(anon:|RCAnonymousID:)/.test(id);
+
 export async function mergeCustomers(project: Project, fromId: string, toId: string) {
   if (fromId === toId) return;
+  if (!toId) throw new HttpError(400, "new_app_user_id_required");
   const from = db.doc(`projects/${project.id}/customers/${fromId}`);
   const purchases = await from.collection("purchases").get();
   for (const doc of purchases.docs) {
@@ -255,4 +296,26 @@ export async function mergeCustomers(project: Project, fromId: string, toId: str
   batch.set(from, { mergedInto: toId, entitlements: {}, activeEntitlements: [] }, { merge: true });
   batch.set(db.doc(`projects/${project.id}/customers/${toId}`), { aliases: FieldValue.arrayUnion(fromId) }, { merge: true });
   await batch.commit();
+}
+
+
+// ── Taux de change ─────────────────────────────────────────────────────────
+// Taux du jour de la BCE (system/fx), relus toutes les 6 h par chaque instance ; la table de engine.ts sert de repli.
+let fxLoadedAt = 0;
+export async function loadFx(force = false) {
+  if (!force && Date.now() - fxLoadedAt < 6 * 3600000) return;
+  fxLoadedAt = Date.now();
+  const d = (await db.doc("system/fx").get().catch(() => null))?.data();
+  if (d?.rates && typeof d.rates === "object") applyFxRates(d.rates);
+}
+
+/** Récupère les taux de référence BCE (Frankfurter) et les enregistre. Appelé une fois par jour. */
+export async function refreshFxFromEcb() {
+  const r = await fetch("https://api.frankfurter.dev/v1/latest?base=EUR", { signal: AbortSignal.timeout(10000) });
+  if (!r.ok) throw new Error(`fx ${r.status}`);
+  const j = await r.json() as { date?: string; rates?: Record<string, number> };
+  if (!j.rates || !Object.keys(j.rates).length) throw new Error("fx_empty");
+  await db.doc("system/fx").set({ rates: j.rates, date: j.date ?? null, source: "ECB", at: Date.now() });
+  applyFxRates(j.rates);
+  fxLoadedAt = Date.now();
 }

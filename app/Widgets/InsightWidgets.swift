@@ -25,12 +25,16 @@ struct InsightProvider: TimelineProvider {
     var wantsMap = false
 
     func placeholder(in context: Context) -> InsightEntry {
+        InsightEntry(date: .now, history: nil, today: .empty(), overview: nil, feed: [], signedIn: true)
+    }
+    /// Faux historique réservé aux aperçus de la galerie.
+    private func preview() -> InsightEntry {
         InsightEntry(date: .now, history: .placeholder, today: .placeholder, overview: nil, feed: FeedEvent.samples, signedIn: true)
     }
     func getSnapshot(in context: Context, completion: @escaping (InsightEntry) -> Void) {
-        if context.isPreview { completion(placeholder(in: context)); return }
-        completion(InsightEntry(date: .now, history: MMShared.history ?? .placeholder, today: MMShared.cachedToday ?? .placeholder,
-                                overview: MoneyMakerClient.cachedOverview, feed: MMShared.cachedFeed, signedIn: context.isPreview || MoneyMakerClient.stored.token != nil))
+        if context.isPreview { completion(preview()); return }
+        completion(InsightEntry(date: .now, history: MMShared.history, today: MMShared.todayOrEmpty,
+                                overview: MoneyMakerClient.cachedOverview, feed: MMShared.cachedFeed, signedIn: MoneyMakerClient.stored.token != nil))
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<InsightEntry>) -> Void) {
         Task {
@@ -38,7 +42,7 @@ struct InsightProvider: TimelineProvider {
             async let h = client.history()
             async let t = try? client.today()
             let (history, today) = await (h, t)
-            let entry = InsightEntry(date: .now, history: history, today: today ?? MMShared.cachedToday,
+            let entry = InsightEntry(date: .now, history: history, today: today ?? MMShared.todayOrEmpty,
                                      overview: wantsMap ? MoneyMakerClient.cachedOverview : nil,
                                      feed: wantsMap ? MMShared.cachedFeed : [], signedIn: client.token != nil)
             let midnight = Calendar.current.startOfDay(for: .now.addingTimeInterval(86400))
@@ -314,7 +318,7 @@ struct StreakWidgetView: View {
 
     var body: some View {
         if !entry.signedIn { SignedOutView() } else {
-            let s = entry.history.map { MMStreak(history: $0, today: entry.today) } ?? .placeholder
+            let s = entry.history.map { MMStreak(history: $0, today: entry.today) } ?? .empty
             switch family {
             case .accessoryCircular:
                 VStack(spacing: 0) {

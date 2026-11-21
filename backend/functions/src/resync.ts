@@ -10,9 +10,9 @@
 
 import Stripe from "stripe";
 import { AppStoreServerAPIClient, Environment } from "@apple/app-store-server-library";
-import { Purchase, convertMicros } from "./engine";
+import { Purchase, convertMicros, minorToMicros } from "./engine";
 import { Project, db, getCredentials, lookupIndex, upsertPurchase } from "./store";
-import { checkoutProductName, invoiceSubscription, oneTimeOwner, storeSubscription, stripeOneTimePurchase, stripeSubscriptionPurchase } from "./stripe";
+import { checkoutProductName, invoiceSubscription, oneTimeOwner, storeSubscription, stripeOneTimePurchase, stripeSubscriptionPurchase, SUB_EXPAND } from "./stripe";
 import { ingestAppleNotification } from "./apple";
 
 const DAY = 86400000;
@@ -46,12 +46,12 @@ export async function resyncStripe(project: Project, stripe: Stripe, now = Date.
     if (subId) {
       const periodStart = Number((inv as any)?.lines?.data?.[0]?.period?.start ?? ch.created) * 1000;
       if (await hasTransaction(project.id, subId, periodStart)) continue;
-      const sub = await stripe.subscriptions.retrieve(subId);
+      const sub = await stripe.subscriptions.retrieve(subId, { expand: SUB_EXPAND });
       await storeSubscription(project, sub, stripe);
       if (await hasTransaction(project.id, subId, periodStart)) { fixed.push(`sub ${subId}`); continue; }
       // Période plus ancienne que l'état actuel de l'abonnement : la recette est inscrite telle quelle.
       const owner = await lookupIndex(project.id, `stripe:${subId}`, `stripe_cus:${ch.customer}`) ?? `$stripe:${ch.customer}`;
-      const p = { ...stripeSubscriptionPurchase(sub), latestPurchaseAt: periodStart, priceMicros: (inv!.amount_paid ?? 0) * 10000,
+      const p = { ...stripeSubscriptionPurchase(sub), latestPurchaseAt: periodStart, priceMicros: minorToMicros(inv!.amount_paid ?? 0, inv!.currency),
         currency: (inv!.currency ?? sub.currency).toUpperCase() };
       await recordLateTransaction(project, owner, p, inv!.billing_reason === "subscription_cycle" ? "renewal" : "purchase", `stripe_inv_${inv!.id}`);
       fixed.push(`invoice ${inv!.id}`);

@@ -124,9 +124,9 @@ enum RCMetric: String, CaseIterable {
     func value(_ o: Overview, today t: Today?) -> String {
         switch self {
         case .trials: return o.activeTrials.formatted()
-        case .today: return (t?.netMicros ?? 0).money(t?.currency ?? o.currency)
+        case .today: return (t?.grossMicros ?? 0).money(t?.currency ?? o.currency)
         case .mrr: return o.mrrMicros.money(o.currency)
-        case .revenue: return o.revenueMicros.money(o.currency)
+        case .revenue: return o.grossRevenueMicros.money(o.currency)
         case .newCustomers: return o.newCustomers.formatted()
         case .activeCustomers: return (o.payingCustomers ?? o.activeSubscriptions).formatted()
         }
@@ -182,7 +182,7 @@ struct SelectRCMetricIntent: AppIntent {
 struct RCOverviewEntry: TimelineEntry { let date: Date; let overview: Overview?; let signedIn: Bool; var metric: RCMetric = .revenue; var series: [Double]? = nil; var today: Today? = nil }
 
 struct RCOverviewProvider: TimelineProvider {
-    func placeholder(in context: Context) -> RCOverviewEntry { RCOverviewEntry(date: .now, overview: .rcSample, signedIn: true) }
+    func placeholder(in context: Context) -> RCOverviewEntry { RCOverviewEntry(date: .now, overview: nil, signedIn: true) }
     func getSnapshot(in context: Context, completion: @escaping (RCOverviewEntry) -> Void) {
         completion(RCOverviewEntry(date: .now, overview: context.isPreview ? .rcSample : MoneyMakerClient.cachedOverview, signedIn: context.isPreview || MoneyMakerClient.stored.token != nil))
     }
@@ -195,7 +195,7 @@ struct RCOverviewProvider: TimelineProvider {
             async let fetched = tapped ? nil : try? client.overview(days: 28)
             async let fetchedToday = tapped ? nil : try? client.today()
             let o = await fetched ?? MoneyMakerClient.cachedOverview
-            let today = await fetchedToday ?? MMShared.cachedToday
+            let today = await fetchedToday ?? MMShared.cachedToday.flatMap { $0.isForToday ? $0 : nil }
             let metric = context.family == .systemLarge ? RCMetric.current : .revenue
             if !tapped, context.family == .systemLarge, let o { await RCSeriesCache.refresh(o, client: client) }
             let series = RCSeriesCache.series(metric)
@@ -320,7 +320,7 @@ struct RCMRRWidgetPush: Widget {
 struct RCTransactionsEntry: TimelineEntry { let date: Date; let events: [FeedEvent]; let signedIn: Bool; var icons: WIcons = [:] }
 
 struct RCTransactionsProvider: TimelineProvider {
-    func placeholder(in context: Context) -> RCTransactionsEntry { RCTransactionsEntry(date: .now, events: FeedEvent.rcSamples, signedIn: true) }
+    func placeholder(in context: Context) -> RCTransactionsEntry { RCTransactionsEntry(date: .now, events: [], signedIn: true) }
     func getSnapshot(in context: Context, completion: @escaping (RCTransactionsEntry) -> Void) {
         let cached = MMShared.cachedFeed.filter(\.isRevenue)
         completion(RCTransactionsEntry(date: .now, events: context.isPreview ? FeedEvent.rcSamples : cached, signedIn: context.isPreview || MoneyMakerClient.stored.token != nil))

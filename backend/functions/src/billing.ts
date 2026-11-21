@@ -20,6 +20,9 @@ import { DEMO_UID } from "./demo";
 import { GIFT_ATTEMPTS_PER_DAY, ProGrant, ProSource, giftAttempts, isFullDiscount, normalizeGiftCode, proFields, proSources, proState, testerOverride, withSource } from "./proEntitlement";
 
 export const FREE_PROJECTS = 1;
+/** Lancement : tout est gratuit pour les premiers utilisateurs. Aucun achat proposé, aucune limite de
+ *  business, sur l'app (toutes versions) comme sur le web. Remettre à false pour rouvrir Pro. */
+export const FREE_LAUNCH = true;
 export const PRO_PRICE = { amount: 29, currency: "EUR" };
 export const PRO_PRODUCT_ID = "io.moneymaker.pro.lifetime";
 
@@ -39,6 +42,7 @@ async function config(): Promise<BillingConfig | null> {
 
 /** En mode test, seuls les testeurs voient l'offre : personne n'obtient Pro avec une carte de test. */
 async function configFor(uid: string) {
+  if (FREE_LAUNCH) return null;
   const cfg = await config();
   return cfg && (cfg.mode === "live" || cfg.testers.includes(uid)) ? cfg : null;
 }
@@ -100,7 +104,7 @@ export async function billingStatus(uid: string) {
   const { pro, sources } = proState(user.data());
   const tester = !!(await config())?.testers.includes(uid);
   return {
-    pro, sources, ownedProjects: owned, freeProjects: FREE_PROJECTS, price: PRO_PRICE, available: !!(await configFor(uid)), tester,
+    pro, sources, ownedProjects: owned, freeProjects: FREE_PROJECTS, price: PRO_PRICE, available: !!(await configFor(uid)), tester, freeLaunch: FREE_LAUNCH,
     productId: PRO_PRODUCT_ID, appAccountToken: token,
   };
 }
@@ -134,17 +138,28 @@ export async function assertCanCreateProject(uid: string) {
 // au compte : le droit tient donc que le paiement soit ouvert ou non (FREE_LAUNCH), sur le web comme
 // sur l'iPhone. Les essais ratés sont comptés par compte et par jour.
 
-async function giftCodeIsValid(code: string): Promise<boolean> {
+/** Code valable et nombre d'utilisations permises (null = illimité).
+ *  system/billing.giftCodes : "CODE" (illimité) ou { code: "CODE", max: 50 }.
+ *  Code promo Stripe à 100 % : sa limite `max_redemptions` est respectée (décomptée ici, car aucun paiement Stripe n'a lieu). */
+async function giftCodeLimit(code: string): Promise<{ valid: boolean; max: number | null }> {
   const listed = (await db.doc("system/billing").get()).get("giftCodes");
-  if (Array.isArray(listed) && listed.some(c => typeof c === "string" && c.toUpperCase() === code)) return true;
+  if (Array.isArray(listed)) {
+    for (const c of listed) {
+      if (typeof c === "string" && c.toUpperCase() === code) return { valid: true, max: null };
+      if (c && typeof c === "object" && String(c.code ?? "").toUpperCase() === code) return { valid: true, max: Number.isFinite(c.max) ? Number(c.max) : null };
+    }
+  }
   const cfg = await config();
-  if (!cfg) return false;
+  if (!cfg) return { valid: false, max: null };
   try {
     const found = (await new Stripe(cfg.secretKey).promotionCodes.list({ code, active: true, limit: 1 })).data[0];
     // Selon la version de l'API Stripe, le coupon est sur le code ou sous `promotion`.
     const coupon = (found as any)?.coupon ?? (found as any)?.promotion?.coupon;
-    return isFullDiscount(typeof coupon === "object" ? coupon : null);
-  } catch { return false; }
+    if (!isFullDiscount(typeof coupon === "object" ? coupon : null)) return { valid: false, max: null };
+    const max = (found as any)?.max_redemptions ?? (typeof coupon === "object" ? coupon?.max_redemptions : null);
+    const used = Number((found as any)?.times_redeemed ?? 0);
+    return { valid: true, max: typeof max === "number" ? Math.max(0, max - used) : null };
+  } catch { return { valid: false, max: null }; }
 }
 
 export async function redeemGiftCode(uid: string, raw: unknown) {
@@ -156,12 +171,17 @@ export async function redeemGiftCode(uid: string, raw: unknown) {
   if (proSources(before).granted) return { ...(await billingStatus(uid)), redeemed: false, alreadyActive: true };
   const day = new Date().toISOString().slice(0, 10);
   if (giftAttempts(before, day) >= GIFT_ATTEMPTS_PER_DAY) throw new HttpError(429, "too_many_attempts", "Trop d'essais aujourd'hui. Réessaie demain.");
-  if (!(await giftCodeIsValid(code))) {
+  const { valid, max } = await giftCodeLimit(code);
+  if (!valid) {
     await ref.set({ giftAttempts: { day, n: giftAttempts(before, day) + 1 } }, { merge: true });
     throw new HttpError(404, "unknown_code", "Code inconnu ou expiré.");
   }
+  const uses = db.doc(`giftCodeUses/${code}`);
   await db.runTransaction(async tx => {
+    const n = Number((await tx.get(uses)).get("count") ?? 0);
+    if (max !== null && n >= max) throw new HttpError(410, "code_exhausted", "Ce code a déjà été utilisé le nombre de fois prévu.");
     await setProSource(uid, "granted", { since: Date.now(), ref: `code:${code}` }, tx);
+    tx.set(uses, { count: n + 1, lastAt: Date.now() }, { merge: true });
     tx.set(db.doc(`giftRedemptions/${uid}`), { uid, code, at: Date.now() });
   });
   return { ...(await billingStatus(uid)), redeemed: true, alreadyActive: false };
@@ -210,7 +230,9 @@ export async function handleBillingWebhook(raw: Buffer | string | undefined, sig
     const cs = event.data.object as Stripe.Checkout.Session;
     const uid = cs.client_reference_id ?? cs.metadata?.uid;
     // Un code à -100 % termine le paiement en no_payment_required : le droit est acquis aussi.
-    if (uid && (cs.payment_status === "paid" || cs.payment_status === "no_payment_required")) {
+    // Seules nos sessions de paiement Pro comptent (pas un lien de paiement ou un autre produit du compte Stripe).
+    const isPro = cs.metadata?.product_id === PRO_PRODUCT_ID;
+    if (uid && isPro && (cs.payment_status === "paid" || cs.payment_status === "no_payment_required")) {
       await setProSource(uid, "stripe", { since: Date.now(), ref: String(cs.payment_intent ?? cs.id) });
       await db.doc(`users/${uid}`).set({ proCustomer: String(cs.customer ?? "") }, { merge: true });
       await trackPurchase(uid, "stripe");
@@ -277,6 +299,11 @@ export async function redeemAppStorePurchase(uid: string, signedTransaction: unk
     await revokeAppStorePro(original);
     return billingStatus(uid);
   }
+  // Bac à sable (TestFlight, Xcode) : un achat gratuit ne doit pas donner Pro à vie en production.
+  // Seuls les comptes de l'équipe le gardent ; les autres le voient sans qu'il soit enregistré.
+  if (String(t.environment) === "Sandbox" && !(await config())?.testers.includes(uid)) {
+    return { ...(await billingStatus(uid)), pro: true, sandbox: true };
+  }
   const token = await appAccountToken(uid);
   if (t.appAccountToken && t.appAccountToken.toLowerCase() !== token.toLowerCase()) {
     throw new HttpError(409, "purchase_other_account", "Cet achat est rattaché à un autre compte MoneyMaker.");
@@ -295,4 +322,9 @@ export async function redeemAppStorePurchase(uid: string, signedTransaction: unk
   });
   if (isNew) await trackPurchase(uid, "app_store");
   return billingStatus(uid);
+}
+
+/** Comptes de l'équipe (system/billing.testers) : ils reçoivent les avis envoyés depuis l'app. */
+export async function teamUids(): Promise<string[]> {
+  return (await config())?.testers ?? [];
 }

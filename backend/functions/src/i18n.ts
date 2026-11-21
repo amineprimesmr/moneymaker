@@ -26,15 +26,39 @@ export const plural = (lang: Lang, n: number, one: string, many: string) => (lan
 export const EVENT_TITLES: Record<Lang, Record<string, string>> = {
   fr: {
     INITIAL_PURCHASE: "Nouvel abonné", NON_RENEWING_PURCHASE: "Nouvel achat", TRIAL_CONVERTED: "Essai converti", RENEWAL: "Renouvellement",
-    TRIAL_STARTED: "Essai démarré", CANCELLATION: "Annulation", EXPIRATION: "Abonnement expiré", BILLING_ISSUE: "Problème de paiement",
-    BILLING_RECOVERED: "Paiement récupéré", REFUND: "Remboursement", REVOKED: "Accès révoqué", UNCANCELLATION: "Réactivation", TEST: "Notification de test",
+    TRIAL_STARTED: "Essai démarré", CANCELLATION: "Abonnement résilié", TRIAL_CANCELLATION: "Essai annulé", EXPIRATION: "Abonnement expiré",
+    TRIAL_EXPIRATION: "Essai terminé sans achat", BILLING_ISSUE: "Problème de paiement", BILLING_RECOVERED: "Paiement récupéré",
+    REFUND: "Remboursement", REFUND_REQUESTED: "Demande de remboursement", REFUND_DECLINED: "Remboursement refusé par Apple",
+    REFUND_REVERSED: "Remboursement annulé", REVOKED: "Accès révoqué", UNCANCELLATION: "Réabonné", PRODUCT_CHANGE: "Changement de formule",
+    PAUSED: "Abonnement en pause", GRANT: "Accès offert", TEST: "Notification de test",
   },
   en: {
     INITIAL_PURCHASE: "New subscriber", NON_RENEWING_PURCHASE: "New purchase", TRIAL_CONVERTED: "Trial converted", RENEWAL: "Renewal",
-    TRIAL_STARTED: "Trial started", CANCELLATION: "Cancellation", EXPIRATION: "Subscription expired", BILLING_ISSUE: "Billing issue",
-    BILLING_RECOVERED: "Payment recovered", REFUND: "Refund", REVOKED: "Access revoked", UNCANCELLATION: "Reactivation", TEST: "Test notification",
+    TRIAL_STARTED: "Trial started", CANCELLATION: "Subscription cancelled", TRIAL_CANCELLATION: "Trial cancelled", EXPIRATION: "Subscription expired",
+    TRIAL_EXPIRATION: "Trial ended without purchase", BILLING_ISSUE: "Billing issue", BILLING_RECOVERED: "Payment recovered",
+    REFUND: "Refund", REFUND_REQUESTED: "Refund requested", REFUND_DECLINED: "Refund declined by Apple",
+    REFUND_REVERSED: "Refund reversed", REVOKED: "Access revoked", UNCANCELLATION: "Resubscribed", PRODUCT_CHANGE: "Plan changed",
+    PAUSED: "Subscription paused", GRANT: "Access granted", TEST: "Test notification",
   },
 };
+
+/** Ligne d'explication d'un événement (corps de la notification). */
+export function eventHint(lang: Lang, type: string, e: { isTrial?: boolean; expiresAt?: number | null; reason?: string | null }, tz = "Europe/Paris"): string {
+  const d = e.expiresAt ? new Date(e.expiresAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", { timeZone: tz, day: "numeric", month: "short" }) : "";
+  const fr: Record<string, string> = {
+    CANCELLATION: d ? `Accès jusqu'au ${d}, pas de renouvellement` : "Ne sera pas renouvelé",
+    BILLING_ISSUE: "Le paiement a échoué, le store réessaie",
+    REFUND_REQUESTED: "Le client a demandé un remboursement",
+    EXPIRATION: "L'accès a pris fin",
+  };
+  const en: Record<string, string> = {
+    CANCELLATION: d ? `Access until ${d}, won't renew` : "Won't renew",
+    BILLING_ISSUE: "Payment failed, the store is retrying",
+    REFUND_REQUESTED: "The customer asked for a refund",
+    EXPIRATION: "Access has ended",
+  };
+  return (lang === "fr" ? fr : en)[type] ?? "";
+}
 
 export function periodLabel(lang: Lang, m?: number) {
   const fr: Record<string, string> = { "12": "annuel", "1": "mensuel", "3": "trimestriel", "6": "semestriel", "0.25": "hebdo" };

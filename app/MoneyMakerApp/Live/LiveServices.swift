@@ -44,7 +44,8 @@ final class Router: ObservableObject {
         switch url.host {
         case "auth":
             // moneymaker://auth?token=mm_pat_… : connexion directe (lien depuis le dashboard, tests UI).
-            // Un jeton invalide passe aussi par Store.signIn, qui affiche le motif du refus.
+            // Déjà connecté : RootView demande confirmation et vérifie le jeton avant de changer de compte
+            // (un jeton invalide ne ferme jamais la session en cours).
             // moneymaker://auth?token=mm_demo : accès en lecture seule donné au testeur App Review dans les notes.
             if let t = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "token" })?.value, !t.isEmpty {
                 pendingToken = t
@@ -54,7 +55,7 @@ final class Router: ObservableObject {
         case "globe": pending = .globe
         case "leaderboard": pending = .leaderboard
         case "settings": pending = .settings
-        case "pro": ProPaywall.shared.isPresented = true
+        case "pro": if !ProPaywall.freeLaunch { ProPaywall.shared.isPresented = true }
         case "charts":
             // moneymaker://charts?project=ID (sans projet : le business affiché).
             pending = .charts(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "project" }?.value)
@@ -163,6 +164,17 @@ final class PushManager: ObservableObject {
         catch { lastError = error.localizedDescription }
     }
 
+    /// Après une connexion : l'appareil est réenregistré pour le nouveau compte si les notifications
+    /// sont autorisées (jeton APNs via `didRegisterForRemoteNotifications`, jeton push-to-start du direct).
+    func registerAfterSignIn() async {
+        await refreshAuthorization()
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+        UIApplication.shared.registerForRemoteNotifications()
+        if #available(iOS 17.2, *), let t = Activity<RevenueActivityAttributes>.pushToStartToken {
+            try? await MoneyMakerClient.stored.registerDevice(["liveActivity": ["pushToStartToken": t.hex]])
+        }
+    }
+
     /// À la déconnexion : le serveur oublie cet appareil.
     func forgetDevice(token: String?) async {
         guard let token else { return }
@@ -219,7 +231,8 @@ final class LiveActivityManager: ObservableObject {
 
     func start() async {
         guard enabled else { return }
-        let today = (try? await MoneyMakerClient.stored.today()) ?? MMShared.cachedToday ?? .placeholder
+        // Jamais de faux chiffres sur l'écran verrouillé : le jour réel, sinon zéro.
+        let today = (try? await MoneyMakerClient.stored.today()) ?? MMShared.todayOrEmpty
         let state = RevenueActivityAttributes.ContentState(today: today)
         if let current = Activity<RevenueActivityAttributes>.activities.first {
             await current.update(ActivityContent(state: state, staleDate: .now.addingTimeInterval(3 * 3600)))

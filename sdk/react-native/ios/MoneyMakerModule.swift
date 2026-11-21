@@ -15,7 +15,8 @@ public final class MoneyMakerModule: Module {
 
     Constant("defaultBaseUrl") { MoneyMaker.defaultBaseURL.absoluteString }
 
-    Function("configure") { (apiKey: String, appUserId: String?, baseUrl: String?) throws in try Self.onMain {
+    // consumableProductIds: Android only (StoreKit knows the product type on iOS).
+    Function("configure") { (apiKey: String, appUserId: String?, baseUrl: String?, _: [String]?) throws in try Self.onMain {
       var url = MoneyMaker.defaultBaseURL
       if let baseUrl, !baseUrl.isEmpty {
         guard let parsed = URL(string: baseUrl) else { throw Self.error("invalid_base_url", "Invalid baseUrl: \(baseUrl)") }
@@ -68,7 +69,7 @@ public final class MoneyMakerModule: Module {
       try await Self.wrap { Self.encode(try await Self.mm().loadOfferings()) }
     }
 
-    AsyncFunction("purchasePackage") { (offeringId: String, packageId: String, _: String?) async throws -> [String: Any] in
+    AsyncFunction("purchasePackage") { (offeringId: String, packageId: String, _: String?, _: String?) async throws -> [String: Any] in
       try await Self.wrap {
         let mm = try await Self.mm()
         var offerings = await mm.offerings
@@ -80,7 +81,7 @@ public final class MoneyMakerModule: Module {
       }
     }
 
-    AsyncFunction("purchaseProduct") { (productId: String, _: String?) async throws -> [String: Any] in
+    AsyncFunction("purchaseProduct") { (productId: String, _: String?, _: String?) async throws -> [String: Any] in
       try await Self.wrap { Self.encode(try await Self.mm().purchase(productID: productId)) }
     }
 

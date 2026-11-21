@@ -80,7 +80,7 @@ const flat = (r: Record<string, any>) => Object.fromEntries(Object.entries(r).ma
 export function toCsv(rows: Record<string, any>[]): string {
   if (!rows.length) return "";
   const cols = [...new Set(rows.flatMap(r => Object.keys(r)))].sort();
-  const cell = (v: any) => { if (v === undefined || v === null) return ""; const s = String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const cell = (v: any) => { if (v === undefined || v === null) return ""; const s0 = String(v); const s = /^[=+\-@\t\r]/.test(s0) && !/^-?\d/.test(s0) ? `'${s0}` : s0; return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   return [cols.join(","), ...rows.map(r => { const f = flat(r); return cols.map(c => cell(f[c])).join(","); })].join("\n") + "\n";
 }
 export const toJsonl = (rows: Record<string, any>[]) => rows.map(r => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : "");

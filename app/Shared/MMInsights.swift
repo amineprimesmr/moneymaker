@@ -74,7 +74,7 @@ extension MoneyMakerClient {
         if let c = cached, Date().timeIntervalSince1970 - c.fetchedAt < maxAge { return c }
         guard let o = try? await overview(days: 365) else { return cached }
         let h = MMHistory(o)
-        MMShared.history = h
+        if ownsSharedCache { MMShared.history = h }
         return h
     }
 }
@@ -91,7 +91,7 @@ struct MMRecord: Hashable {
     init(today: Int, previousBest: Int) { self.today = today; self.previousBest = previousBest }
     init?(today t: Today?, history h: MMHistory?) {
         guard let t, let h else { return nil }
-        self.init(today: t.netMicros, previousBest: h.bestPreviousDay)
+        self.init(today: t.grossMicros, previousBest: h.bestPreviousDay)
     }
 }
 
@@ -107,7 +107,7 @@ struct MMStreak: Hashable {
     init(history h: MMHistory, today: Today?) {
         let keys = DayKeys.last(365)
         var days = keys.map { (h.byDay[$0.0] ?? 0) > 0 }
-        if let t = today, t.transactions > 0 || t.netMicros > 0 { days[days.count - 1] = true }
+        if let t = today, t.transactions > 0 || t.grossMicros > 0 { days[days.count - 1] = true }
         todayDone = days.last ?? false
         // Série en cours : aujourd'hui compte s'il y a déjà une vente, sinon on part d'hier (pas encore cassée).
         var c = 0
@@ -119,6 +119,8 @@ struct MMStreak: Hashable {
         last14 = Array(days.suffix(14))
     }
 
+    /// Aucune donnée encore : série à zéro (jamais la fausse série de l'aperçu).
+    static let empty = MMStreak(current: 0, best: 0, last14: Array(repeating: false, count: 14), todayDone: false)
     static let placeholder = MMStreak(current: 12, best: 31, last14: [true, false, true, true, true, true, true, true, true, true, true, true, true, true], todayDone: true)
     private init(current: Int, best: Int, last14: [Bool], todayDone: Bool) { self.current = current; self.best = best; self.last14 = last14; self.todayDone = todayDone }
 }
@@ -144,7 +146,7 @@ struct MMMonthProjection: Hashable {
         let dim = cal.range(of: .day, in: .month, for: now)?.count ?? 30
         let dayIndex = cal.component(.day, from: now) // 1…dim
         var daily: [Int] = (0..<dayIndex).map { h.byDay[f.string(from: start.addingTimeInterval(Double($0) * 86400))] ?? 0 }
-        if let t = today { daily[daily.count - 1] = max(daily[daily.count - 1], t.netMicros) }
+        if let t = today { daily[daily.count - 1] = max(daily[daily.count - 1], t.grossMicros) }
         let soFar = daily.reduce(0, +)
         // Rythme : moyenne du mois pondérée avec les 7 derniers jours complets (60 % récents).
         let complete = Array(daily.dropLast())
@@ -229,10 +231,10 @@ extension Overview {
     /// Aperçu restreint à un seul business (les agrégats sont recalculés depuis ce business).
     func focused(on id: String?) -> Overview {
         guard let id, let p = projects.first(where: { $0.projectId == id }) else { return self }
-        return Overview(currency: p.currency, periodDays: periodDays, mrrMicros: p.mrrMicros, revenueMicros: p.netRevenueMicros,
+        return Overview(currency: p.currency, periodDays: periodDays, mrrMicros: p.mrrMicros, revenueMicros: p.grossRevenueMicros,
                         activeSubscriptions: p.activeSubscriptions, activeTrials: p.activeTrials, newCustomers: p.newCustomers,
                         projects: [p], generatedAt: generatedAt, payingCustomers: p.payingCustomers ?? p.activeSubscriptions,
-                        downloads: p.downloads, hasTrials: p.hasTrials)
+                        downloads: p.downloads, hasTrials: p.hasTrials, refundsMicros: p.refundsMicros, netRevenueMicros: p.netRevenueMicros)
     }
 
     /// Nom du business suivi (nil = tous).
@@ -280,7 +282,7 @@ struct ToggleLiveActivityIntent: LiveActivityIntent {
             MMShared.liveRunning = false
             try? await MoneyMakerClient.stored.registerDevice(["liveActivity": ["updateToken": NSNull()]])
         } else if ActivityAuthorizationInfo().areActivitiesEnabled {
-            let t = (try? await MoneyMakerClient.stored.today()) ?? MMShared.cachedToday ?? .placeholder
+            let t = (try? await MoneyMakerClient.stored.today()) ?? MMShared.todayOrEmpty
             let activity = try Activity.request(attributes: RevenueActivityAttributes(title: String(localized: "Aujourd'hui")),
                                                 content: ActivityContent(state: .init(today: t), staleDate: .now.addingTimeInterval(3 * 3600), relevanceScore: 100),
                                                 pushType: .token)

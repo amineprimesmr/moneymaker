@@ -1,6 +1,6 @@
 ---
 name: moneymaker
-description: Integrate MoneyMaker (self-hosted RevenueCat alternative) into an iOS, Android or web app — in-app subscriptions, paywall, entitlements, restore, Stripe checkout, server webhooks. Use when the user asks to add subscriptions/paywall/in-app purchases, to replace RevenueCat, or mentions MoneyMaker or mm_pub_/mm_sk_/mm_pat_ keys.
+description: Integrate MoneyMaker (hosted RevenueCat alternative) into an iOS, Android or web app — in-app subscriptions, paywall, entitlements, restore, Stripe checkout, server webhooks. Use when the user asks to add subscriptions/paywall/in-app purchases, to replace RevenueCat, or mentions MoneyMaker or mm_pub_/mm_sk_/mm_pat_ keys.
 ---
 
 # MoneyMaker integration

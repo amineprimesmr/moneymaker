@@ -76,7 +76,8 @@ class MoneyMakerFlutterPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, 
             "configure" -> {
                 val apiKey = call.argument<String>("apiKey") ?: throw PluginException("invalid_arguments", "apiKey is required")
                 MoneyMaker.configure(context, apiKey, call.argument("appUserId"),
-                    call.argument<String>("baseUrl") ?: MoneyMaker.DEFAULT_BASE_URL)
+                    call.argument<String>("baseUrl") ?: MoneyMaker.DEFAULT_BASE_URL,
+                    consumableProductIds = call.argument<List<String>>("consumableProductIds").orEmpty().toSet())
                 subscribeIfNeeded()
                 return null
             }
@@ -98,13 +99,13 @@ class MoneyMakerFlutterPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, 
                 val playId = call.argument<Map<String, String>>("productIds")?.get("play_store")
                 val pkg = findPackage { it.id == id && it.productIds["play_store"] == playId }
                     ?: throw MoneyMakerException("product_not_found", "Package $id not found")
-                encode(mm.purchase(requireActivity(), pkg, call.argument("offerToken")))
+                encode(mm.purchase(requireActivity(), pkg, call.argument("offerToken"), call.argument("offerId")))
             }
             "purchaseProduct" -> {
                 val pid = call.argument<String>("productId") ?: throw PluginException("invalid_arguments", "productId is required")
-                val details = findPackage { it.product?.productId == pid }?.product
+                val pkg = findPackage { it.product?.productId == pid }
                     ?: throw MoneyMakerException("product_not_found", "Play product $pid not found in any offering")
-                encode(mm.purchase(requireActivity(), details, call.argument("offerToken")))
+                encode(mm.purchase(requireActivity(), pkg, call.argument("offerToken"), call.argument("offerId")))
             }
             "restorePurchases" -> encode(mm.restorePurchases())
             "syncPurchases" -> null // The Android SDK syncs existing purchases at configure time.
@@ -181,23 +182,19 @@ class MoneyMakerFlutterPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, 
         "productIds" to p.productIds,
         "metadata" to p.metadata,
         "hasFreeTrial" to p.hasFreeTrial,
-        "product" to p.product?.let { encode(it, p.formattedPrice) },
+        "product" to p.product?.let { encode(it, p) },
     )
 
-    private fun encode(d: ProductDetails, formattedPrice: String?): Map<String, Any?> {
-        val phase = d.subscriptionOfferDetails?.firstOrNull()?.pricingPhases?.pricingPhaseList?.lastOrNull()
-        val oneTime = d.oneTimePurchaseOfferDetails
-        val micros = phase?.priceAmountMicros ?: oneTime?.priceAmountMicros
-        return mapOf(
-            "identifier" to d.productId,
-            "title" to d.name,
-            "description" to d.description,
-            "priceString" to (formattedPrice ?: ""),
-            "price" to micros?.let { it / 1_000_000.0 },
-            "currencyCode" to (phase?.priceCurrencyCode ?: oneTime?.priceCurrencyCode),
-            "subscriptionPeriod" to phase?.billingPeriod,
-        )
-    }
+    /** Prices of the base plan bought by default (no offer), same as `MoneyMaker.purchase`. */
+    private fun encode(d: ProductDetails, p: Package): Map<String, Any?> = mapOf(
+        "identifier" to d.productId,
+        "title" to d.name,
+        "description" to d.description,
+        "priceString" to (p.formattedPrice ?: ""),
+        "price" to p.priceAmountMicros?.let { it / 1_000_000.0 },
+        "currencyCode" to p.priceCurrencyCode,
+        "subscriptionPeriod" to p.subscriptionPeriod,
+    )
 
     private class PluginException(val code: String, override val message: String) : Exception(message)
 }

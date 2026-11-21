@@ -28,7 +28,11 @@ test("wants: prefs, sandbox, muted projects", () => {
   assert.equal(wants(DEFAULT_PREFS, "p1", { ...sale, isSandbox: true }), false);
   assert.equal(wants({ ...DEFAULT_PREFS, sandbox: true }, "p1", { ...sale, isSandbox: true }), true);
   assert.equal(wants({ ...DEFAULT_PREFS, mutedProjects: ["p1"] }, "p1", sale), false);
-  assert.equal(wants(DEFAULT_PREFS, "p1", { type: "CANCELLATION" }), false); // churn off by default
+  assert.equal(wants(DEFAULT_PREFS, "p1", { type: "CANCELLATION" }), true); // résiliations notifiées par défaut (comme RevenueCat)
+  assert.equal(wants({ ...DEFAULT_PREFS, churn: false }, "p1", { type: "CANCELLATION" }), false);
+  assert.equal(wants({ ...DEFAULT_PREFS, churn: false, trials: true }, "p1", { type: "CANCELLATION", isTrial: true }), true); // essai annulé → préférence « essais »
+  for (const type of ["REFUND_REQUESTED", "REFUND_DECLINED", "REFUND_REVERSED"]) assert.equal(wants(DEFAULT_PREFS, "p1", { type }), true);
+  assert.equal(wants({ ...DEFAULT_PREFS, refunds: false }, "p1", { type: "REFUND_REQUESTED" }), false);
   assert.equal(wants(DEFAULT_PREFS, "p1", { type: "TEST", isSandbox: true }), true);
 });
 
@@ -62,10 +66,10 @@ test("today: local day start, hourly cumulative, refunds, sandbox ignored", () =
   assert.equal(t.revenueMicros, 15e6);
   assert.equal(t.refundsMicros, 10e6);
   assert.equal(t.sales, 1); assert.equal(t.renewals, 1); assert.equal(t.trials, 1); assert.equal(t.newSubscribers, 1);
-  assert.equal(t.hourly[0], 0); assert.equal(t.hourly[1], 10e6); assert.equal(t.hourly[3], 15e6); assert.equal(t.hourly[23], 5e6);
+  assert.equal(t.hourly[0], 0); assert.equal(t.hourly[1], 10e6); assert.equal(t.hourly[3], 15e6); assert.equal(t.hourly[23], 15e6); // courbe des ventes : un remboursement ne la fait pas baisser
   assert.equal(t.last.amountMicros, 5e6);
   const s = liveActivityState(t);
-  assert.equal(s.revenueMicros, 5e6); assert.equal(s.sales, 2); assert.equal(s.hourly.length, 24); assert.equal(s.hourly[3], 15);
+  assert.equal(s.revenueMicros, 15e6); assert.equal(s.sales, 2); // Live Activity : ventes du jour, jamais négatif assert.equal(s.hourly.length, 24); assert.equal(s.hourly[3], 15);
 });
 
 test("downloads: sales report parsing keeps first downloads of the app only", () => {
@@ -97,6 +101,7 @@ test("icons: apple-touch-icon and dark variant win, svg/ico ignored", () => {
 });
 
 test("icons: normalised to a 256 px PNG from any image", async () => {
+  process.env.MM_ALLOW_PRIVATE_FETCH = "1"; // serveur de test local (bloqué en production)
   const sharp = require("sharp");
   const { fetchIcon } = require("../lib/icons");
   const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><circle cx="32" cy="32" r="30" fill="#0f0"/></svg>');
@@ -104,6 +109,7 @@ test("icons: normalised to a 256 px PNG from any image", async () => {
   const server = http.createServer((q, r) => { r.setHeader("content-type", "image/svg+xml"); r.end(svg); }).listen(0);
   const png = await fetchIcon({ url: `http://127.0.0.1:${server.address().port}/i.svg`, source: "website" });
   server.close();
+  delete process.env.MM_ALLOW_PRIVATE_FETCH;
   const meta = await sharp(png).metadata();
   assert.equal(meta.format, "png"); assert.equal(meta.width, 256); assert.equal(meta.height, 256);
 });
@@ -165,4 +171,17 @@ test("finance: franchise en base — no VAT on Stripe, stores still net of VAT",
   ], s, "EUR", 30);
   assert.equal(w.vatMicros, 2_000_000); // seulement la TVA collectée par Apple
   assert.equal(w.socialMicros, Math.round(w.netRevenueMicros * 0.212));
+});
+
+test("notifications: refund request, trial cancel and cancellation hint", () => {
+  const { eventNotification } = require("../lib/push");
+  const project = { id: "p1", name: "V2" };
+  const n = eventNotification(project, { type: "REFUND_REQUESTED", priceMicros: 9.99e6, currency: "EUR", productId: "com.app.monthly" }, DEFAULT_PREFS, undefined, "EUR", "fr");
+  assert.match(n.aps.alert.title, /Demande de remboursement · V2/); assert.match(n.aps.alert.body, /demandé un remboursement/);
+  const c = eventNotification(project, { type: "CANCELLATION", isTrial: true, productId: "x" }, DEFAULT_PREFS, undefined, "EUR", "en");
+  assert.match(c.aps.alert.title, /Trial cancelled/);
+  const r = eventNotification(project, { type: "REFUND", priceMicros: 9.99e6, currency: "EUR", productId: "x" }, DEFAULT_PREFS, undefined, "EUR", "fr");
+  assert.match(r.aps.alert.body, /-9,99|−9,99/);
+  const named = eventNotification(project, { type: "INITIAL_PURCHASE", priceMicros: 19e6, currency: "EUR", productId: "price_123", productName: "Process Pro" }, DEFAULT_PREFS, undefined, "EUR", "fr");
+  assert.match(named.aps.alert.body, /Process Pro/);
 });

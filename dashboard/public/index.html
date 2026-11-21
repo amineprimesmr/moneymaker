@@ -5,7 +5,15 @@
 <script src="/i18n.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MoneyMaker</title>
-<meta name="description" content="Tes revenus d'apps en une question : App Store, Google Play et Stripe réunis, directement dans Claude.">
+<meta name="description" content="Alternative hébergée et gratuite à RevenueCat : abonnements App Store, Google Play et Stripe, app iPhone avec widgets, SDK iOS, Android, Flutter et React Native, classements App Store dans 177 pays et agents IA via MCP.">
+<link rel="canonical" href="https://usemoneymaker.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="MoneyMaker">
+<meta property="og:url" content="https://usemoneymaker.com/">
+<meta property="og:title" content="MoneyMaker · tes revenus d'apps en une question">
+<meta property="og:description" content="Alternative gratuite à RevenueCat : App Store, Google Play et Stripe réunis, app iPhone et widgets, SDK, classements App Store dans 177 pays, et Claude via MCP.">
+<meta property="og:image" content="https://usemoneymaker.com/icon-512.png">
+<meta name="twitter:card" content="summary">
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="icon" type="image/png" sizes="32x32" href="/icon-32.png">
 <link rel="apple-touch-icon" href="/icon-180.png">
@@ -30,6 +38,7 @@
       <a href="#signin" class="lp-btn lp-btn-primary">Commencer</a>
       <a href="https://claude.ai/directory/moneymaker" target="_blank" rel="noopener" class="lp-btn">Ajouter à Claude</a>
     </div>
+    <p class="lp-mcp">Autre client MCP, ou la fiche ne s'ouvre pas ? Adresse du serveur : <code id="mcpUrl">https://usemoneymaker.com/mcp</code> <button type="button" class="small" id="mcpCopy">Copier</button> · <a href="/mcp-docs">Documentation</a></p>
 
     <div class="lp-chat" aria-hidden="true">
       <div class="lp-msg lp-me">Combien j'ai gagné cette semaine&nbsp;?</div>
@@ -48,6 +57,19 @@
     <div><b>La finance au propre</b><p>TVA, commissions et net, export comptable en un clic.</p></div>
   </section>
 
+  <section class="lp-what" aria-labelledby="whatTitle">
+    <h2 id="whatTitle">Ce que fait MoneyMaker</h2>
+    <p class="lp-what-sub">Une alternative hébergée à RevenueCat. Rien à installer ni à héberger, et c'est gratuit pendant le lancement.</p>
+    <div class="lp-grid lp-grid-what">
+      <div><b>Achats et abonnements</b><p>App Store, Google Play et Stripe validés et réunis : accès premium, offres de paywall, webhooks et migration depuis RevenueCat.</p></div>
+      <div><b>SDK pour tes apps</b><p>iOS, Android, Flutter et React Native, plus une API REST documentée.</p></div>
+      <div><b>App iPhone et widgets</b><p>Tes ventes en direct sur l'écran d'accueil, avec une notification à chaque vente.</p></div>
+      <div><b>Classements App Store</b><p>Rangs, notes et avis de tes apps et de tes concurrents dans 177 pays, avec des alertes.</p></div>
+      <div><b>Agents IA via MCP</b><p>Claude et les autres clients MCP lisent tes chiffres et, si tu l'autorises, règlent ton projet.</p></div>
+      <div><b>Gratuit pendant le lancement</b><p>Business illimités, sans commission sur tes ventes.</p></div>
+    </div>
+  </section>
+
   <section id="signin" class="lp-signin">
     <h2>Connecte-toi</h2>
     <div class="wl-card-shell">
@@ -57,19 +79,21 @@
           Continuer avec Google
         </button>
         <div class="sep">ou</div>
-        <form id="emailForm" class="stack">
-          <div class="wl-field"><input id="email" type="email" placeholder="ton@email.com" autocomplete="email" required></div>
-          <div class="wl-field"><input id="password" type="password" placeholder="Mot de passe (8+ caractères)" autocomplete="current-password" minlength="8" required></div>
-          <button class="primary wide wl-submit" type="submit">Connexion</button>
+        <form id="emailForm" class="stack" novalidate>
+          <div class="wl-field"><input id="email" type="email" placeholder="ton@email.com" autocomplete="email" aria-label="E-mail" required></div>
+          <div class="wl-field"><input id="password" type="password" placeholder="Mot de passe (8+ caractères)" autocomplete="current-password" aria-label="Mot de passe" required></div>
+          <button id="emailSubmit" class="primary wide wl-submit" type="submit">Connexion</button>
           <button id="signup" class="ghost wide" type="button">Créer un compte</button>
+          <button id="forgot" class="plain lp-forgot" type="button">Mot de passe oublié ?</button>
         </form>
         <p id="loginError" class="error" role="status"></p>
+        <p class="lp-consent">En créant un compte, tu acceptes les <a href="/terms">conditions d'utilisation</a> et la <a href="/privacy">politique de confidentialité</a>.</p>
       </div>
     </div>
   </section>
 
   <footer class="wl-foot">
-    <div><a href="/guide">Guide</a><span>·</span><a href="/docs">API</a><span>·</span><a href="/mcp-docs">Claude</a><span>·</span><a href="/support">Support</a><span>·</span><a href="/privacy">Confidentialité</a><span>·</span><a href="/terms">Conditions</a></div>
+    <div><a href="/guide">Guide</a><span>·</span><a href="/docs">API</a><span>·</span><a href="/mcp-docs">Claude</a><span>·</span><a href="/support">Support</a><span>·</span><a href="/privacy">Confidentialité</a><span>·</span><a href="/terms">Conditions</a><span>·</span><a href="/legal">Mentions légales</a></div>
     <div><a href="?lang=en">English</a><span>·</span><a href="?lang=fr">Français</a></div>
     <div>© 2026 MoneyMaker</div>
   </footer>
@@ -86,6 +110,7 @@
     <button id="sideSettings" class="side-item"></button>
     <a id="sideApp" class="side-item" href="https://apps.apple.com/app/id6821596839" target="_blank" rel="noopener" style="text-decoration:none"></a>
   </nav>
+  <header id="topbar"></header>
   <div id="stage">
     <main id="main"></main>
     <button id="scrim" aria-label="Fermer le menu" class="plain"></button>

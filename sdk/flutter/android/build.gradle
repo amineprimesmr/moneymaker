@@ -1,11 +1,11 @@
 group 'io.moneymaker.flutter'
-version '1.0.0'
+version '1.2.0'
 
 buildscript {
-    ext.kotlin_version = '2.0.21'
+    ext.kotlin_version = '2.3.0'
     repositories { google(); mavenCentral() }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.7.3'
+        classpath 'com.android.tools.build:gradle:8.13.2'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
@@ -19,6 +19,8 @@ rootProject.allprojects {
     }
 }
 
+// Built-in Kotlin (Flutter 3.44+): no `kotlin-android` plugin and no `kotlinOptions` block,
+// see https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
 apply plugin: 'com.android.library'
 
 android {
@@ -42,6 +44,7 @@ kotlin {
 }
 
 dependencies {
-    implementation 'com.github.amineprimesmr:moneymaker:1.1.1'
+    // Same version as this plugin: tag 1.2.0 of github.com/amineprimesmr/moneymaker (sdk/android, Play Billing 8).
+    implementation 'com.github.amineprimesmr:moneymaker:1.2.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
 }

@@ -180,10 +180,10 @@ export async function projectCategory(project: import("./store").Project, db: Fi
 
 export async function runBenchmarks() {
   const { db, getProject } = await import("./store");
-  const docs = (await db.collection("projects").select().get()).docs;
+  const docs = (await db.collection("projects").select("testData", "demo").get()).docs;
   const samples: ProjectSample[] = [];
   for (const d of docs) {
-    if (EXCLUDED_PROJECTS.has(d.id)) continue;
+    if (EXCLUDED_PROJECTS.has(d.id) || d.get("testData") || d.get("demo")) continue; // données fictives exclues
     try {
       const s = await projectSample(await getProject(d.id));
       if (eligible(s.projectId, s.payingCustomers, s.sandboxOnly)) samples.push({ projectId: s.projectId, category: s.category, tier: s.tier, kpis: s.kpis });

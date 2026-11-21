@@ -30,7 +30,7 @@ struct RevenueCard: View {
         let isToday = store.period == 0
         let pts = isToday ? todayPoints(store.today) : dailySeries(o?.revenueByDay ?? [:], days: store.periodDays)
         let point = selected.flatMap { d in pts.min { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) } }
-        let total: Int? = isToday ? store.today?.netMicros : o?.revenueMicros
+        let total: Int? = isToday ? store.today?.grossMicros : o?.grossRevenueMicros
         MMCard(padding: 20, glow: MMColor.accent) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -69,6 +69,10 @@ struct RevenueCard: View {
                 Text(subtitle(isToday: isToday, o: o))
                     .font(MMFont.system(13)).foregroundStyle(MMColor.ink2)
                     .contentTransition(.numericText())
+                // Remboursements à part, en petit : le chiffre principal reste les ventes.
+                if point == nil, let r = isToday ? store.today?.refundNote : o?.refundNote {
+                    Text(r).font(MMFont.system(12)).foregroundStyle(MMColor.ink3).transition(.opacity)
+                }
                 MMGlowChart(points: pts, selection: $selected, showsAxis: !isToday)
                     .frame(height: 140)
                     .sensoryFeedback(.selection, trigger: point?.date)
@@ -187,7 +191,7 @@ struct FeedItemRow: View {
             }
             .frame(width: 46, height: 46)
             VStack(alignment: .leading, spacing: 3) {
-                Text(e.productId ?? e.projectName ?? e.title).font(MMFont.system(15, .medium)).lineLimit(1).truncationMode(.head)
+                Text(e.productLabel ?? e.projectName ?? e.title).font(MMFont.system(15, .medium)).lineLimit(1).truncationMode(.head)
                 Text([timeText, e.storeName].compactMap { $0 }.joined(separator: " · "))
                     .font(MMFont.system(12)).foregroundStyle(MMColor.ink3).lineLimit(1)
             }
@@ -195,7 +199,7 @@ struct FeedItemRow: View {
             VStack(alignment: .trailing, spacing: 5) {
                 Text(e.amountText ?? (e.badge.free ? String(localized: "Gratuit") : ""))
                     .font(MMFont.number(15, .regular))
-                    .foregroundStyle(e.type == "REFUND" ? MMColor.red : e.amountText == nil ? MMColor.ink3 : MMColor.ink)
+                    .foregroundStyle(e.isNegative ? MMColor.red : e.amountText == nil ? MMColor.ink3 : MMColor.ink)
                 TransactionBadge(kind: e.badge)
             }
         }
@@ -303,12 +307,12 @@ struct FeedDayGroup: Identifiable {
         }
     }
 
-    /// Total encaissé du jour (remboursements déduits), dans la devise de l'Accueil.
+    /// Ventes du jour, dans la devise de l'Accueil (jamais négatif : les remboursements ont leur propre ligne).
     private static func dayTotal(_ items: [FeedEvent], currency: String?) -> String {
         let cur = currency ?? items.first?.shownCurrency ?? "EUR"
         let total = items.reduce(0) { acc, e in
             guard let m = e.shownMicros, e.isTrial != true, e.shownCurrency == cur else { return acc }
-            return e.isRevenue ? acc + m : e.type == "REFUND" ? acc - m : acc
+            return e.isRevenue ? acc + m : acc
         }
         return total.money(cur)
     }
@@ -350,8 +354,6 @@ struct NotificationSettingsPage: View {
     @ObservedObject private var live = LiveActivityManager.shared
     @State private var goal = MMShared.mrrGoal.map(String.init) ?? ""
     @State private var dailyGoal = MMShared.dailyGoal.map(String.init) ?? ""
-    @State private var confirmDelete = false
-    @State private var deleting = false
 
     private var denied: Bool { push.status == .denied }
 
@@ -360,14 +362,23 @@ struct NotificationSettingsPage: View {
                 VStack(alignment: .leading, spacing: 22) {
                     statusCard.mmAppear(0)
                     section("Me notifier pour", footer: "Toutes les notifications sont groupées par business.") {
-                        toggle("Ventes et renouvellements", "eurosign.circle.fill", MMColor.accent,
-                               get: { $0.sales || $0.renewals }, set: { $0.sales = $1; $0.renewals = $1 })
+                        toggle("Ventes", "eurosign.circle.fill", MMColor.accent,
+                               get: { $0.sales }, set: { $0.sales = $1 })
                         divider
-                        toggle("Essais gratuits", "sparkles", MMColor.blue,
+                        toggle("Renouvellements", "arrow.clockwise.circle.fill", MMColor.accent,
+                               get: { $0.renewals }, set: { $0.renewals = $1 })
+                        divider
+                        toggle("Essais", "sparkles", MMColor.blue,
                                get: { $0.trials }, set: { $0.trials = $1 })
                         divider
-                        toggle("Paiements, remboursements, annulations", "exclamationmark.triangle.fill", .orange,
-                               get: { $0.billing || $0.refunds || $0.churn }, set: { $0.billing = $1; $0.refunds = $1; $0.churn = $1 })
+                        toggle("Résiliations et expirations", "xmark.circle.fill", MMColor.red,
+                               get: { $0.churn }, set: { $0.churn = $1 })
+                        divider
+                        toggle("Problèmes de paiement", "exclamationmark.triangle.fill", .orange,
+                               get: { $0.billing }, set: { $0.billing = $1 })
+                        divider
+                        toggle("Remboursements et demandes de remboursement", "arrow.uturn.backward.circle.fill", MMColor.red,
+                               get: { $0.refunds }, set: { $0.refunds = $1 })
                         divider
                         toggle("Classements et alertes intelligentes", "trophy.fill", .yellow,
                                get: { $0.rankings || $0.insights }, set: { $0.rankings = $1; $0.insights = $1 })
@@ -617,7 +628,7 @@ struct TransactionDetailView: View {
             VStack(spacing: 16) {
                 header(project)
                 section {
-                    row("square.dashed", "Produit", e.productId ?? "—", stacked: (e.productId ?? "").count > 22)
+                    row("square.dashed", "Produit", e.productLabel ?? "—", stacked: (e.productLabel ?? "").count > 22)
                     divider
                     row("dollarsign.circle", "Revenu", e.amountText ?? (e.badge.free ? String(localized: "Gratuit") : "—"))
                     if let user = e.appUserId {
@@ -963,7 +974,7 @@ extension FeedEvent {
 
     /// Phrase de la frise, comme RevenueCat (« Renouvelé Weekly », « Abonnement démarré à … pour 2,99€ »).
     var timelineTitle: String {
-        let product = productId ?? String(localized: "le produit")
+        let product = productLabel ?? String(localized: "le produit")
         let price = amountText.map { String(localized: " pour \($0)") } ?? ""
         switch type {
         case "INITIAL_PURCHASE": return isTrial == true ? String(localized: "Essai démarré : \(product)") : String(localized: "Abonnement démarré : \(product)\(price)")
@@ -971,8 +982,11 @@ extension FeedEvent {
         case "TRIAL_CONVERTED": return String(localized: "Essai converti : \(product)\(price)")
         case "RENEWAL": return String(localized: "Renouvelé : \(product)\(price)")
         case "NON_RENEWING_PURCHASE": return String(localized: "Achat unique : \(product)\(price)")
-        case "CANCELLATION": return String(localized: "Renouvellement automatique désactivé : \(product)")
-        case "UNCANCELLATION": return String(localized: "Renouvellement automatique réactivé : \(product)")
+        case "CANCELLATION": return isTrial == true ? String(localized: "Essai annulé : \(product)") : String(localized: "Renouvellement automatique désactivé : \(product)")
+        case "UNCANCELLATION": return String(localized: "Réabonné : \(product)")
+        case "REFUND_REQUESTED": return String(localized: "Demande de remboursement : \(product)")
+        case "REFUND_DECLINED": return String(localized: "Remboursement refusé par Apple : \(product)")
+        case "REFUND_REVERSED": return String(localized: "Remboursement annulé : \(product)")
         case "EXPIRATION": return String(localized: "Expiré : \(product)")
         case "BILLING_ISSUE": return String(localized: "Problème de paiement : \(product)")
         case "BILLING_RECOVERED": return String(localized: "Paiement récupéré : \(product)")
@@ -995,6 +1009,8 @@ extension FeedEvent {
         case "EXPIRATION": return "clock.badge.xmark"
         case "BILLING_ISSUE": return "exclamationmark.triangle.fill"
         case "REFUND", "REVOKED": return "arrow.uturn.backward.circle.fill"
+        case "REFUND_REQUESTED": return "exclamationmark.bubble.fill"
+        case "REFUND_DECLINED", "REFUND_REVERSED": return "checkmark.shield.fill"
         case "PRODUCT_CHANGE": return "arrow.left.arrow.right"
         case "PAUSED": return "pause.circle"
         case "GRANT": return "gift.fill"
@@ -1020,8 +1036,11 @@ struct LiveSettingsView: View {
     @AppStorage(AppTheme.storageKey) private var themeRaw = AppTheme.system.rawValue
     @State private var language = AppLanguage.current
     @State private var languageChanged = false
+    @State private var showFeedback = false
     @State private var confirmDelete = false
     @State private var deleting = false
+    @State private var deleteError: String?
+    @State private var showDemoInfo = false
 
     var body: some View {
         NavigationStack {
@@ -1111,11 +1130,9 @@ struct LiveSettingsView: View {
                         Button { dismiss(); HomeTutorial.shared.requestReplay() } label: { SettingsRow(icon: "hand.tap.fill", title: String(localized: "Revoir le tutoriel")) }.settingsRowButton()
                         SettingsRowDivider()
                     }
-                    link("Envoyer un avis…", "exclamationmark.bubble.fill", "mailto:amine.ennasri.pro@gmail.com?subject=MoneyMaker%20-%20avis")
+                    Button { showFeedback = true } label: { SettingsRow(icon: "bubble.left.and.text.bubble.right.fill", title: String(localized: "Donner mon avis")) }.settingsRowButton()
                     SettingsRowDivider()
                     Button { requestReview() } label: { SettingsRow(icon: "star.fill", title: String(localized: "Noter l'app"), trailing: .external) }.settingsRowButton()
-                    SettingsRowDivider()
-                    link("Dashboard web", "safari.fill", "https://usemoneymaker.com")
                 }
                 .padding(.bottom, 14)
                 SettingsCard {
@@ -1130,8 +1147,8 @@ struct LiveSettingsView: View {
                     SettingsDestructiveButton(title: String(localized: "Se déconnecter"), icon: "rectangle.portrait.and.arrow.right") {
                         dismiss(); store.signOut()
                     }
-                    Button { confirmDelete = true } label: {
-                        Text((deleting ? "Suppression…" : "Supprimer mon compte") as LocalizedStringKey).font(V2Font.system(size: 14)).foregroundStyle(SettingsTheme.valueTint)
+                    Button { if store.isDemo { showDemoInfo = true } else { confirmDelete = true } } label: {
+                        Text((deleting ? "Suppression…" : store.isDemo ? "Quitter la démo" : "Supprimer mon compte") as LocalizedStringKey).font(V2Font.system(size: 14)).foregroundStyle(SettingsTheme.valueTint)
                     }
                     .disabled(deleting)
                 }
@@ -1144,11 +1161,11 @@ struct LiveSettingsView: View {
                     Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel("Fermer")
                 }
             }
+            .sheet(isPresented: $showFeedback) { FeedbackSheet(client: store.client) }
             .alert("Langue modifiée", isPresented: $languageChanged) {
-                Button("Relancer maintenant") { exit(0) }
-                Button("Plus tard", role: .cancel) {}
+                Button("OK", role: .cancel) {}
             } message: {
-                Text("MoneyMaker doit redémarrer pour passer toute l'app dans la nouvelle langue.")
+                Text("La langue sera appliquée au prochain lancement de l'app.")
             }
             .task { await push.refreshAuthorization() }
             .onChange(of: currency) { _, _ in Task { await store.reformat() } }
@@ -1170,14 +1187,31 @@ struct LiveSettingsView: View {
                 deleting = true
                 Task {
                     struct R: Decodable { let ok: Bool }
-                    let r: R? = try? await store.client.send("DELETE", "account", body: ["confirm": "SUPPRIMER"])
-                    deleting = false
-                    if r?.ok == true { dismiss(); store.signOut() } else { push.lastError = String(localized: "La suppression a échoué, réessaie.") }
+                    do {
+                        let r: R = try await store.client.send("DELETE", "account", body: ["confirm": "SUPPRIMER"])
+                        deleting = false
+                        if r.ok { dismiss(); store.signOut() } else { deleteError = String(localized: "La suppression a échoué, réessaie.") }
+                    } catch {
+                        deleting = false
+                        // Message du serveur (démo en lecture seule, rôle…) ou motif réseau (hors ligne).
+                        deleteError = error.localizedDescription
+                    }
                 }
             }
             Button("Annuler", role: .cancel) {}
         } message: {
             Text("Ton compte, tes jetons et les business dont tu es le seul membre (données de ventes, clés, réglages) seront supprimés. C'est irréversible.")
+        }
+        .alert("Suppression impossible", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+            Button("OK", role: .cancel) { deleteError = nil }
+        } message: {
+            Text(deleteError ?? "")
+        }
+        .alert("Mode démo", isPresented: $showDemoInfo) {
+            Button("Se déconnecter de la démo", role: .destructive) { dismiss(); store.signOut() }
+            Button("Annuler", role: .cancel) {}
+        } message: {
+            Text("La démo n'a pas de compte à supprimer. Pour en sortir, déconnecte-toi simplement de la démo.")
         }
     }
 
@@ -1251,6 +1285,18 @@ struct ProSettingsSection: View {
     @State private var showPaywall = false
 
     var body: some View {
+        if ProPaywall.freeLaunch {
+            SettingsSectionTitle(title: "MoneyMaker")
+            SettingsCard {
+                SettingsRow(icon: "gift.fill", title: String(localized: "Gratuit pendant le lancement : business illimités"), trailing: .none)
+            }
+            SettingsFootnote(text: String(localized: "Pendant le lancement, tout MoneyMaker est gratuit : business illimités et toutes les fonctions."))
+        } else {
+            proSections
+        }
+    }
+
+    @ViewBuilder private var proSections: some View {
         if let status = paywall.status, status.tester == true {
             SettingsSectionTitle(title: String(localized: "Mode test"))
             SettingsCard {

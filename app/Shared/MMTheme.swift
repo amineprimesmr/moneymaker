@@ -348,8 +348,9 @@ enum DayKeys {
 }
 
 /// Revenu par jour (clé `yyyy-MM-dd` UTC), du plus ancien au plus récent.
+/// Un jour où les remboursements dépassent les ventes compte pour zéro : jamais de barre ni de valeur négative.
 func dailySeries(_ byDay: [String: Int], days: Int) -> [MMPoint] {
-    DayKeys.last(days).map { MMPoint(date: $0.1, value: Double(byDay[$0.0] ?? 0) / 1e6) }
+    DayKeys.last(days).map { MMPoint(date: $0.1, value: Double(max(0, byDay[$0.0] ?? 0)) / 1e6) }
 }
 
 /// Variation de la seconde moitié de la série par rapport à la première.
