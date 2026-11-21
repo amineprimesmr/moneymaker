@@ -62,8 +62,8 @@ struct ProjectSummary: Codable, Identifiable, Hashable {
     var refundsByDay: [String: Int]? = nil
     var id: String { projectId }
 
-    /// Revenu affiché en titre : ventes brutes, jamais négatives.
-    var grossRevenueMicros: Int { max(0, revenueMicros ?? netRevenueMicros) }
+    /// Revenu affiché en titre : solde net (ventes − remboursements), négatif si les remboursements dépassent les ventes.
+    var shownRevenueMicros: Int { netRevenueMicros }
     var refundNote: String? { refundsNote(refundsMicros, currency) }
 }
 
@@ -109,8 +109,8 @@ struct Overview: Codable, Hashable {
     /// "apple", "live" ou "mixed" (voir ProjectSummary.downloadsSource).
     var downloadsSource: String? = nil
 
-    /// Revenu affiché en titre : ventes brutes, jamais négatives.
-    var grossRevenueMicros: Int { max(0, revenueMicros) }
+    /// Revenu affiché en titre : solde net (ventes − remboursements), peut être négatif.
+    var shownRevenueMicros: Int { netRevenueMicros ?? (revenueMicros - (refundsMicros ?? 0)) }
     /// Téléchargements comptés en direct (au moins un business suit les installations par le SDK).
     var downloadsLive: Bool { downloadsSource == "live" || downloadsSource == "mixed" || projects.contains { $0.downloadsSource == "live" || $0.downloadsSource == "mixed" } }
     /// Téléchargements par jour, tous business confondus.

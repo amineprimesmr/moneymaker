@@ -39,9 +39,9 @@ struct Today: Codable, Hashable {
     let generatedAt: Double?
 
     var netMicros: Int { revenueMicros - refundsMicros }
-    /// Chiffre affiché en titre : ventes brutes du jour, jamais négatives (les remboursements
-    /// s'affichent à part, sur une ligne discrète).
-    var grossMicros: Int { max(0, revenueMicros) }
+    /// Chiffre affiché en titre : solde net du jour (ventes − remboursements), négatif si les
+    /// remboursements dépassent les ventes. Le détail des remboursements reste sur une ligne à part.
+    var shownMicros: Int { revenueMicros - refundsMicros }
     /// « −12 € remboursé », seulement s'il y a eu des remboursements aujourd'hui.
     var refundNote: String? {
         refundsNote(refundsMicros, currency)
@@ -362,7 +362,7 @@ struct RevenueActivityAttributes: ActivityAttributes {
 
         init(today t: Today) {
             // Ventes brutes du jour, comme le serveur (jamais un total négatif sur l'écran verrouillé).
-            revenueMicros = t.grossMicros; currency = t.currency; sales = t.transactions; trials = t.trials
+            revenueMicros = t.shownMicros; currency = t.currency; sales = t.transactions; trials = t.trials
             lastProject = t.last?.projectName; lastAmountMicros = t.last?.amountMicros ?? 0; lastCurrency = t.last?.currency ?? t.currency; lastCountry = t.last?.country
             lastSaleAt = t.last.map { Int($0.at / 1000) }
             hourly = t.hourly.map { Double($0) / 1e6 }; updatedAt = Int(Date().timeIntervalSince1970)

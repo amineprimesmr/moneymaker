@@ -30,7 +30,7 @@ struct RevenueCard: View {
         let isToday = store.period == 0
         let pts = isToday ? todayPoints(store.today) : dailySeries(o?.revenueByDay ?? [:], days: store.periodDays)
         let point = selected.flatMap { d in pts.min { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) } }
-        let total: Int? = isToday ? store.today?.grossMicros : o?.grossRevenueMicros
+        let total: Int? = isToday ? store.today?.shownMicros : o?.shownRevenueMicros
         MMCard(padding: 20, glow: MMColor.accent) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {

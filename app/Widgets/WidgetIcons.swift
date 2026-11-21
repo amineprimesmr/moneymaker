@@ -46,7 +46,7 @@ enum WIconCache {
 
     /// Logos des business d'un aperçu (classés par revenu).
     static func load(top overview: Overview?) async -> WIcons {
-        let ids = (overview?.projects ?? []).sorted { $0.grossRevenueMicros > $1.grossRevenueMicros }.map(\.projectId)
+        let ids = (overview?.projects ?? []).sorted { $0.shownRevenueMicros > $1.shownRevenueMicros }.map(\.projectId)
         return await load(ids, overview: overview)
     }
 

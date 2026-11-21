@@ -55,7 +55,7 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
     /// Valeur d'un business pour ce chiffre (micros pour l'argent).
     func value(_ p: ProjectSummary) -> Double {
         switch self {
-        case .today, .revenue: Double(p.grossRevenueMicros)
+        case .today, .revenue: Double(p.shownRevenueMicros)
         case .mrr: Double(p.mrrMicros)
         case .subscriptions: Double(p.activeSubscriptions)
         case .paying: Double(p.payingCustomers ?? p.activeSubscriptions)
@@ -67,9 +67,9 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
 
     func total(_ o: Overview, today: Today?) -> Double {
         switch self {
-        case .today: Double(today?.grossMicros ?? 0)
+        case .today: Double(today?.shownMicros ?? 0)
         case .mrr: Double(o.mrrMicros)
-        case .revenue: Double(o.grossRevenueMicros)
+        case .revenue: Double(o.shownRevenueMicros)
         case .subscriptions: Double(o.activeSubscriptions)
         case .paying: Double(o.payingCustomers ?? o.activeSubscriptions)
         case .trials: Double(o.activeTrials)
@@ -995,7 +995,7 @@ struct HomeTile: View, Equatable {
         case .revenue:
             let daily = dailySeries(o.mergedRevenueByDay, days: 14).map(\.value)
             let yesterday = daily.dropLast().last ?? 0
-            RecoveryWideTile(symbol: metric.symbol, title: title, value: o.grossRevenueMicros.money(o.currency, compact: true),
+            RecoveryWideTile(symbol: metric.symbol, title: title, value: o.shownRevenueMicros.money(o.currency, compact: true),
                              footerLead: String(localized: "Hier"), footerStrong: Int(yesterday * 1e6).money(o.currency, compact: true), dotsAnchor: .topTrailing,
                              note: o.refundNote) {
                 RecoveryVioletLine(values: daily, money: true)

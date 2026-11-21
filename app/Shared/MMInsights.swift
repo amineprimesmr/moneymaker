@@ -91,7 +91,7 @@ struct MMRecord: Hashable {
     init(today: Int, previousBest: Int) { self.today = today; self.previousBest = previousBest }
     init?(today t: Today?, history h: MMHistory?) {
         guard let t, let h else { return nil }
-        self.init(today: t.grossMicros, previousBest: h.bestPreviousDay)
+        self.init(today: t.shownMicros, previousBest: h.bestPreviousDay)
     }
 }
 
@@ -107,7 +107,7 @@ struct MMStreak: Hashable {
     init(history h: MMHistory, today: Today?) {
         let keys = DayKeys.last(365)
         var days = keys.map { (h.byDay[$0.0] ?? 0) > 0 }
-        if let t = today, t.transactions > 0 || t.grossMicros > 0 { days[days.count - 1] = true }
+        if let t = today, t.transactions > 0 || t.shownMicros > 0 { days[days.count - 1] = true }
         todayDone = days.last ?? false
         // Série en cours : aujourd'hui compte s'il y a déjà une vente, sinon on part d'hier (pas encore cassée).
         var c = 0
@@ -146,7 +146,7 @@ struct MMMonthProjection: Hashable {
         let dim = cal.range(of: .day, in: .month, for: now)?.count ?? 30
         let dayIndex = cal.component(.day, from: now) // 1…dim
         var daily: [Int] = (0..<dayIndex).map { h.byDay[f.string(from: start.addingTimeInterval(Double($0) * 86400))] ?? 0 }
-        if let t = today { daily[daily.count - 1] = max(daily[daily.count - 1], t.grossMicros) }
+        if let t = today { daily[daily.count - 1] = max(daily[daily.count - 1], t.shownMicros) }
         let soFar = daily.reduce(0, +)
         // Rythme : moyenne du mois pondérée avec les 7 derniers jours complets (60 % récents).
         let complete = Array(daily.dropLast())
@@ -231,7 +231,7 @@ extension Overview {
     /// Aperçu restreint à un seul business (les agrégats sont recalculés depuis ce business).
     func focused(on id: String?) -> Overview {
         guard let id, let p = projects.first(where: { $0.projectId == id }) else { return self }
-        return Overview(currency: p.currency, periodDays: periodDays, mrrMicros: p.mrrMicros, revenueMicros: p.grossRevenueMicros,
+        return Overview(currency: p.currency, periodDays: periodDays, mrrMicros: p.mrrMicros, revenueMicros: p.shownRevenueMicros,
                         activeSubscriptions: p.activeSubscriptions, activeTrials: p.activeTrials, newCustomers: p.newCustomers,
                         projects: [p], generatedAt: generatedAt, payingCustomers: p.payingCustomers ?? p.activeSubscriptions,
                         downloads: p.downloads, hasTrials: p.hasTrials, refundsMicros: p.refundsMicros, netRevenueMicros: p.netRevenueMicros)

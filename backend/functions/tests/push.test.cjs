@@ -69,7 +69,7 @@ test("today: local day start, hourly cumulative, refunds, sandbox ignored", () =
   assert.equal(t.hourly[0], 0); assert.equal(t.hourly[1], 10e6); assert.equal(t.hourly[3], 15e6); assert.equal(t.hourly[23], 15e6); // courbe des ventes : un remboursement ne la fait pas baisser
   assert.equal(t.last.amountMicros, 5e6);
   const s = liveActivityState(t);
-  assert.equal(s.revenueMicros, 15e6); assert.equal(s.sales, 2); // Live Activity : ventes du jour, jamais négatif assert.equal(s.hourly.length, 24); assert.equal(s.hourly[3], 15);
+  assert.equal(s.revenueMicros, 5e6); assert.equal(s.sales, 2); // Live Activity : solde net du jour (ventes − remboursements) assert.equal(s.hourly.length, 24); assert.equal(s.hourly[3], 15);
 });
 
 test("downloads: sales report parsing keeps first downloads of the app only", () => {

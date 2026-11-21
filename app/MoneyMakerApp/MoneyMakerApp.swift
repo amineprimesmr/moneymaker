@@ -200,7 +200,7 @@ final class Store: ObservableObject {
             } else {
                 let ps = m.viewProjects, dl = ps.compactMap(\.downloads)
                 m.scoped = Overview(currency: ps.first?.currency ?? o.currency, periodDays: o.periodDays,
-                                    mrrMicros: ps.reduce(0) { $0 + $1.mrrMicros }, revenueMicros: ps.reduce(0) { $0 + $1.grossRevenueMicros },
+                                    mrrMicros: ps.reduce(0) { $0 + $1.mrrMicros }, revenueMicros: ps.reduce(0) { $0 + $1.shownRevenueMicros },
                                     activeSubscriptions: ps.reduce(0) { $0 + $1.activeSubscriptions }, activeTrials: ps.reduce(0) { $0 + $1.activeTrials },
                                     newCustomers: ps.reduce(0) { $0 + $1.newCustomers }, projects: ps, generatedAt: o.generatedAt,
                                     payingCustomers: ps.reduce(0) { $0 + ($1.payingCustomers ?? 0) },

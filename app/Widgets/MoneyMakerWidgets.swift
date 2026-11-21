@@ -20,10 +20,10 @@ struct MRRSlice: Hashable {
     init?(_ o: Overview?, projectId: String?) {
         guard let o else { return nil }
         if let id = projectId, id != "*", let p = o.projects.first(where: { $0.projectId == id }) {
-            name = p.name; currency = p.currency; mrrMicros = p.mrrMicros; revenueMicros = p.grossRevenueMicros
+            name = p.name; currency = p.currency; mrrMicros = p.mrrMicros; revenueMicros = p.shownRevenueMicros
             subscribers = p.activeSubscriptions; trials = p.activeTrials; byDay = p.revenueByDay; projects = []; self.projectId = p.projectId
         } else {
-            name = String(localized: "Tous les business"); currency = o.currency; mrrMicros = o.mrrMicros; revenueMicros = o.grossRevenueMicros
+            name = String(localized: "Tous les business"); currency = o.currency; mrrMicros = o.mrrMicros; revenueMicros = o.shownRevenueMicros
             subscribers = o.activeSubscriptions; trials = o.activeTrials; byDay = o.revenueByDay; projects = o.projects
         }
     }
@@ -153,7 +153,7 @@ struct WidgetBody: View {
                     }
                     WHairline().padding(.vertical, 8)
                     HStack(alignment: .top) {
-                        WStat(label: String(localized: "Revenu 28 j"), value: max(0, o.revenueMicros).money(o.currency, compact: true), size: 16)
+                        WStat(label: String(localized: "Revenu 28 j"), value: o.revenueMicros.money(o.currency, compact: true), size: 16)
                         Spacer(minLength: 6)
                         WStat(label: String(localized: "Abonnés"), value: o.subscribers.formatted(), size: 16)
                         Spacer(minLength: 6)

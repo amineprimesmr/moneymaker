@@ -124,9 +124,9 @@ enum RCMetric: String, CaseIterable {
     func value(_ o: Overview, today t: Today?) -> String {
         switch self {
         case .trials: return o.activeTrials.formatted()
-        case .today: return (t?.grossMicros ?? 0).money(t?.currency ?? o.currency)
+        case .today: return (t?.shownMicros ?? 0).money(t?.currency ?? o.currency)
         case .mrr: return o.mrrMicros.money(o.currency)
-        case .revenue: return o.grossRevenueMicros.money(o.currency)
+        case .revenue: return o.shownRevenueMicros.money(o.currency)
         case .newCustomers: return o.newCustomers.formatted()
         case .activeCustomers: return (o.payingCustomers ?? o.activeSubscriptions).formatted()
         }

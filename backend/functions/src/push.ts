@@ -257,7 +257,7 @@ export async function todayFor(uid: string, tz: string, currency?: string, proje
 /** Live Activity content-state — mirrors `RevenueActivityAttributes.ContentState` in the app. */
 export function liveActivityState(t: Today) {
   return {
-    revenueMicros: t.revenueMicros, currency: t.currency, sales: t.sales + t.renewals, trials: t.trials, // ventes du jour (jamais négatif)
+    revenueMicros: t.revenueMicros - t.refundsMicros, currency: t.currency, sales: t.sales + t.renewals, trials: t.trials, // solde net du jour (ventes − remboursements)
     installs: t.installs ?? 0,
     lastProject: t.last?.projectName ?? null, lastAmountMicros: t.last?.amountMicros ?? 0, lastCurrency: t.last?.currency ?? t.currency, lastCountry: (t.last as any)?.country ?? null,
     lastSaleAt: t.last ? Math.floor(t.last.at / 1000) : null,
@@ -373,7 +373,7 @@ export async function pushEvent(project: Project, e: Record<string, any>): Promi
     const prefs = { ...DEFAULT_PREFS, ...d.prefs };
     const t = isRevenue && !e.isSandbox ? await today(d).catch(() => undefined) : undefined;
     const jobs: Promise<void>[] = [];
-    if (d.apnsToken && wants(prefs, project.id, e)) jobs.push(apnsSend(d.env, d.apnsToken, "alert", eventNotification(project, e, prefs, t ? t.revenueMicros : undefined, d.currency, normLang(d.lang), d.tz || "Europe/Paris"))
+    if (d.apnsToken && wants(prefs, project.id, e)) jobs.push(apnsSend(d.env, d.apnsToken, "alert", eventNotification(project, e, prefs, t ? t.revenueMicros - t.refundsMicros : undefined, d.currency, normLang(d.lang), d.tz || "Europe/Paris"))
       .then(async r => { r.status === 200 ? stats.alerts++ : stats.failed++; await prune(d, "apnsToken", r); }));
     if (isRevenue && !e.isSandbox) {
       if (d.widgetPushToken) jobs.push(apnsSend(d.env, d.widgetPushToken, "widgets", { aps: { "content-changed": true } })
@@ -447,7 +447,7 @@ export async function sendDailySummaries(now = Date.now()): Promise<number> {
     const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: d.tz, hour: "numeric", hourCycle: "h23" }).format(new Date(now)));
     if (hour !== 21 || !d.apnsToken) return;
     const t = await todayFor(uid, d.tz, d.currency);
-    const net = t.revenueMicros; // ventes du jour (les remboursements ne rendent jamais le résumé négatif)
+    const net = t.revenueMicros - t.refundsMicros; // solde net du jour (ventes − remboursements)
     const { title, body } = dailySummaryText(normLang(d.lang), t, net, t.currency);
     const r = await apnsSend(d.env, d.apnsToken, "alert", {
       aps: { alert: { title, body }, "thread-id": "daily", "interruption-level": "passive", category: "SUMMARY" },

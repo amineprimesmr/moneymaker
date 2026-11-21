@@ -45,7 +45,7 @@ struct TodayEntry: TimelineEntry {
 
     var goalProgress: Double? {
         guard let g = goalMicros, g > 0, let t = today else { return nil }
-        return Double(t.grossMicros) / Double(g)
+        return Double(max(0, t.shownMicros)) / Double(g)
     }
 }
 
@@ -102,7 +102,7 @@ struct TodayWidgetView: View {
         if !entry.signedIn {
             SignedOutView()
         } else if let t = entry.today {
-            let net = t.grossMicros.money(t.currency, compact: true)
+            let net = t.shownMicros.money(t.currency, compact: true)
             let curve = todayValues(t, now: entry.date)
             switch family {
             case .accessoryInline:
@@ -124,7 +124,7 @@ struct TodayWidgetView: View {
             case .accessoryRectangular:
                 VStack(alignment: .leading, spacing: 1) {
                     Image(systemName: isRecord ? "trophy.fill" : "sun.max.fill").font(.system(size: 11, weight: .semibold)).widgetAccentable()
-                    Text(t.grossMicros.money(t.currency)).font(.system(size: 19, weight: .medium)).minimumScaleFactor(0.6).lineLimit(1)
+                    Text(t.shownMicros.money(t.currency)).font(.system(size: 19, weight: .medium)).minimumScaleFactor(0.6).lineLimit(1)
                     HStack(spacing: 6) {
                         Text("\(t.transactions) ventes").font(.system(size: 11)).foregroundStyle(.secondary).fixedSize()
                         if let p = entry.goalProgress { ProgressView(value: min(1, p)).widgetAccentable() }
@@ -138,7 +138,7 @@ struct TodayWidgetView: View {
                         WLiveToggle(on: entry.liveOn).padding(.top, -4)
                     }
                     HStack(alignment: .center, spacing: 6) {
-                        WValue(text: net, size: 30, numeric: Double(t.grossMicros))
+                        WValue(text: net, size: 30, numeric: Double(t.shownMicros))
                         if let p = entry.goalProgress { Spacer(minLength: 0); WRing(progress: p, lineWidth: 2.6).frame(width: 20, height: 20) }
                     }
                     .padding(.top, 4)
@@ -182,7 +182,7 @@ struct TodayWidgetView: View {
                                     .frame(width: 30, height: 30)
                                     .accessibilityLabel(Text("Objectif \(g.money(t.currency, compact: true))"))
                                 }
-                                WValue(text: t.grossMicros.money(t.currency), size: 32, numeric: Double(t.grossMicros))
+                                WValue(text: t.shownMicros.money(t.currency), size: 32, numeric: Double(t.shownMicros))
                             }
                             HStack(spacing: 14) {
                                 WStat(label: String(localized: "ventes"), value: "\(t.sales)", size: 15)
@@ -274,7 +274,7 @@ struct FeedWidgetView: View {
         if !entry.signedIn { SignedOutView() } else {
             let rows = Array(entry.events.prefix(family == .systemLarge ? 7 : 3))
             VStack(alignment: .leading, spacing: 0) {
-                WHeader(trailing: entry.today.map { $0.grossMicros.money($0.currency, compact: true) }, live: true)
+                WHeader(trailing: entry.today.map { $0.shownMicros.money($0.currency, compact: true) }, live: true)
                     .padding(.bottom, 4)
                 if rows.isEmpty {
                     Spacer()
@@ -350,7 +350,7 @@ struct LiveMoment {
     init(_ s: RevenueActivityAttributes.ContentState, now: Date = .now) {
         let x = MMLiveExtras.current
         let sameDay = x?.dayKey == DayKeys.last(1).first?.0
-        goalProgress = x?.goalMicros.flatMap { $0 > 0 ? Double(max(0, s.revenueMicros)) / Double($0) : nil }
+        goalProgress = x?.goalMicros.flatMap { $0 > 0 ? Double(s.revenueMicros) / Double($0) : nil }
         record = (sameDay && (x?.bestDayMicros ?? 0) > 0) ? MMRecord(today: s.revenueMicros, previousBest: x!.bestDayMicros) : nil
         saleDate = s.lastSaleAt.map { Date(timeIntervalSince1970: Double($0)) }
         freshSale = s.lastAmountMicros > 0 && (saleDate.map { now.timeIntervalSince($0) < 8 } ?? false)
@@ -381,8 +381,8 @@ struct RevenueLiveActivity: Widget {
                         } else {
                             Text("AUJOURD'HUI").font(MMFont.system(9, .medium)).tracking(1.6).foregroundStyle(.white.opacity(0.4))
                         }
-                        Text(max(0, s.revenueMicros).money(s.currency)).font(MMFont.number(26)).tracking(-0.7).foregroundStyle(.white)
-                            .contentTransition(.numericText(value: Double(max(0, s.revenueMicros)))).minimumScaleFactor(0.6).lineLimit(1)
+                        Text(s.revenueMicros.money(s.currency)).font(MMFont.number(26)).tracking(-0.7).foregroundStyle(.white)
+                            .contentTransition(.numericText(value: Double(s.revenueMicros))).minimumScaleFactor(0.6).lineLimit(1)
                     }
                     .padding(.leading, 6).padding(.top, 2)
                 }
@@ -412,15 +412,15 @@ struct RevenueLiveActivity: Widget {
                     LiveDot()
                 }
             } compactTrailing: {
-                Text(max(0, s.revenueMicros).money(s.currency, compact: true))
+                Text(s.revenueMicros.money(s.currency, compact: true))
                     .font(MMFont.number(14, .regular)).foregroundStyle(m.isRecord ? WTone.gold : .white)
-                    .contentTransition(.numericText(value: Double(max(0, s.revenueMicros))))
+                    .contentTransition(.numericText(value: Double(s.revenueMicros)))
                     .lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: 72)
             } minimal: {
-                Text(max(0, s.revenueMicros).money(s.currency, compact: true))
+                Text(s.revenueMicros.money(s.currency, compact: true))
                     .font(MMFont.number(11, .regular)).foregroundStyle(.white)
                     .lineLimit(1).minimumScaleFactor(0.5)
-                    .contentTransition(.numericText(value: Double(max(0, s.revenueMicros))))
+                    .contentTransition(.numericText(value: Double(s.revenueMicros)))
             }
             .keylineTint(.clear)
             .widgetURL(URL(string: "moneymaker://today"))
@@ -492,8 +492,8 @@ struct LiveLockScreen: View {
             HStack(alignment: .bottom, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .center, spacing: 8) {
-                        Text(max(0, state.revenueMicros).money(state.currency)).font(MMFont.number(34)).tracking(-1).foregroundStyle(.white)
-                            .contentTransition(.numericText(value: Double(max(0, state.revenueMicros)))).minimumScaleFactor(0.6).lineLimit(1)
+                        Text(state.revenueMicros.money(state.currency)).font(MMFont.number(34)).tracking(-1).foregroundStyle(.white)
+                            .contentTransition(.numericText(value: Double(state.revenueMicros))).minimumScaleFactor(0.6).lineLimit(1)
                         if let p = m.goalProgress { WRing(progress: p, lineWidth: 2.6, track: .white.opacity(0.14)).frame(width: 20, height: 20) }
                     }
                     Text("\(state.sales) ventes · \(state.trials) essais").font(MMFont.system(12)).foregroundStyle(.white.opacity(0.55))

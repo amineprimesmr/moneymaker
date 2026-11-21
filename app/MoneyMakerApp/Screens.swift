@@ -520,7 +520,7 @@ struct OverviewView: View {
 
     private func stats(_ o: Overview) -> some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
-            StatTile(icon: "eurosign", title: o.periodStart != nil ? String(localized: "Revenu de \(CalendarMonth.name)") : String(localized: "Revenu \(o.periodDays) j"), value: o.grossRevenueMicros.money(o.currency, compact: true))
+            StatTile(icon: "eurosign", title: o.periodStart != nil ? String(localized: "Revenu de \(CalendarMonth.name)") : String(localized: "Revenu \(o.periodDays) j"), value: o.shownRevenueMicros.money(o.currency, compact: true))
             StatTile(icon: "creditcard", title: String(localized: "Users payants"), value: (o.payingCustomers ?? o.activeSubscriptions).formatted())
             if let dl = o.downloads { StatTile(icon: "arrow.down.app", title: String(localized: "Téléchargements"), value: dl.formatted()) }
             if o.hasTrials ?? (o.activeTrials > 0) { StatTile(icon: "hourglass", title: String(localized: "Essais"), value: o.activeTrials.formatted()) }
@@ -639,7 +639,7 @@ struct ProjectView: View {
                 hero.mmAppear(1)
                 ProHealthCard(p: p).mmAppear(2)
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
-                    StatTile(icon: "eurosign", title: String(localized: "Revenu"), value: p.grossRevenueMicros.money(p.currency, compact: true))
+                    StatTile(icon: "eurosign", title: String(localized: "Revenu"), value: p.shownRevenueMicros.money(p.currency, compact: true))
                     StatTile(icon: "person.2", title: String(localized: "Abonnés"), value: "\(p.activeSubscriptions)")
                     StatTile(icon: "hourglass", title: String(localized: "Essais"), value: "\(p.activeTrials)")
                     StatTile(icon: "sparkle", title: String(localized: "Nouveaux"), value: "\(p.newCustomers)")

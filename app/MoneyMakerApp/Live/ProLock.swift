@@ -54,7 +54,7 @@ struct ProHealthCard: View {
     }
     private var revenuePerPayer: String {
         guard let n = p.payingCustomers, n > 0 else { return "—" }
-        return (p.grossRevenueMicros / n).money(p.currency)
+        return (p.shownRevenueMicros / n).money(p.currency)
     }
     private var installToPaid: Double? {
         guard let d = p.downloads, d > 0, let n = p.payingCustomers else { return nil }

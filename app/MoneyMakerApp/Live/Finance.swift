@@ -35,7 +35,7 @@ struct FinanceSettings: Codable, Hashable {
 }
 
 struct Waterfall: Codable, Hashable {
-    struct StoreLine: Codable, Hashable { let grossMicros: Int; let vatMicros: Int; let feesMicros: Int; let netMicros: Int }
+    struct StoreLine: Codable, Hashable { let shownMicros: Int; let vatMicros: Int; let feesMicros: Int; let netMicros: Int }
     struct Annual: Codable, Hashable { let netRevenueMicros: Int; let pocketMicros: Int }
     struct Preset: Codable, Hashable {
         let label: String; let note: String; var labelEn: String? = nil; var noteEn: String? = nil
@@ -44,7 +44,7 @@ struct Waterfall: Codable, Hashable {
     }
     let currency: String
     let days: Int
-    let grossMicros: Int
+    let shownMicros: Int
     let vatMicros: Int
     let storeFeesMicros: Int
     let paymentFeesMicros: Int
@@ -133,8 +133,8 @@ private struct NetCardContent: View, Equatable {
                             .font(MMFont.number(40, .light)).tracking(-1.2)
                             .lineLimit(1).minimumScaleFactor(0.5)
                             .contentTransition(.numericText(value: Double(w.pocketMicros)))
-                        if w.grossMicros > 0 {
-                            Text("\(Int((Double(w.pocketMicros) / Double(w.grossMicros) * 100).rounded())) % du brut")
+                        if w.shownMicros > 0 {
+                            Text("\(Int((Double(w.pocketMicros) / Double(w.shownMicros) * 100).rounded())) % du brut")
                                 .font(MMFont.system(12, .medium)).foregroundStyle(MMColor.ink3)
                         }
                     }
@@ -161,7 +161,7 @@ private struct NetCardContent: View, Equatable {
         let franchise = w.settings.vatFranchise ?? w.settings.structure.hasPrefix("micro")
         let micro = w.settings.structure.hasPrefix("micro")
         let rows: [(String, Int, Color, Bool, String)] = [
-            (String(localized: "Brut payé par les clients"), w.grossMicros, MMColor.ink, false, String(localized: "Ce que tes clients ont payé, toutes ventes confondues.")),
+            (String(localized: "Brut payé par les clients"), w.shownMicros, MMColor.ink, false, String(localized: "Ce que tes clients ont payé, toutes ventes confondues.")),
             (franchise ? String(localized: "TVA collectée par les stores") : String(localized: "TVA et taxes"), -w.vatMicros, MMColor.ink3, true,
              franchise ? String(localized: "Les stores prélèvent la TVA du pays du client avant de te payer. Sur Stripe, en franchise, tu n'en factures pas.")
                        : String(localized: "TVA comprise dans tes prix : collectée par les stores, à reverser toi-même pour Stripe.")),
@@ -195,7 +195,7 @@ private struct NetCardContent: View, Equatable {
                 .font(MMFont.system(11)).foregroundStyle(MMColor.ink3).padding(.top, 6)
             if !w.byStore.isEmpty {
                 HStack(spacing: 8) {
-                    ForEach(w.byStore.sorted { $0.value.grossMicros > $1.value.grossMicros }, id: \.key) { k, v in
+                    ForEach(w.byStore.sorted { $0.value.shownMicros > $1.value.shownMicros }, id: \.key) { k, v in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(storeName(k)).font(MMFont.system(10, .medium)).foregroundStyle(MMColor.ink3)
                             Text(v.netMicros.money(w.currency, compact: true)).font(MMFont.number(13, .regular)).mmNumeric()
@@ -218,7 +218,7 @@ private struct NetCardContent: View, Equatable {
 private struct WaterfallBar: View {
     let w: Waterfall
     var body: some View {
-        let total = max(Double(w.grossMicros), 1)
+        let total = max(Double(w.shownMicros), 1)
         let parts: [(Double, Color)] = [
             (Double(w.pocketMicros), MMColor.accent),
             (Double(w.dividendTaxMicros + w.corporateTaxMicros + w.socialMicros), MMColor.red),

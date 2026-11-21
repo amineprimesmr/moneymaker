@@ -1171,5 +1171,7 @@
 "Premiers téléchargements sur la période. En direct : chaque première ouverture de l'app (SDK MoneyMaker) compte tout de suite, puis les chiffres officiels d'Apple remplacent ces jours-là dès qu'ils sont publiés (sous 48 h).": "First-time downloads over the period. Live: every first app open (MoneyMaker SDK) counts right away, then Apple's official figures replace those days as soon as they are published (within 48 h).",
 "En direct": "Live",
 "Chiffres Apple": "Apple figures",
-"En direct · {0} aujourd'hui": "Live · {0} today"
+"En direct · {0} aujourd'hui": "Live · {0} today",
+"Depuis minuit": "Since midnight",
+"Depuis minuit · {0}": "Since midnight · {0}"
 }
