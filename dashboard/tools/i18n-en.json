@@ -1167,5 +1167,9 @@
 "73 outils au total (44 en lecture, 29 en modification).": "73 tools in total (44 read, 29 write).",
 "Abonnés qui n'ouvrent plus l'app : leurs renouvellements sont rattachés automatiquement au bon compte dès qu'ils rouvrent l'app. Pour voir tout de suite leurs accès et leur historique, lance l'import RevenueCat (Connexions → RevenueCat, avec ta clé secrète RevenueCat).": "Subscribers who no longer open the app: their renewals are linked to the right account automatically as soon as they reopen the app. To see their access and history right away, run the RevenueCat import (Connections → RevenueCat, with your RevenueCat secret key).",
 "MoneyMaker est un service hébergé : rien à installer ni à héberger. Il est gratuit pendant le lancement, business illimités, et ne prend aucune commission sur tes ventes.": "MoneyMaker is a hosted service: nothing to install or host. It is free during launch, with unlimited businesses, and takes no commission on your sales.",
-"Référence de l'API et des SDK MoneyMaker (iOS, Android, Flutter, React Native) : abonnements App Store, Google Play et Stripe.": "MoneyMaker API and SDK reference (iOS, Android, Flutter, React Native): App Store, Google Play and Stripe subscriptions."
+"Référence de l'API et des SDK MoneyMaker (iOS, Android, Flutter, React Native) : abonnements App Store, Google Play et Stripe.": "MoneyMaker API and SDK reference (iOS, Android, Flutter, React Native): App Store, Google Play and Stripe subscriptions.",
+"Premiers téléchargements sur la période. En direct : chaque première ouverture de l'app (SDK MoneyMaker) compte tout de suite, puis les chiffres officiels d'Apple remplacent ces jours-là dès qu'ils sont publiés (sous 48 h).": "First-time downloads over the period. Live: every first app open (MoneyMaker SDK) counts right away, then Apple's official figures replace those days as soon as they are published (within 48 h).",
+"En direct": "Live",
+"Chiffres Apple": "Apple figures",
+"En direct · {0} aujourd'hui": "Live · {0} today"
 }

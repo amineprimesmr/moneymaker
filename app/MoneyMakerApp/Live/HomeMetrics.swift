@@ -92,13 +92,18 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
 
     func caption(_ o: Overview, today: Today?) -> String? {
         switch self {
-        case .today: today.map { String(localized: "\($0.transactions) ventes · \($0.newSubscribers) nouveaux abonnés") }
+        case .today: today.map { t in
+            let base = String(localized: "\(t.transactions) ventes · \(t.newSubscribers) nouveaux abonnés")
+            guard let i = t.installs, i > 0 else { return base }
+            return base + " · " + String(localized: "\(i) téléchargements")
+        }
         case .mrr: "ARR \((o.mrrMicros * 12).money(o.currency, compact: true))"
         case .revenue: String(localized: "\(o.projects.count) business")
         case .subscriptions: String(localized: "\(o.activeTrials) essais en plus")
         case .paying: String(localized: "\(o.projects.count) business")
         case .trials: conversion(o).map { String(localized: "Conversion \(Int(($0 * 100).rounded()))%") }
         case .downloads: o.downloads == nil ? HomeMetric.downloadsPending
+            : o.downloadsLive ? String(localized: "En direct · \(today?.installs ?? 0) aujourd'hui")
             : o.periodStart != nil ? String(localized: "Depuis le 1er \(CalendarMonth.name)") : String(localized: "\(o.periodDays) derniers jours")
         case .newCustomers: o.periodStart != nil ? String(localized: "Depuis le 1er \(CalendarMonth.name)") : String(localized: "\(o.periodDays) derniers jours")
         }
@@ -147,7 +152,7 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
         case .subscriptions: String(localized: "Abonnements en cours et renouvelés, hors essais gratuits.")
         case .paying: String(localized: "Clients qui paient en ce moment : abonnés actifs et achats encore valables. Les nouveaux clients sont ceux qui ont payé pour la première fois sur la période.")
         case .trials: String(localized: "Essais gratuits en cours, qui deviendront des abonnements s'ils sont convertis.")
-        case .downloads: String(localized: "Premiers téléchargements sur la période, d'après les stores.")
+        case .downloads: String(localized: "Premiers téléchargements sur la période. En direct : chaque première ouverture de l'app (SDK MoneyMaker) compte tout de suite, puis les chiffres officiels d'Apple remplacent ces jours-là dès qu'ils sont publiés (sous 48 h).")
         case .newCustomers: String(localized: "Clients qui ont payé pour la première fois sur la période.")
         }
     }
@@ -513,6 +518,10 @@ struct HomeMetricDetail: View {
             let start = Date(timeIntervalSince1970: t.dayStart / 1000)
             return t.hourly.enumerated().map { MMPoint(date: start.addingTimeInterval(Double($0.offset) * 3600), value: Double($0.element) / 1e6) }
         }
+        if metric == .downloads {
+            // Nombre de téléchargements par jour (pas un montant).
+            return dailySeries((o?.mergedDownloadsByDay ?? [:]).mapValues { $0 * 1_000_000 }, days: range.days)
+        }
         let byDay = history.revenueByDay(store.viewIds) ?? o?.mergedRevenueByDay ?? [:]
         let daily = dailySeries(byDay, days: range.days)
         // MRR : cumul sur la période (la tendance) ; le reste : revenu jour par jour.
@@ -525,6 +534,7 @@ struct HomeMetricDetail: View {
         switch metric {
         case .today, .mrr, .subscriptions, .paying, .trials: return metric.format(metric.total(o, today: store.today), o)
         case .downloads where o.downloads == nil: return "—"
+        case .downloads: return Int(pts.reduce(0) { $0 + $1.value }.rounded()).formatted()
         default: return Int(pts.reduce(0) { $0 + $1.value } * 1e6).money(o.currency)
         }
     }

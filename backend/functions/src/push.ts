@@ -10,7 +10,7 @@
 
 import { connect, ClientHttp2Session, constants } from "http2";
 import { createPrivateKey, sign, KeyObject } from "crypto";
-import { db, Project } from "./store";
+import { db, Project, installsSince } from "./store";
 import { convertMicros, readableProductId } from "./engine";
 import { Lang, normLang, money, EVENT_TITLES, eventHint, periodLabel, todayLine, lateSaleLine, todayLabel, liveActivityStart, RANK_TITLES, CHART_NAMES, categoryLabel, previousRank, dailySummaryText } from "./i18n";
 
@@ -191,6 +191,7 @@ export interface Today {
   currency: string; tz: string; dayStart: number;
   revenueMicros: number; refundsMicros: number; sales: number; renewals: number; trials: number; newSubscribers: number;
   hourly: number[];             // cumulative net revenue per local hour, 24 values
+  installs?: number;            // installations du jour vues par le SDK (téléchargements en direct)
   last?: { projectName: string; amountMicros: number; currency: string; productId?: string; country?: string | null; at: number };
 }
 
@@ -249,13 +250,15 @@ export async function todayFor(uid: string, tz: string, currency?: string, proje
     ]);
     return { projectName: String(p.get("name") ?? ""), tx: tx.docs.map(d => d.data() as any), events: ev.docs.map(d => d.data() as any) };
   }));
-  return foldToday(rows, cur, tz, dayStart);
+  const installs = await Promise.all(docs.map(p => installsSince(p.id, dayStart).catch(() => 0)));
+  return { ...foldToday(rows, cur, tz, dayStart), installs: installs.reduce((a, b) => a + b, 0) };
 }
 
 /** Live Activity content-state — mirrors `RevenueActivityAttributes.ContentState` in the app. */
 export function liveActivityState(t: Today) {
   return {
     revenueMicros: t.revenueMicros, currency: t.currency, sales: t.sales + t.renewals, trials: t.trials, // ventes du jour (jamais négatif)
+    installs: t.installs ?? 0,
     lastProject: t.last?.projectName ?? null, lastAmountMicros: t.last?.amountMicros ?? 0, lastCurrency: t.last?.currency ?? t.currency, lastCountry: (t.last as any)?.country ?? null,
     lastSaleAt: t.last ? Math.floor(t.last.at / 1000) : null,
     hourly: t.hourly.map(v => Math.round(v / 10000) / 100), updatedAt: Math.floor(Date.now() / 1000),

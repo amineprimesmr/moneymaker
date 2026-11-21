@@ -205,7 +205,8 @@ final class Store: ObservableObject {
                                     newCustomers: ps.reduce(0) { $0 + $1.newCustomers }, projects: ps, generatedAt: o.generatedAt,
                                     payingCustomers: ps.reduce(0) { $0 + ($1.payingCustomers ?? 0) },
                                     downloads: dl.isEmpty ? nil : dl.reduce(0, +), hasTrials: ps.contains { $0.hasTrials ?? ($0.activeTrials > 0) }, periodStart: o.periodStart,
-                                    refundsMicros: ps.reduce(0) { $0 + ($1.refundsMicros ?? 0) }, netRevenueMicros: ps.reduce(0) { $0 + $1.netRevenueMicros })
+                                    refundsMicros: ps.reduce(0) { $0 + ($1.refundsMicros ?? 0) }, netRevenueMicros: ps.reduce(0) { $0 + $1.netRevenueMicros },
+                                    downloadsSource: ps.contains { $0.downloadsSource == "live" || $0.downloadsSource == "mixed" } ? "live" : ps.compactMap(\.downloadsSource).first)
             }
         }
         // Seulement nos apps : les concurrents suivis (ex. Whoop) n'apparaissent jamais dans l'Accueil.

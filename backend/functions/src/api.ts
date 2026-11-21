@@ -6,7 +6,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { HttpError, cleanId, Purchase, convertMicros, readableProductId } from "./engine";
 import type { Credentials } from "./store";
 import {
-  db, getProject, createProject, customerInfo, mergeCustomers, isAnonymousId, touchCustomer, resolveKey, issueKey, revokeProjectKeys, revokeKeysIssuedBy,
+  db, getProject, createProject, customerInfo, mergeCustomers, isAnonymousId, touchCustomer, sdkPlatform, installsSince, resolveKey, issueKey, revokeProjectKeys, revokeKeysIssuedBy,
   upsertPurchase, lookupIndex, accountUUID, Project, ProjectConfig, getCredentials, KeyRecord, DEFAULT_CONFIG, CustomerCenterConfig,
 } from "./store";
 import { ingestAppleTransaction, ingestAppleNotification } from "./apple";
@@ -382,10 +382,13 @@ route("POST", "/v1/customers/:id/customer-center/feedback", async (req, _res, [i
   return { ok: true, id: ref.id };
 });
 
+/** Appel du SDK depuis l'app : un premier passage compte comme une installation (sauf clé de test). */
+const sdkInstall = (req: any) => ({ install: !/^Bearer\s+mm_test_/i.test(String(req.get("authorization") ?? "")), platform: sdkPlatform(req.get("x-platform"), req.get("user-agent")) });
+
 route("GET", "/v1/customers/:id", async (req, _res, [id]) => {
   const project = await clientProject(req);
   const appUserId = cleanId(decodeURIComponent(id));
-  await touchCustomer(project.id, appUserId);
+  await touchCustomer(project.id, appUserId, sdkInstall(req));
   return customerInfo(project, appUserId);
 });
 
@@ -630,6 +633,10 @@ route("GET", "/v1/overview", async req => {
     newCustomers: projects.reduce((a, p) => a + p.newCustomers, 0),
     payingCustomers: projects.reduce((a, p) => a + p.payingCustomers, 0),
     downloads: projects.some(p => p.downloads !== null) ? projects.reduce((a, p) => a + (p.downloads ?? 0), 0) : null,
+    // Téléchargements : Apple quand publié, sinon installations en direct vues par le SDK (voir mergeDownloads).
+    downloadsSource: ((s: Set<string>) => s.size === 0 ? null : s.size === 1 ? [...s][0] : "mixed")(new Set(projects.map(p => p.downloadsSource).filter(Boolean) as string[])),
+    downloadsByDay: projects.reduce((acc, p) => { for (const [d, n] of Object.entries(p.downloadsByDay ?? {})) acc[d] = (acc[d] ?? 0) + (n as number); return acc; }, {} as Record<string, number>),
+    installs: projects.reduce((a, p) => a + (p.installs ?? 0), 0),
     hasTrials: projects.some(p => p.hasTrials),
     // Montants de chaque business convertis dans la devise d'affichage : l'app peut les additionner sans mélanger € et $.
     projects: projects.map(({ history, revenueByDay, refundsByDay, downloadsByDay, ...p }) => { const cv = (m: number) => convertMicros(m, p.currency, currency);
@@ -640,6 +647,7 @@ route("GET", "/v1/overview", async req => {
       activeSubscriptions: p.activeSubscriptions, activeTrials: p.activeTrials, newCustomers: p.newCustomers, trialConversionRate: p.trialConversionRate,
       adRevenueMicros: p.adRevenueMicros == null ? p.adRevenueMicros : cv(p.adRevenueMicros), revenueInclAdsMicros: p.revenueInclAdsMicros == null ? p.revenueInclAdsMicros : cv(p.revenueInclAdsMicros),
       churnRate: p.churnRate, billingIssues: p.billingIssues, payingCustomers: p.payingCustomers, downloads: p.downloads,
+      downloadsSource: p.downloadsSource, installs: p.installs, installsByPlatform: p.installsByPlatform,
       hasTrials: p.hasTrials, revenueByCountry: cvMap(p.revenueByCountry), iconUrl: p.iconUrl, stores: p.stores, downloadsByDay, revenueByDay: cvMap(revenueByDay), refundsByDay: cvMap(refundsByDay),
     }; }),
     generatedAt: Date.now(),
@@ -935,7 +943,7 @@ const rcRoute = (method: string, path: string, h: Handler) => { route(method, `/
 rcRoute("GET", "/subscribers/:id", async (req, _res, [id]) => {
   const project = await rcProject(req);
   const appUserId = cleanId(decodeURIComponent(id));
-  await touchCustomer(project.id, appUserId);
+  await touchCustomer(project.id, appUserId, sdkInstall(req));
   return rcSubscriber(project, appUserId);
 });
 
@@ -964,7 +972,7 @@ rcRoute("POST", "/subscribers/:id/attributes", async (req, _res, [id]) => {
 
 rcRoute("GET", "/subscribers/:id/offerings", async (req, _res, [id]) => {
   const project = await rcProject(req);
-  await touchCustomer(project.id, cleanId(decodeURIComponent(id)));
+  await touchCustomer(project.id, cleanId(decodeURIComponent(id)), sdkInstall(req));
   const { current, offerings } = offeringsFor(project);
   const xp = String(req.get("x-platform") ?? "");
   const platform = /amazon/i.test(xp) ? "amazon" : /galaxy|samsung/i.test(xp) ? "galaxy" : /roku/i.test(xp) ? "roku" : /android/i.test(xp) ? "play_store" : /stripe|web/i.test(String(req.get("x-platform") ?? "")) ? "stripe" : "app_store";

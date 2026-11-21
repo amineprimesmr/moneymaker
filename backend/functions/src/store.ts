@@ -148,15 +148,64 @@ export function accountUUID(appUserId: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${((parseInt(h[16], 16) & 3) | 8).toString(16)}${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
-export async function touchCustomer(pid: string, appUserId: string) {
+/** Plateforme d'un appel SDK, d'après l'en-tête X-Platform puis le User-Agent. */
+export function sdkPlatform(xPlatform?: string, userAgent?: string): "ios" | "android" | "web" | "other" {
+  const s = `${xPlatform ?? ""} ${userAgent ?? ""}`.toLowerCase();
+  if (/android|amazon|galaxy|samsung|play_store/.test(s)) return "android";
+  if (/ios|iphone|ipad|ipados|macos|darwin|cfnetwork|watchos|tvos|visionos|app_store/.test(s)) return "ios";
+  if (/web|stripe|mozilla/.test(s)) return "web";
+  return "other";
+}
+
+/** Id créé par une boutique ou un paiement web, pas par l'ouverture de l'app. */
+export const isStoreOnlyId = (id: string) => /^\$(stripe|apple|google|paddle|amazon|roku|galaxy|web):/.test(id);
+
+/** Installation = premier passage d'un appareil dans le SDK (comme « New Customers » chez RevenueCat).
+ *  Compteur du jour (UTC) pour les graphiques ; `installAt` sur le client pour « aujourd'hui » dans le fuseau de l'utilisateur. */
+export async function recordInstall(pid: string, platform: string, at = Date.now()) {
+  const date = new Date(at).toISOString().slice(0, 10);
+  await db.doc(`projects/${pid}/installs/${date}`).set({
+    date, units: FieldValue.increment(1), byPlatform: { [platform]: FieldValue.increment(1) },
+    byHour: { [String(new Date(at).getUTCHours())]: FieldValue.increment(1) }, updatedAt: at,
+  }, { merge: true });
+}
+
+/** `install` : appel du SDK depuis l'app (pas une fusion d'identifiants, ni un paiement web). */
+export async function touchCustomer(pid: string, appUserId: string, ctx: { install?: boolean; platform?: string } = {}) {
   const ref = db.doc(`projects/${pid}/customers/${appUserId}`);
   const batch = db.batch();
   batch.set(ref, { appUserId, lastSeenAt: Date.now() }, { merge: true });
   batch.set(indexRef(pid, `acct:${accountUUID(appUserId)}`), { appUserId });
   batch.set(indexRef(pid, `acct:${sha256(appUserId)}`), { appUserId });
   await batch.commit();
-  const snap = await ref.get();
-  if (!snap.get("firstSeenAt")) await ref.set({ firstSeenAt: Date.now() }, { merge: true });
+  // Transaction : deux appels simultanés au premier lancement ne comptent qu'une installation.
+  const first = await db.runTransaction(async t => {
+    const snap = await t.get(ref);
+    if (snap.get("firstSeenAt")) return null;
+    const now = Date.now();
+    const install = !!ctx.install && !isStoreOnlyId(appUserId);
+    t.set(ref, { firstSeenAt: now, ...(install ? { installAt: now, platform: ctx.platform ?? "other" } : {}) }, { merge: true });
+    return install ? now : null;
+  });
+  if (first) await recordInstall(pid, ctx.platform ?? "other", first).catch(e => console.error("install", pid, e));
+}
+
+/** Installations depuis `since` (graphiques) ; jours UTC. */
+export async function installsFor(projectId: string, since: number) {
+  const snap = await db.collection(`projects/${projectId}/installs`).where("date", ">=", new Date(since).toISOString().slice(0, 10)).get();
+  const byDay: Record<string, number> = {}, byPlatform: Record<string, number> = {};
+  let total = 0;
+  for (const d of snap.docs) {
+    const x = d.data();
+    byDay[x.date] = x.units ?? 0; total += x.units ?? 0;
+    for (const [k, v] of Object.entries(x.byPlatform ?? {})) byPlatform[k] = (byPlatform[k] ?? 0) + (v as number);
+  }
+  return { total, byDay, byPlatform };
+}
+
+/** Installations depuis `since` à la milliseconde près (« aujourd'hui » dans le fuseau de l'utilisateur). */
+export async function installsSince(projectId: string, since: number): Promise<number> {
+  return (await db.collection(`projects/${projectId}/customers`).where("installAt", ">=", since).count().get()).data().count;
 }
 
 // ── Purchases ──────────────────────────────────────────────────────────────

@@ -33,6 +33,8 @@ struct Today: Codable, Hashable {
     /// Revenu cumulé par heure locale (24 valeurs, micros). Jamais négatif une fois décodé :
     /// un remboursement en début de journée ne fait pas plonger la courbe sous zéro.
     let hourly: [Int]
+    /// Téléchargements du jour, en direct (installations vues par le SDK). Absent d'un ancien serveur.
+    var installs: Int? = nil
     let last: Last?
     let generatedAt: Double?
 
@@ -77,6 +79,7 @@ extension Today {
         trials = try c.decodeIfPresent(Int.self, forKey: .trials) ?? 0
         newSubscribers = try c.decodeIfPresent(Int.self, forKey: .newSubscribers) ?? 0
         hourly = (try c.decodeIfPresent([Int].self, forKey: .hourly) ?? []).map { max(0, $0) }
+        installs = try c.decodeIfPresent(Int.self, forKey: .installs)
         last = try c.decodeIfPresent(Last.self, forKey: .last)
         generatedAt = try c.decodeIfPresent(Double.self, forKey: .generatedAt)
     }

@@ -37,6 +37,8 @@ function scopeOverview(o, ids = viewIds()) {
     ...o, projects, mrrMicros: sum(projects, p => p.mrrMicros), revenueMicros: sum(projects, p => p.revenueMicros ?? p.netRevenueMicros), refundsMicros: sum(projects, p => p.refundsMicros ?? 0),
     activeSubscriptions: sum(projects, p => p.activeSubscriptions), activeTrials: sum(projects, p => p.activeTrials), newCustomers: sum(projects, p => p.newCustomers),
     payingCustomers: sum(projects, p => p.payingCustomers ?? p.activeSubscriptions), downloads: anyDl ? sum(projects, p => p.downloads) : null, hasTrials: projects.some(p => p.hasTrials),
+    // Téléchargements en direct : installations vues par le SDK, en attendant les chiffres Apple (J+1 à J+2).
+    downloadsLive: projects.some(p => p.downloadsSource === "live" || p.downloadsSource === "mixed"),
   };
 }
 const mergedByDay = o => { const acc = {}; for (const p of o.projects) for (const [k, v] of Object.entries(p.revenueByDay ?? {})) acc[k] = (acc[k] ?? 0) + v; return acc; };
@@ -160,7 +162,7 @@ const METRICS = {
   subscriptions: { icon: "people", seed: 3, title: () => "Abonnés actifs", explain: "Abonnements en cours et renouvelés, hors essais gratuits." },
   paying: { icon: "card", seed: 4, title: () => "Utilisateurs payants", explain: "Clients qui paient en ce moment : abonnés actifs et achats encore valables. Les nouveaux clients sont ceux qui ont payé pour la première fois sur la période." },
   trials: { icon: "hourglass", seed: 5, title: () => "Essais en cours", explain: "Essais gratuits en cours, qui deviendront des abonnements s'ils sont convertis." },
-  downloads: { icon: "download", seed: 6, title: () => "Téléchargements", explain: "Premiers téléchargements sur la période, d'après les rapports App Store Connect. Ils arrivent sous 48 h après la connexion App Store Connect." },
+  downloads: { icon: "download", seed: 6, title: () => "Téléchargements", explain: "Premiers téléchargements sur la période. En direct : chaque première ouverture de l'app (SDK MoneyMaker) compte tout de suite, puis les chiffres officiels d'Apple remplacent ces jours-là dès qu'ils sont publiés (sous 48 h)." },
 };
 const payingOf = o => o.payingCustomers ?? o.activeSubscriptions;
 function metricRatio(k, o) {
@@ -331,7 +333,7 @@ function bizCaption(k, p) {
     case "revenue": return `MRR ${money(p.mrrMicros, p.currency, true)}`;
     case "paying": return `${int(p.newCustomers)} nouveaux · ${int(p.billingIssues)} problèmes de paiement`;
     case "trials": return p.trialConversionRate != null ? `Conversion ${Math.round(p.trialConversionRate * 100)} %` : "Pas encore de conversion";
-    case "downloads": return p.downloads == null ? DL_PENDING : `${int(p.newCustomers)} nouveaux clients`;
+    case "downloads": return p.downloads == null ? DL_PENDING : (p.downloadsSource === "live" || p.downloadsSource === "mixed") ? "En direct" : "Chiffres Apple";
     default: return "";
   }
 }
@@ -371,6 +373,7 @@ export async function renderMetric(main) {
     const subtitle = () => {
       if (k === "today") return refundLine(t) ? `Cumul depuis minuit · ${refundLine(t)}` : "Cumul depuis minuit";
       if (k === "downloads" && o.downloads == null) return DL_PENDING;
+      if (k === "downloads" && o.downloadsLive) return `En direct · ${int(t?.installs ?? 0)} aujourd'hui`;
       if (k === "mrr") return `${int(o.activeSubscriptions)} abonnés actifs · ARR ${money(o.mrrMicros * 12, cur, true)}`;
       const label = RANGES.find(r => r[1] === range)[0].toLowerCase();
       if (["paying", "subscriptions", "trials"].includes(k)) return `Encaissé sur ${label} : ${money(total * 1e6, cur)}`;
@@ -855,7 +858,7 @@ function deskCards(o, t) {
     (o.hasTrials ?? o.activeTrials > 0)
       ? { title: "Essais en cours", icon: "hourglass", value: int(o.activeTrials), sub: "En ce moment", chart: sliderTrack(metricRatio("trials", o)), href: "metric/trials", seed: 5 }
       : o.downloads != null
-        ? { title: "Téléchargements", icon: "download", value: int(o.downloads), sub: `${days} derniers jours`, chart: sliderTrack(metricRatio("downloads", o)), href: "metric/downloads", seed: 6 }
+        ? { title: "Téléchargements", icon: "download", value: int(o.downloads), sub: o.downloadsLive ? `En direct · ${int(t?.installs ?? 0)} aujourd'hui` : `${days} derniers jours`, chart: sliderTrack(metricRatio("downloads", o)), href: "metric/downloads", seed: 6 }
         : { title: "Utilisateurs payants", icon: "card", value: int(payingOf(o)), sub: "En ce moment", chart: vline(dailySeries(byDay, 30).map(d => d.v)), href: "metric/paying", seed: 5 },
   ];
   return cards.map(deskCard).join("");

@@ -40,10 +40,16 @@ struct ProjectSummary: Codable, Identifiable, Hashable {
     let billingIssues: Int
     let revenueByDay: [String: Int]
     var payingCustomers: Int? = nil
-    /// nil = téléchargements non disponibles (numéro de fournisseur Apple non renseigné).
+    /// nil = téléchargements pas encore connus (ni chiffres Apple, ni installations vues par le SDK).
     var downloads: Int? = nil
     var hasTrials: Bool? = nil
     var revenueByCountry: [String: Int]? = nil
+    /// "apple" (chiffres officiels), "live" (installations vues par le SDK, en direct), "mixed" (Apple complété en direct).
+    var downloadsSource: String? = nil
+    /// Téléchargements par jour (Apple, complétés en direct par les installations).
+    var downloadsByDay: [String: Int]? = nil
+    /// Installations vues par le SDK sur la période.
+    var installs: Int? = nil
     /// Icône App Store de l'app du business (512 px), si suivie.
     var iconUrl: String? = nil
     /// Sources de revenus connectées : app_store, stripe, play_store…
@@ -100,9 +106,17 @@ struct Overview: Codable, Hashable {
     var refundsMicros: Int? = nil
     /// Ventes − remboursements.
     var netRevenueMicros: Int? = nil
+    /// "apple", "live" ou "mixed" (voir ProjectSummary.downloadsSource).
+    var downloadsSource: String? = nil
 
     /// Revenu affiché en titre : ventes brutes, jamais négatives.
     var grossRevenueMicros: Int { max(0, revenueMicros) }
+    /// Téléchargements comptés en direct (au moins un business suit les installations par le SDK).
+    var downloadsLive: Bool { downloadsSource == "live" || downloadsSource == "mixed" || projects.contains { $0.downloadsSource == "live" || $0.downloadsSource == "mixed" } }
+    /// Téléchargements par jour, tous business confondus.
+    var mergedDownloadsByDay: [String: Int] {
+        projects.reduce(into: [:]) { acc, p in for (d, n) in p.downloadsByDay ?? [:] { acc[d, default: 0] += n } }
+    }
     var refundNote: String? { refundsNote(refundsMicros, currency) }
 
     static let placeholder = Overview(currency: "EUR", periodDays: 30, mrrMicros: 4_280_000_000, revenueMicros: 4_910_000_000,

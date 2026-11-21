@@ -1,8 +1,26 @@
 import { computeMetrics, convertMicros, Purchase } from "./engine";
 import { Project, db } from "./store";
 import { downloadsFor } from "./downloads";
+import { installsFor } from "./store";
 
 const DAY = 86400000;
+/** Téléchargements affichés : chiffres Apple quand ils existent (J+1 à J+2), complétés en direct par les installations
+ *  vues par le SDK pour les jours qu'Apple n'a pas encore publiés. Sans données Apple : installations seules. Pure, testée. */
+export function mergeDownloads(
+  apple: { total: number; byDay: Record<string, number>; byCountry: Record<string, number>; available: boolean },
+  installs: { total: number; byDay: Record<string, number> },
+) {
+  const appleDays = Object.keys(apple.byDay).sort();
+  const lastApple = appleDays[appleDays.length - 1];
+  const byDay: Record<string, number> = { ...apple.byDay };
+  let live = false;
+  for (const [d, n] of Object.entries(installs.byDay)) if (!n) continue; else if (!lastApple || d > lastApple) { byDay[d] = n; live = true; }
+  const total = Object.values(byDay).reduce((a, b) => a + b, 0);
+  const available = apple.available || installs.total > 0;
+  const source: "apple" | "live" | "mixed" | null = !available ? null : !apple.available ? "live" : live ? "mixed" : "apple";
+  return { total, byDay, byCountry: apple.byCountry, available, source };
+}
+
 export const dayKey = (t: number) => new Date(t).toISOString().slice(0, 10);
 const monthKey = (t: number) => new Date(t).toISOString().slice(0, 7);
 const ratio = (a: number, b: number) => (b ? a / b : null);
@@ -83,7 +101,11 @@ export async function projectMetrics(project: Project, days = 30, sinceAt?: numb
     db.collection(`projects/${pid}/daily`).orderBy("date", "desc").limit(Math.min(days, 400)).get(),
   ]);
   const ads = await import("./ads").then(a => a.adRevenueSince(pid, since)).catch(() => ({ revenueMicros: 0, impressions: 0 }));
-  const dl = await downloadsFor(pid, since).catch(() => ({ total: 0, byDay: {}, byCountry: {}, available: false }));
+  const [appleDl, inst] = await Promise.all([
+    downloadsFor(pid, since).catch(() => ({ total: 0, byDay: {}, byCountry: {}, available: false })),
+    installsFor(pid, since).catch(() => ({ total: 0, byDay: {}, byPlatform: {} })),
+  ]);
+  const dl = mergeDownloads(appleDl, inst);
   const purchases = [...purchasesSnap.docs, ...lifetime.docs].map(d => ({ ...(d.data() as Purchase), appUserId: d.get("appUserId") as string }));
   const current = computeMetrics(purchases, p => (p as any).appUserId, project.config.currency, now);
 
@@ -138,6 +160,9 @@ export async function projectMetrics(project: Project, days = 30, sinceAt?: numb
     downloads: dl.available ? dl.total : null,
     downloadsByDay: dl.byDay,
     downloadsByCountry: dl.byCountry,
+    /** "apple" (chiffres officiels), "live" (installations vues par le SDK), "mixed" (Apple, complété en direct depuis son dernier jour publié). */
+    downloadsSource: dl.source,
+    installs: inst.total, installsByDay: inst.byDay, installsByPlatform: inst.byPlatform,
     /** Trials exist for this project (offer has a free trial or trials happened recently). */
     hasTrials: current.activeTrials > 0 || started > 0 || (prev.eventCounts.TRIAL_STARTED ?? 0) > 0,
     history: dailySnap.docs.map(d => d.data()).reverse(),

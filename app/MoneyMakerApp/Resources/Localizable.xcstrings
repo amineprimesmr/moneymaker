@@ -15308,6 +15308,78 @@
           }
         }
       }
+    },
+    "%lld téléchargements" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld download"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld downloads"
+                }
+              }
+            }
+          }
+        },
+        "fr" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld téléchargement"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld téléchargements"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "En direct · %lld aujourd'hui" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live · %lld today"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En direct · %lld aujourd'hui"
+          }
+        }
+      }
+    },
+    "Premiers téléchargements sur la période. En direct : chaque première ouverture de l'app (SDK MoneyMaker) compte tout de suite, puis les chiffres officiels d'Apple remplacent ces jours-là dès qu'ils sont publiés (sous 48 h)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First-time downloads over the period. Live: every first app open (MoneyMaker SDK) counts right away, then Apple's official figures replace those days as soon as they are published (within 48 h)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Premiers téléchargements sur la période. En direct : chaque première ouverture de l'app (SDK MoneyMaker) compte tout de suite, puis les chiffres officiels d'Apple remplacent ces jours-là dès qu'ils sont publiés (sous 48 h)."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

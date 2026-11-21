@@ -248,3 +248,29 @@ test("net: private and metadata addresses are refused", async () => {
   assert.equal(await isPublicUrl("http://metadata.google.internal/"), false);
   assert.equal(await isPublicUrl("file:///etc/passwd"), false);
 });
+
+test("downloads: Apple figures, completed live by SDK installs for days Apple has not published yet", () => {
+  const { mergeDownloads } = require("../lib/metrics");
+  const apple = { total: 30, byDay: { "2026-11-18": 10, "2026-11-19": 20 }, byCountry: { FR: 30 }, available: true };
+  const inst = { total: 12, byDay: { "2026-11-19": 7, "2026-11-20": 4, "2026-11-21": 1 } };
+  const m = mergeDownloads(apple, inst);
+  assert.deepEqual(m.byDay, { "2026-11-18": 10, "2026-11-19": 20, "2026-11-20": 4, "2026-11-21": 1 });
+  assert.equal(m.total, 35); assert.equal(m.source, "mixed");
+  const live = mergeDownloads({ total: 0, byDay: {}, byCountry: {}, available: false }, inst);
+  assert.equal(live.total, 12); assert.equal(live.source, "live");
+  assert.equal(mergeDownloads(apple, { total: 0, byDay: {} }).source, "apple");
+  const none = mergeDownloads({ total: 0, byDay: {}, byCountry: {}, available: false }, { total: 0, byDay: {} });
+  assert.equal(none.available, false); assert.equal(none.source, null);
+});
+
+test("installs: platform from SDK headers, store-only ids are never installs", () => {
+  const { sdkPlatform, isStoreOnlyId } = require("../lib/store");
+  assert.equal(sdkPlatform(undefined, "MoneyMaker-iOS/1.2.0"), "ios");
+  assert.equal(sdkPlatform("iOS", "RevenueCat/5.0 CFNetwork"), "ios");
+  assert.equal(sdkPlatform(undefined, "MoneyMaker-Android/1.2.0"), "android");
+  assert.equal(sdkPlatform("android", undefined), "android");
+  assert.equal(sdkPlatform(undefined, "Mozilla/5.0"), "web");
+  assert.equal(sdkPlatform(undefined, "curl/8"), "other");
+  assert.equal(isStoreOnlyId("$stripe:cus_1"), true); assert.equal(isStoreOnlyId("$apple:123"), true);
+  assert.equal(isStoreOnlyId("$anon:abc"), false); assert.equal(isStoreOnlyId("user_42"), false);
+});
