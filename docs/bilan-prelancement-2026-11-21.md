@@ -88,3 +88,15 @@
 6. Devises (sans décimales, taux manquants), churn des essais, période Google.
 7. SDK Android → Play Billing 8, nouvelle 1.1.2 avec `usemoneymaker.com`.
 8. Le reste (état vide, déconnexion propre, traductions, SEO, docs).
+
+## État après corrections (21 nov. 2026, soir)
+Fait et déployé (functions, firestore, hosting sur `moneymaker-io`), commit `2528160` :
+- Bloquants 1, 2, 3, 6, 7 (sauf identité légale), 8 (SDK 1.2.0 prêt, pas publié) et tous les points 🟠 « chiffres », « sécurité », « app iOS », « web ».
+- Fausses données de `moneymaker-app` supprimées (sauvegarde `~/Developer/backups/moneymaker-donnees-fictives-2026-11-21.json`).
+- Tests backend 153/153, SDK iOS 10/10, SDK Android 20/20 (projet JVM de test), app iOS compilée et installée sur le 16 Pro Max.
+
+Reste, à décider par Amine :
+- Adresse de support réelle (provisoire : `support@usemoneymaker.com`, domaine sans MX).
+- Champs `[À COMPLÉTER]` de `legal.html` (éditeur, SIREN, adresse).
+- Publication SDK 1.2.0 (tag git, JitPack, npm) ; SDK Android à réinstaller pour lancer Gradle.
+- Section confidentialité de la fiche App Store Connect à aligner sur `PrivacyInfo.xcprivacy` (DeviceID inclus).
