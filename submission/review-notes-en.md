@@ -12,7 +12,7 @@ FEEDBACK: users can send an idea, a bug or a remark from the menu or Settings ("
 
 LEADERBOARD: a business appears publicly only if its owner opts in. Each public business page lets users report or hide the business. Reports are reviewed manually.
 
-CONTACT: support@usemoneymaker.com
+CONTACT: contact@moneymakerr.fr
 
 Notifications are optional and only report the developer's own sales. Tax and net figures are labeled as estimates, not financial advice.
 

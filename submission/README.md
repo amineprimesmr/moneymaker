@@ -19,7 +19,7 @@ Re-vérifier avant d'envoyer : `cd backend/functions && node tests/mcp-prod-chec
 | Documentation | https://usemoneymaker.com/mcp-docs |
 | Confidentialité | https://usemoneymaker.com/privacy (section « Assistants IA ») |
 | Conditions | https://usemoneymaker.com/terms |
-| Support | https://usemoneymaker.com/support · support@usemoneymaker.com |
+| Support | https://usemoneymaker.com/support · contact@moneymakerr.fr |
 | Logo | `dashboard/public/icon-512.png` (512×512) |
 | Catégorie | Finance / Business analytics |
 | Outils | 73 : 44 lecture (`readOnlyHint`), 23 écriture, 6 suppressions (`destructiveHint`, `confirm: true`). Liste : `/mcp-docs` |

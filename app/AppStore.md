@@ -17,7 +17,7 @@ Version **1.1.1** (app id 6821596839). Textes complets par langue : `submission/
 | URL de confidentialité | https://usemoneymaker.com/privacy |
 | URL d'assistance | https://usemoneymaker.com/support |
 | URL marketing | https://usemoneymaker.com |
-| Contact | support@usemoneymaker.com |
+| Contact | contact@moneymakerr.fr |
 | Copyright | © 2026 MoneyMaker |
 
 **Mots-clés (100 octets)** : `abonnements,indie,développeur,dashboard,widget,churn,saas,compta,analytics,chiffre,affaires,startup`
@@ -75,7 +75,7 @@ Suivi publicitaire (tracking) : **Non**.
 
 ## Notes pour la review (à coller dans « App Review Information »)
 
-Texte à jour dans `submission/review-notes-en.md` : tout est gratuit (aucun achat intégré à tester), démo via le bouton « Try the demo » (accueil et écran de connexion), suppression du compte dans Settings → « Delete my account », contact support@usemoneymaker.com.
+Texte à jour dans `submission/review-notes-en.md` : tout est gratuit (aucun achat intégré à tester), démo via le bouton « Try the demo » (accueil et écran de connexion), suppression du compte dans Settings → « Delete my account », contact contact@moneymakerr.fr.
 
 ## État de préparation
 
@@ -84,7 +84,7 @@ Texte à jour dans `submission/review-notes-en.md` : tout est gratuit (aucun ach
 | Build Release signé (distribution, push production, sans chiffrement propriétaire) | ✅ |
 | Connexion et création de compte dans l'app (Apple, Google, e-mail ; Sign in with Apple présent → 4.8) | ✅ |
 | Suppression du compte dans l'app (5.1.1(v)) | ✅ |
-| Pages confidentialité / conditions / aide (contact support@usemoneymaker.com) | à vérifier en ligne |
+| Pages confidentialité / conditions / aide (contact contact@moneymakerr.fr) | à vérifier en ligne |
 | Fiche App Store (texte, mots-clés, catégorie, classification) | ✅ ci-dessus |
 | Questionnaire App Privacy | ✅ ci-dessus |
 | Accès pour la review | ✅ bouton « Essayer la démo » dans l'app, sans compte ni lien |

@@ -14,7 +14,7 @@ const config = await fetch("/__/firebase/init.json").then(r => r.json()).catch((
 const auth = getAuth(initializeApp(config));
 auth.languageCode = MM_LANG; // e-mails Firebase (réinitialisation du mot de passe) dans la langue du site
 /** Adresse de support unique du site (même valeur dans terms, privacy, support, legal). */
-const SUPPORT_EMAIL = "support@usemoneymaker.com";
+const SUPPORT_EMAIL = "contact@moneymakerr.fr";
 if (local) connectAuthEmulator(auth, "http://127.0.0.1:9199", { disableWarnings: true });
 
 // Mesure d'audience du site : sans cookie ni stockage, désactivée en local.

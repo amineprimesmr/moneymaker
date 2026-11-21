@@ -5,7 +5,7 @@ Pod::Spec.new do |s|
   s.description      = 'Flutter plugin wrapping the MoneyMaker iOS SDK (vendored from sdk/ios).'
   s.homepage         = 'https://github.com/amineprimesmr/moneymaker'
   s.license          = { :type => 'MIT', :file => '../LICENSE' }
-  s.author           = { 'MoneyMaker' => 'contact@moneymakerr.com' }
+  s.author           = { 'MoneyMaker' => 'contact@moneymakerr.fr' }
   s.source           = { :path => '.' }
   # Classes/MoneyMakerCore is a copy of sdk/ios/Sources/MoneyMaker (tool/sync_native_sources.sh).
   s.source_files     = 'Classes/**/*.swift'
