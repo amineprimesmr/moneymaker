@@ -33,7 +33,7 @@
    - `POST /v1/feedback` → 404 en prod ; l'app affiche « route_not_found » (fonction mise en avant dans les nouveautés 1.1.1).
    - `freeLaunch = true` dans l'app, mais `FREE_LAUNCH` pas déployé : le serveur refuse encore le 2ᵉ business (402 `pro_required`) alors que l'app dit « illimité ».
    - Le dashboard en prod ne correspond à aucun commit (mélange).
-4. **L'adresse de support ne reçoit rien.** `contact@moneymakerr.fr` : MX nul (vérifié). Seule adresse sur /support, /privacy, CGU, notes App Review. `usemoneymaker.com` n'a pas de MX.
+4. **L'adresse de support ne reçoit rien.** `contact@usemoneymaker.com` : MX nul (vérifié). Seule adresse sur /support, /privacy, CGU, notes App Review. `usemoneymaker.com` n'a pas de MX.
 5. **Notes App Review fausses** : `review-notes-en.md:7` demande de tester l'achat Pro, qui n'est plus proposé (`freeLaunch`). Les captures `7-paywall.png` montrent un écran inaccessible. Rejet 2.1 / 2.3.3 probable si l'achat est joint à la version.
 6. **Suppression de compte** : en démo (le cas du reviewer) ou hors ligne, l'échec est silencieux (`LiveScreens.swift:1170`). Pas de révocation du jeton Sign in with Apple. Avis, signalements et codes cadeaux restent après suppression, alors que la confidentialité promet un effacement « immédiat et définitif ».
 7. **Confidentialité** : `PrivacyInfo.xcprivacy` ne déclare rien alors que PostHog identifie l'utilisateur ; `privacy.html` oublie plusieurs sous-traitants (Translation, APNs, Stripe, CDN…) et les transferts hors UE ; **aucune mention légale** (éditeur, SIREN, hébergeur) exigée par la LCEN.
@@ -96,7 +96,7 @@ Fait et déployé (functions, firestore, hosting sur `moneymaker-io`), commit `2
 - Tests backend 153/153, SDK iOS 10/10, SDK Android 20/20 (projet JVM de test), app iOS compilée et installée sur le 16 Pro Max.
 
 Reste, à décider par Amine :
-- Adresse de support réelle (provisoire : `contact@moneymakerr.fr`, domaine sans MX).
+- Adresse de support réelle (provisoire : `contact@usemoneymaker.com`, domaine sans MX).
 - Champs `[À COMPLÉTER]` de `legal.html` (éditeur, SIREN, adresse).
 - Publication SDK 1.2.0 (tag git, JitPack, npm) ; SDK Android à réinstaller pour lancer Gradle.
 - Section confidentialité de la fiche App Store Connect à aligner sur `PrivacyInfo.xcprivacy` (DeviceID inclus).
