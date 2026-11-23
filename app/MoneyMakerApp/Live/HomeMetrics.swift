@@ -159,8 +159,13 @@ enum HomeMetric: String, CaseIterable, Hashable, Identifiable {
 }
 
 extension Overview {
-    /// Une app App Store est connectée : ses téléchargements sont attendus même s'ils ne sont pas encore arrivés.
-    var expectsDownloads: Bool { projects.contains { ($0.stores ?? []).contains("app_store") } }
+    /// Au moins une app mobile dans la vue : ses téléchargements sont attendus même s'ils ne sont pas encore arrivés.
+    /// Un SaaS web seul n'a pas de carte Téléchargements (il n'a que des clients payants).
+    var expectsDownloads: Bool { projects.contains { $0.isApp } }
+    /// Nouveaux clients des apps seulement : à comparer aux téléchargements (un client Stripe d'un SaaS n'a rien téléchargé).
+    var appNewCustomers: Int { projects.filter(\.isApp).reduce(0) { $0 + $1.newCustomers } }
+    /// Revenu net des apps seulement (pour le revenu par téléchargement).
+    var appRevenueMicros: Int { projects.filter(\.isApp).reduce(0) { $0 + $1.shownRevenueMicros } }
 }
 
 extension Overview {
@@ -457,9 +462,9 @@ struct HomeMetricDetail: View {
         case .downloads:
             let d = o.downloads ?? 0
             return [(String(localized: "Téléchargements"), o.downloads.map { $0.formatted() } ?? "—", "arrow.down.app.fill"),
-                    (String(localized: "Nouveaux clients"), o.newCustomers.formatted(), "sparkles"),
-                    (String(localized: "Téléchargement → payant"), d > 0 ? pct(Double(o.newCustomers) / Double(d)) : "—", "arrow.right.circle"),
-                    (String(localized: "Revenu par téléchargement"), d > 0 ? Int(sum * 1e6 / Double(d)).money(cur) : "—", "eurosign")]
+                    (String(localized: "Nouveaux clients des apps"), o.appNewCustomers.formatted(), "sparkles"),
+                    (String(localized: "Téléchargement → payant"), d > 0 ? pct(Double(o.appNewCustomers) / Double(d)) : "—", "arrow.right.circle"),
+                    (String(localized: "Revenu par téléchargement"), d > 0 ? (o.appRevenueMicros / d).money(cur) : "—", "eurosign")]
         }
     }
 
@@ -467,7 +472,9 @@ struct HomeMetricDetail: View {
 
     @ViewBuilder
     private func perBusiness(_ o: Overview) -> some View {
-        let rows: [(ProjectSummary, Double)] = o.projects.map { ($0, metric.value($0)) }.sorted { $0.1 > $1.1 }
+        // Téléchargements : uniquement les apps (un SaaS web n'en a pas, il n'apparaît pas avec « — »).
+        let rows: [(ProjectSummary, Double)] = o.projects.filter { metric != .downloads || $0.isApp }
+            .map { ($0, metric.value($0)) }.sorted { $0.1 > $1.1 }
         let top = max(rows.first?.1 ?? 1, 1)
         if !rows.isEmpty && metric != .today && AppPrefs.perBusiness {
             VStack(alignment: .leading, spacing: 10) {
@@ -500,6 +507,12 @@ struct HomeMetricDetail: View {
     }
 
     private func businessCaption(_ p: ProjectSummary) -> String {
+        let detail = businessDetail(p)
+        guard let kind = p.kindLabel else { return detail }
+        return detail.isEmpty ? kind : "\(kind) · \(detail)"
+    }
+
+    private func businessDetail(_ p: ProjectSummary) -> String {
         switch metric {
         case .mrr, .subscriptions: String(localized: "\(p.activeSubscriptions) abonnés · \(p.activeTrials) essais")
         case .revenue: "MRR \(p.mrrMicros.money(p.currency, compact: true))"
@@ -920,7 +933,7 @@ extension HomeMetric {
         let r: Double = switch self {
         case .paying: Double(o.activeSubscriptions) / paying
         case .trials: o.projects.compactMap(\.trialConversionRate).max() ?? Double(o.activeTrials) / (Double(o.activeTrials) + paying)
-        case .downloads: o.downloads.map { $0 > 0 ? Double(o.newCustomers) / Double($0) : 0 } ?? 0
+        case .downloads: o.downloads.map { $0 > 0 ? Double(o.appNewCustomers) / Double($0) : 0 } ?? 0
         case .newCustomers: Double(o.newCustomers) / paying
         default: 0.5
         }
@@ -952,7 +965,7 @@ extension HomeMetric {
             return String(localized: "+\(pct) % conv.")
         case .downloads:
             guard let d = o.downloads, d > 0 else { return nil }
-            let pct = Int((Double(o.newCustomers) / Double(d) * 100).rounded())
+            let pct = Int((Double(o.appNewCustomers) / Double(d) * 100).rounded())
             return String(localized: "+\(pct) % clients")
         default:
             guard let d = halfOverHalf(dailySeries(o.mergedRevenueByDay, days: 30)), [.paying, .newCustomers].contains(self) else { return nil }

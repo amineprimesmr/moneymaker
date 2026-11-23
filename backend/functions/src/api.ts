@@ -637,7 +637,10 @@ route("GET", "/v1/overview", async req => {
     // Téléchargements : Apple quand publié, sinon installations en direct vues par le SDK (voir mergeDownloads).
     downloadsSource: ((s: Set<string>) => s.size === 0 ? null : s.size === 1 ? [...s][0] : "mixed")(new Set(projects.map(p => p.downloadsSource).filter(Boolean) as string[])),
     downloadsByDay: projects.reduce((acc, p) => { for (const [d, n] of Object.entries(p.downloadsByDay ?? {})) acc[d] = (acc[d] ?? 0) + (n as number); return acc; }, {} as Record<string, number>),
-    installs: projects.reduce((a, p) => a + (p.installs ?? 0), 0),
+    installs: projects.reduce((a, p) => a + (p.kind === "web" ? 0 : p.installs ?? 0), 0),
+    // Quels types de business sont dans la vue : l'app n'affiche les téléchargements que s'il y a au moins une app.
+    hasApps: projects.some(p => p.kind === "app" || p.kind === "hybrid"),
+    hasWeb: projects.some(p => p.kind === "web" || p.kind === "hybrid"),
     hasTrials: projects.some(p => p.hasTrials),
     // Montants de chaque business convertis dans la devise d'affichage : l'app peut les additionner sans mélanger € et $.
     projects: projects.map(({ history, revenueByDay, refundsByDay, downloadsByDay, ...p }) => { const cv = (m: number) => convertMicros(m, p.currency, currency);
@@ -648,7 +651,7 @@ route("GET", "/v1/overview", async req => {
       activeSubscriptions: p.activeSubscriptions, activeTrials: p.activeTrials, newCustomers: p.newCustomers, trialConversionRate: p.trialConversionRate,
       adRevenueMicros: p.adRevenueMicros == null ? p.adRevenueMicros : cv(p.adRevenueMicros), revenueInclAdsMicros: p.revenueInclAdsMicros == null ? p.revenueInclAdsMicros : cv(p.revenueInclAdsMicros),
       churnRate: p.churnRate, billingIssues: p.billingIssues, payingCustomers: p.payingCustomers, downloads: p.downloads,
-      downloadsSource: p.downloadsSource, installs: p.installs, installsByPlatform: p.installsByPlatform,
+      kind: p.kind, downloadsSource: p.downloadsSource, installs: p.installs, installsByPlatform: p.installsByPlatform,
       hasTrials: p.hasTrials, revenueByCountry: cvMap(p.revenueByCountry), iconUrl: p.iconUrl, stores: p.stores, downloadsByDay, revenueByDay: cvMap(revenueByDay), refundsByDay: cvMap(refundsByDay),
     }; }),
     generatedAt: Date.now(),

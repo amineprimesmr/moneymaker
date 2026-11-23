@@ -42,6 +42,8 @@ export interface Project {
   ownerUid?: string;
   config: ProjectConfig;
   createdAt?: unknown;
+  /** Boutiques et paiements connectés (clés de `connections`), pour savoir si c'est une app, un site ou les deux. */
+  connections?: string[];
 }
 
 export interface Credentials {
@@ -98,7 +100,7 @@ export async function getProject(id: string): Promise<Project> {
   const snap = await db.doc(`projects/${id}`).get();
   if (!snap.exists) throw new HttpError(404, "project_not_found");
   const data = snap.data()!;
-  return { id, name: data.name, members: data.members ?? [], roles: data.roles ?? {}, ownerUid: data.ownerUid, config: { ...DEFAULT_CONFIG, ...data.config }, createdAt: data.createdAt };
+  return { id, name: data.name, members: data.members ?? [], roles: data.roles ?? {}, ownerUid: data.ownerUid, config: { ...DEFAULT_CONFIG, ...data.config }, createdAt: data.createdAt, connections: Object.keys(data.connections ?? {}) };
 }
 
 const newWebhookTokens = () => ({
@@ -183,7 +185,8 @@ export async function touchCustomer(pid: string, appUserId: string, ctx: { insta
     const snap = await t.get(ref);
     if (snap.get("firstSeenAt") || snap.get("mergedInto")) return null; // identifiant fusionné : compté dans le compte cible
     const now = Date.now();
-    const install = !!ctx.install && !isStoreOnlyId(appUserId);
+    // Un site web (SDK web) n'a pas de téléchargement : seule une app installée (iPhone, Android…) compte.
+    const install = !!ctx.install && !isStoreOnlyId(appUserId) && ctx.platform !== "web";
     t.set(ref, { firstSeenAt: now, ...(install ? { installAt: now, platform: ctx.platform ?? "other" } : {}) }, { merge: true });
     return install ? now : null;
   });
@@ -197,8 +200,9 @@ export async function installsFor(projectId: string, since: number) {
   let total = 0;
   for (const d of snap.docs) {
     const x = d.data();
-    byDay[x.date] = x.units ?? 0; total += x.units ?? 0;
-    for (const [k, v] of Object.entries(x.byPlatform ?? {})) byPlatform[k] = (byPlatform[k] ?? 0) + (v as number);
+    const n = Math.max(0, (x.units ?? 0) - (x.byPlatform?.web ?? 0)); // visites web : pas des téléchargements
+    byDay[x.date] = n; total += n;
+    for (const [k, v] of Object.entries(x.byPlatform ?? {})) if (k !== "web") byPlatform[k] = (byPlatform[k] ?? 0) + (v as number);
   }
   return { total, byDay, byPlatform };
 }

@@ -54,6 +54,8 @@ struct ProjectSummary: Codable, Identifiable, Hashable {
     var iconUrl: String? = nil
     /// Sources de revenus connectées : app_store, stripe, play_store…
     var stores: [String]? = nil
+    /// "app" (app mobile), "web" (SaaS, sans téléchargements), "hybrid" (app + paiements web), nil (inconnu / ancien serveur).
+    var kind: String? = nil
     /// Ventes brutes de la période (jamais négatives) ; absent d'un ancien serveur → revenu net.
     var revenueMicros: Int? = nil
     /// Remboursements de la période (positif).
@@ -61,6 +63,22 @@ struct ProjectSummary: Codable, Identifiable, Hashable {
     /// Remboursements par jour, à côté de `revenueByDay` (qui ne contient plus que les ventes).
     var refundsByDay: [String: Int]? = nil
     var id: String { projectId }
+
+    /// Business avec une app mobile : seuls ceux-là ont des téléchargements.
+    var isApp: Bool {
+        if let kind { return kind != "web" }
+        let st = stores ?? []
+        return st.contains("app_store") || st.contains("play_store") || st.contains("google_play") || downloads != nil
+    }
+    /// Libellé court du type : « App », « Web » ou « App + Web ».
+    var kindLabel: String? {
+        switch kind {
+        case "app": String(localized: "App")
+        case "web": String(localized: "Web")
+        case "hybrid": String(localized: "App + Web")
+        default: nil
+        }
+    }
 
     /// Revenu affiché en titre : solde net (ventes − remboursements), négatif si les remboursements dépassent les ventes.
     var shownRevenueMicros: Int { netRevenueMicros }

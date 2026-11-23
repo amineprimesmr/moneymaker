@@ -310,3 +310,14 @@ test("mouvements de MRR : résiliation = perte le jour même, expiration ensuite
   // Les essais ne comptent pas.
   assert.equal(mrrMovements([ev("CANCELLATION", 2, { isTrial: true })]).churns.length, 0);
 });
+
+test("type de business : app, SaaS web, ou les deux", () => {
+  const { projectKind } = require("../lib/metrics");
+  assert.equal(projectKind(["app_store"]), "app");            // Lifteo
+  assert.equal(projectKind(["stripe"]), "web");               // Process
+  assert.equal(projectKind(["stripe", "app_store"]), "hybrid"); // V2 : app iPhone + paiement Stripe
+  assert.equal(projectKind(["stripe"], { ios: 3 }), "hybrid"); // SDK vu dans une app iPhone
+  assert.equal(projectKind(["stripe"], { web: 40 }), "web");   // visites du site : pas une app
+  assert.equal(projectKind(["promotional"]), null);
+  assert.equal(projectKind(["stripe"], {}, "app"), "app");     // réglage manuel
+});

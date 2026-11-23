@@ -28,6 +28,10 @@ function activeIds() {
 const selectedProjects = () => { const ids = activeIds(); return allProjects().filter(p => ids.includes(p.projectId)); };
 const viewIds = () => { const f = h.state.focus; return f && activeIds().includes(f) ? [f] : activeIds(); };
 const sum = (ps, f) => ps.reduce((s, p) => s + (f(p) ?? 0), 0);
+// Type de business : "app" (téléchargements), "web" (SaaS : pas de téléchargement, seulement des clients payants), "hybrid" (app + paiements web).
+const isApp = p => p.kind ? p.kind !== "web" : (p.stores ?? []).some(s => s === "app_store" || s === "play_store" || s === "google_play") || p.downloads != null;
+const KIND_LABEL = { app: "App", web: "Web", hybrid: "App + Web" };
+const appsOf = o => o.projects.filter(isApp);
 function scopeOverview(o, ids = viewIds()) {
   if (!o) return null;
   const projects = o.projects.filter(p => ids.includes(p.projectId));
@@ -170,7 +174,7 @@ function metricRatio(k, o) {
   const paying = Math.max(payingOf(o), 1);
   const r = k === "paying" ? o.activeSubscriptions / paying
     : k === "trials" ? (o.projects.map(p => p.trialConversionRate).filter(v => v != null).sort((a, b) => b - a)[0] ?? o.activeTrials / (o.activeTrials + paying))
-    : k === "downloads" ? (o.downloads > 0 ? o.newCustomers / o.downloads : 0) : k === "subscriptions" ? o.activeSubscriptions / paying : .5;
+    : k === "downloads" ? (o.downloads > 0 ? sum(appsOf(o), p => p.newCustomers) / o.downloads : 0) : k === "subscriptions" ? o.activeSubscriptions / paying : .5;
   return Math.min(Math.max(r, .04), 1);
 }
 function metricTotal(k, o, t) { return { today: gross(t), mrr: o.mrrMicros, revenue: netOf(o), subscriptions: o.activeSubscriptions, paying: payingOf(o), trials: o.activeTrials, downloads: o.downloads }[k]; }
@@ -329,6 +333,10 @@ function renderWelcome(main) {
 }
 
 function bizCaption(k, p) {
+  const d = bizDetail(k, p), kind = KIND_LABEL[p.kind];
+  return kind ? (d ? `${kind} · ${d}` : kind) : d;
+}
+function bizDetail(k, p) {
   switch (k) {
     case "mrr": case "subscriptions": return `${int(p.activeSubscriptions)} abonnés · ${int(p.activeTrials)} essais`;
     case "revenue": return `MRR ${money(p.mrrMicros, p.currency, true)}`;
@@ -340,7 +348,8 @@ function bizCaption(k, p) {
 }
 function bizValue(k, p) { return k === "downloads" ? p.downloads : { revenue: p.revenueMicros ?? p.netRevenueMicros, mrr: p.mrrMicros, subscriptions: p.activeSubscriptions, paying: p.payingCustomers ?? p.activeSubscriptions, trials: p.activeTrials }[k] ?? 0; }
 function bizRows(k, o) {
-  const rows = o.projects.map(p => [p, bizValue(k, p)]).sort((a, b) => (b[1] ?? -1) - (a[1] ?? -1)), top = Math.max(rows[0]?.[1] ?? 1, 1);
+  // Téléchargements : seulement les apps (un SaaS web n'en a pas).
+  const rows = o.projects.filter(p => k !== "downloads" || isApp(p)).map(p => [p, bizValue(k, p)]).sort((a, b) => (b[1] ?? -1) - (a[1] ?? -1)), top = Math.max(rows[0]?.[1] ?? 1, 1);
   return rows.map(([p, v]) => `<button class="tile" data-goproject="${esc(p.projectId)}"><div class="biz-tile">
     <div class="top"><span style="position:relative;flex:none">${projectIcon(p, 36)}<span style="position:absolute;right:-4px;bottom:-4px">${platformMark(p.stores, 16)}</span></span><div class="nm"><b><bdi>${esc(p.name)}</bdi></b><i>${esc(bizCaption(k, p))}</i></div><span class="val">${fmtMetric(k, v, p.currency)}</span><span style="color:var(--ink3)">${ic("right", 11)}</span></div>
     ${sliderTrack(Math.min(Math.max((v ?? 0) / top, .04), 1), true)}</div></button>`).join("");
@@ -437,7 +446,12 @@ function detailStats(k, o, t, pts, range) {
     case "revenue": return [["Total", money(s * 1e6, cur), "euro"], ["Moyenne / jour", money(s / Math.max(pts.length, 1) * 1e6, cur), "divide"], ["Meilleur jour", money(best * 1e6, cur), "trophy"], ["Jours avec vente", `${active}/${pts.length}`, "calendar"], ["Ventes", int(inRange.filter(isRevenueEvent).length), "cart"], ["Remboursements", int(inRange.filter(isRefundEvent).length), "undo"]];
     case "paying": return [["Utilisateurs payants", int(paying), "card"], ["Abonnés actifs", int(o.activeSubscriptions), "people"], ["Achats uniques", int(Math.max(paying - o.activeSubscriptions, 0)), "bag"], ["Nouveaux clients", int(o.newCustomers), "sparkles"], ["Problèmes de paiement", int(sum(o.projects, p => p.billingIssues)), "warning"], ["Revenu par client", money(s * 1e6 / Math.max(paying, 1), cur), "person"]];
     case "trials": { const out = [["Essais en cours", int(o.activeTrials), "hourglass"], ["Essais démarrés", int(count("TRIAL_STARTED")), "playc"], ["Essais convertis", int(count("TRIAL_CONVERTED")), "checkc"]]; if (rates.length) out.push(["Conversion", pct(avg(rates)), "seal"]); return out; }
-    case "downloads": { const d = o.downloads ?? 0; if (o.downloads == null) return [["Téléchargements", "—", "download"], ["Nouveaux clients", int(o.newCustomers), "sparkles"]]; return [["Téléchargements", int(d), "download"], ["Nouveaux clients", int(o.newCustomers), "sparkles"], ["Téléchargement → payant", d > 0 ? pct(o.newCustomers / d) : "—", "ext"], ["Revenu par téléchargement", d > 0 ? money(s * 1e6 / d, cur) : "—", "euro"]]; }
+    case "downloads": {
+      // Uniquement les apps : un client Stripe d'un SaaS web n'a rien téléchargé.
+      const d = o.downloads ?? 0, apps = appsOf(o), nc = sum(apps, p => p.newCustomers), rev = sum(apps, p => p.netRevenueMicros ?? 0);
+      if (o.downloads == null) return [["Téléchargements", "—", "download"], ["Nouveaux clients des apps", int(nc), "sparkles"]];
+      return [["Téléchargements", int(d), "download"], ["Nouveaux clients des apps", int(nc), "sparkles"], ["Téléchargement → payant", d > 0 ? pct(nc / d) : "—", "ext"], ["Revenu par téléchargement", d > 0 ? money(rev / d, cur) : "—", "euro"]];
+    }
     default: return [];
   }
 }

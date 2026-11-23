@@ -21,6 +21,20 @@ export function mergeDownloads(
   return { total, byDay, byCountry: apple.byCountry, available, source };
 }
 
+/** Type de business, pour n'afficher que ce qui a du sens :
+ *  - "app" : app mobile (App Store, Google Play…) → téléchargements, abonnés, payants ;
+ *  - "web" : SaaS / site (Stripe, Paddle…) → pas de téléchargement, seulement des clients payants ;
+ *  - "hybrid" : une app ET des paiements web (ex. V2 : app iPhone + paiement Stripe).
+ *  Déduit des boutiques connectées, des achats vus et des installations ; `override` (réglage du projet) l'emporte. Pure, testée. */
+const APP_STORES = new Set(["app_store", "mac_app_store", "google_play", "play_store", "amazon", "galaxy", "roku"]);
+const WEB_STORES = new Set(["stripe", "paddle", "web"]);
+export function projectKind(stores: string[], installsByPlatform: Record<string, number> = {}, override?: unknown): "app" | "web" | "hybrid" | null {
+  if (override === "app" || override === "web" || override === "hybrid") return override;
+  const app = stores.some(s => APP_STORES.has(s)) || Object.entries(installsByPlatform).some(([k, n]) => k !== "web" && n > 0);
+  const web = stores.some(s => WEB_STORES.has(s));
+  return app && web ? "hybrid" : app ? "app" : web ? "web" : null;
+}
+
 export const dayKey = (t: number) => new Date(t).toISOString().slice(0, 10);
 const monthKey = (t: number) => new Date(t).toISOString().slice(0, 7);
 const ratio = (a: number, b: number) => (b ? a / b : null);
@@ -106,9 +120,12 @@ export async function projectMetrics(project: Project, days = 30, sinceAt?: numb
     downloadsFor(pid, since).catch(() => ({ total: 0, byDay: {}, byCountry: {}, available: false })),
     installsFor(pid, since).catch(() => ({ total: 0, byDay: {}, byPlatform: {} })),
   ]);
-  const dl = mergeDownloads(appleDl, inst);
+  const merged = mergeDownloads(appleDl, inst);
   const purchases = [...purchasesSnap.docs, ...lifetime.docs].map(d => ({ ...(d.data() as Purchase), appUserId: d.get("appUserId") as string }));
   const current = computeMetrics(purchases, p => (p as any).appUserId, project.config.currency, now);
+  const kind = projectKind([...(project.connections ?? []), ...purchases.filter(p => !p.isSandbox).map(p => p.store)], inst.byPlatform, (project.config as any).kind);
+  // Un SaaS web n'a pas de téléchargements : on ne montre que ses clients payants.
+  const dl = kind === "web" ? { ...merged, total: 0, byDay: {}, byCountry: {}, available: false, source: null } : merged;
 
   const activeByCountry: Record<string, number> = {};
   for (const p of purchases) {
@@ -158,6 +175,8 @@ export async function projectMetrics(project: Project, days = 30, sinceAt?: numb
     /** Revenu publicitaire (ads.ts, devise du projet) et revenu « pub incluse ». */
     adRevenueMicros: ads.revenueMicros, adImpressions: ads.impressions,
     revenueInclAdsMicros: cur.revenueMicros + ads.revenueMicros, // ventes brutes + pub (remboursements à part)
+    /** "app" (app mobile), "web" (SaaS, pas de téléchargement), "hybrid" (app + paiements web), null (rien de connecté). */
+    kind,
     downloads: dl.available ? dl.total : null,
     downloadsByDay: dl.byDay,
     downloadsByCountry: dl.byCountry,
