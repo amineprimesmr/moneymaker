@@ -38,15 +38,18 @@ test("wants: prefs, sandbox, muted projects", () => {
 
 test("notification: sale is loud, time-sensitive, grouped, with today subtitle", () => {
   const n = eventNotification(project, sale, DEFAULT_PREFS, 120_000_000, "EUR");
-  assert.match(n.aps.alert.title, /^\+9,99\s€ · MonApp$/);
-  assert.match(n.aps.alert.subtitle, /Aujourd'hui : 120,00\s€/);
-  assert.match(n.aps.alert.body, /Nouvel abonné · mensuel · monthly · 🇫🇷 FR/);
+  assert.equal(n.aps.alert.title, "🇫🇷 Nouvel abonnement 💰");
+  assert.equal(n.aps.alert.subtitle, "MonApp");
+  assert.match(n.aps.alert.body, /^Un client vient de s'abonner à monthly mensuel pour 9,99\s€\.$/);
+  const en = eventNotification(project, sale, DEFAULT_PREFS, 0, "EUR", "en");
+  assert.equal(en.aps.alert.title, "🇫🇷 New Subscription 💰");
+  assert.match(en.aps.alert.body, /^A customer just started a subscription of monthly for €?9\.99\s?€?\.$/);
   assert.equal(n.aps.sound, "cash.caf");
   assert.equal(n.aps["interruption-level"], "time-sensitive");
   assert.equal(n.aps["thread-id"], "project-p1");
   assert.equal(eventNotification(project, sale, { ...DEFAULT_PREFS, sound: false }).aps.sound, undefined);
   const trial = eventNotification(project, { ...sale, type: "TRIAL_STARTED", isTrial: true }, DEFAULT_PREFS);
-  assert.equal(trial.aps.alert.title, "Essai démarré · MonApp");
+  assert.equal(trial.aps.alert.title, "🇫🇷 Essai démarré 🚀");
   assert.equal(trial.aps.sound, undefined);
   assert.equal(rankingNotification(project, { type: "TOP_1", rank: 1, cc: "FR", chart: "free", appName: "X" }).aps.alert.body, "#1 🇫🇷 FR · Gratuites");
 });
@@ -177,11 +180,13 @@ test("notifications: refund request, trial cancel and cancellation hint", () => 
   const { eventNotification } = require("../lib/push");
   const project = { id: "p1", name: "V2" };
   const n = eventNotification(project, { type: "REFUND_REQUESTED", priceMicros: 9.99e6, currency: "EUR", productId: "com.app.monthly" }, DEFAULT_PREFS, undefined, "EUR", "fr");
-  assert.match(n.aps.alert.title, /Demande de remboursement · V2/); assert.match(n.aps.alert.body, /demandé un remboursement/);
-  const c = eventNotification(project, { type: "CANCELLATION", isTrial: true, productId: "x" }, DEFAULT_PREFS, undefined, "EUR", "en");
-  assert.match(c.aps.alert.title, /Trial cancelled/);
+  assert.equal(n.aps.alert.title, "Demande de remboursement ⚠️"); assert.equal(n.aps.alert.subtitle, "V2"); assert.match(n.aps.alert.body, /demander un remboursement/);
+  // Même format que RevenueCat : « 🇫🇮 Trial Cancellation ❌ » / « A customer just cancelled their free trial of X Pro weekly. »
+  const c = eventNotification(project, { type: "CANCELLATION", isTrial: true, productId: "x", productName: "X Pro", periodMonths: 0.25, country: "FI" }, DEFAULT_PREFS, undefined, "EUR", "en");
+  assert.equal(c.aps.alert.title, "🇫🇮 Trial Cancellation ❌");
+  assert.equal(c.aps.alert.body, "A customer just cancelled their free trial of X Pro weekly.");
   const r = eventNotification(project, { type: "REFUND", priceMicros: 9.99e6, currency: "EUR", productId: "x" }, DEFAULT_PREFS, undefined, "EUR", "fr");
-  assert.match(r.aps.alert.body, /-9,99|−9,99/);
+  assert.match(r.aps.alert.body, /remboursé de 9,99/);
   const named = eventNotification(project, { type: "INITIAL_PURCHASE", priceMicros: 19e6, currency: "EUR", productId: "price_123", productName: "Process Pro" }, DEFAULT_PREFS, undefined, "EUR", "fr");
   assert.match(named.aps.alert.body, /Process Pro/);
 });

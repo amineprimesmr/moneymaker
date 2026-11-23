@@ -64,9 +64,10 @@ test("a sale caught up late says when it happened, not « Aujourd'hui »", () =>
   const purchasedAt = Date.parse("2026-10-29T13:05:18Z");
   const late = { type: "NON_RENEWING_PURCHASE", priceMicros: 30e6, currency: "EUR", country: "CA", at: Date.parse("2026-10-31T11:19:16Z"), purchasedAt };
   const n = eventNotification(project, late, DEFAULT_PREFS, 0, "EUR", "fr");
-  assert.match(n.aps.alert.subtitle, /Vente du 29 oct\. rattrapée/);
+  assert.match(n.aps.alert.body, /Vente du 29 oct\. rattrapée/);
   assert.equal(n.aps.sound, undefined);
   assert.equal(n.aps["interruption-level"], "passive");
   const live = eventNotification(project, { ...late, at: purchasedAt + 5000 }, DEFAULT_PREFS, 30e6, "EUR", "fr");
-  assert.match(live.aps.alert.subtitle, /Aujourd'hui/);
+  assert.equal(live.aps.alert.subtitle, "Process");
+  assert.doesNotMatch(live.aps.alert.body, /rattrapée/);
 });

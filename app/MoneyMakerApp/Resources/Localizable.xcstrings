@@ -15460,6 +15460,70 @@
           }
         }
       }
+    },
+    "🇫🇷 Nouvel abonnement 💰" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "🇫🇷 New Subscription 💰"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "🇫🇷 Nouvel abonnement 💰"
+          }
+        }
+      }
+    },
+    "🇺🇸 Essai converti 💰" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "🇺🇸 Trial Conversion 💰"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "🇺🇸 Essai converti 💰"
+          }
+        }
+      }
+    },
+    "Un client vient de s'abonner à Mon app Pro annuel pour %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A customer just started a subscription of My app Pro yearly for %@."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un client vient de s'abonner à Mon app Pro annuel pour %@."
+          }
+        }
+      }
+    },
+    "Un client vient de passer de l'essai gratuit à Mon app Pro mensuel pour %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A customer just converted from a free trial of My app Pro monthly for %@."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un client vient de passer de l'essai gratuit à Mon app Pro mensuel pour %@."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

@@ -12,7 +12,7 @@ import { connect, ClientHttp2Session, constants } from "http2";
 import { createPrivateKey, sign, KeyObject } from "crypto";
 import { db, Project, installsSince } from "./store";
 import { convertMicros, readableProductId } from "./engine";
-import { Lang, normLang, money, EVENT_TITLES, eventHint, periodLabel, todayLine, lateSaleLine, todayLabel, liveActivityStart, RANK_TITLES, CHART_NAMES, categoryLabel, previousRank, dailySummaryText } from "./i18n";
+import { Lang, normLang, money, EVENT_TITLES, RC_EVENTS, periodLabel, todayLine, lateSaleLine, todayLabel, liveActivityStart, RANK_TITLES, CHART_NAMES, categoryLabel, previousRank, dailySummaryText } from "./i18n";
 
 export const BUNDLE_ID = "io.moneymaker.app";
 
@@ -142,26 +142,26 @@ export function wants(prefs: PushPrefs, projectId: string, e: Record<string, any
 export const isLateEvent = (e: Record<string, any>) =>
   typeof e.purchasedAt === "number" && e.type !== "REFUND" && Number(e.at ?? Date.now()) - e.purchasedAt > 2 * 3600000;
 
-/** APNs alert payload for a subscription event. Pure — unit-tested. */
+/** APNs alert payload for a subscription event, au format des notifications RevenueCat. Pure — unit-tested. */
 export function eventNotification(project: Project, e: Record<string, any>, prefs: PushPrefs, todayMicros?: number, currency = "EUR", lang: Lang = "fr", tz = "Europe/Paris") {
-  const TITLES = EVENT_TITLES[lang];
   const isRevenue = REVENUE.has(e.type) && !e.isTrial && e.priceMicros > 0;
   const late = isRevenue && isLateEvent(e);
-  const negative = e.type === "REFUND" || e.type === "REVOKED";
-  const amount = e.priceMicros > 0 && !e.isTrial ? formatMoney(negative ? -e.priceMicros : e.priceMicros, e.currency, lang) : "";
-  const label = e.isTrial && e.type === "CANCELLATION" ? TITLES.TRIAL_CANCELLATION : e.isTrial && e.type === "EXPIRATION" ? TITLES.TRIAL_EXPIRATION : TITLES[e.type] ?? e.type;
-  const title = isRevenue ? `+${amount} · ${project.name}` : `${label} · ${project.name}`;
-  const product = e.productName || readableProductId(e.productId);
-  const bits = [isRevenue ? label : amount, periodLabel(lang, e.periodMonths), product, `${flag(e.country)} ${e.country ?? ""}`.trim(), e.isSandbox ? "sandbox" : ""]
-    .filter(Boolean);
-  const hint = isRevenue ? "" : eventHint(lang, e.type, e, tz);
-  if (hint) bits.unshift(hint);
-  const subtitle = late ? lateSaleLine(lang, new Date(e.purchasedAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", { timeZone: tz, day: "numeric", month: "short" }))
-    : isRevenue && todayMicros !== undefined ? todayLine(lang, formatMoney(todayMicros, currency, lang)) : undefined;
+  const amount = e.priceMicros > 0 && !e.isTrial ? formatMoney(e.priceMicros, e.currency, lang) : "";
+  const key = e.isTrial && e.type === "CANCELLATION" ? "TRIAL_CANCELLATION" : e.isTrial && e.type === "EXPIRATION" ? "TRIAL_EXPIRATION" : e.type;
+  const rc = RC_EVENTS[key];
+  // Produit tel que RevenueCat l'affiche (« X Pro weekly ») : nom du produit + période s'il ne la contient pas déjà.
+  const name = e.productName || readableProductId(e.productId);
+  const period = periodLabel(lang, e.periodMonths);
+  const product = period && !name.toLowerCase().includes(period.toLowerCase()) ? `${name} ${period}` : name;
+  const t = rc?.[lang] ?? rc?.en;
+  const title = [flag(e.country), t?.title ?? EVENT_TITLES[lang][key] ?? e.type, rc?.emoji].filter(Boolean).join(" ");
+  let body = t ? t.body(product, amount) : product;
+  if (late) body += ` ${lateSaleLine(lang, new Date(e.purchasedAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", { timeZone: tz, day: "numeric", month: "short" }))}.`;
+  const subtitle = e.isSandbox ? `${project.name} · Sandbox` : project.name;
   const loud = !late && (isRevenue || e.type === "BILLING_ISSUE" || e.type === "REFUND" || e.type === "REFUND_REQUESTED");
   return {
     aps: {
-      alert: { title, ...(subtitle ? { subtitle } : {}), body: bits.join(" · ") },
+      alert: { title, subtitle, body },
       sound: loud && prefs.sound !== false ? (isRevenue ? saleSoundFile(prefs) : prefs.saleSound === "none" ? undefined : "default") : undefined,
       "thread-id": `project-${project.id}`,
       "interruption-level": late ? "passive" : isRevenue ? "time-sensitive" : "active",

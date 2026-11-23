@@ -24,8 +24,9 @@ struct NotificationPermissionConfig {
     var secondaryButtonTitle = String(localized: "Plus tard")
     var showsSecondaryButton = true
 
-    var topNotification = Notification(title: String(localized: "+\(59.99.formatted(.currency(code: "EUR"))) · Mon app"), caption: String(localized: "Nouvel abonné · annuel · 🇫🇷 FR"))
-    var centerNotification = Notification(title: String(localized: "+\(9.99.formatted(.currency(code: "EUR"))) · Mon app"), caption: String(localized: "Essai converti · mensuel · 🇺🇸 US"))
+    // Même format que les vraies notifications (calquées sur RevenueCat) : « 🇫🇷 Nouvel abonnement 💰 », puis la phrase.
+    var topNotification = Notification(title: String(localized: "🇫🇷 Nouvel abonnement 💰"), caption: String(localized: "Un client vient de s'abonner à Mon app Pro annuel pour \(59.99.formatted(.currency(code: "EUR")))."))
+    var centerNotification = Notification(title: String(localized: "🇺🇸 Essai converti 💰"), caption: String(localized: "Un client vient de passer de l'essai gratuit à Mon app Pro mensuel pour \(9.99.formatted(.currency(code: "EUR")))."))
     var bottomNotification = Notification(title: String(localized: "Numéro 1 🥇 · Mon app"), caption: String(localized: "#1 🇫🇷 FR · Payantes · catégorie"))
 
     struct Notification {
