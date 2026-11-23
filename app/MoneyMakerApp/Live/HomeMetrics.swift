@@ -162,8 +162,9 @@ extension Overview {
     /// Au moins une app mobile dans la vue : ses téléchargements sont attendus même s'ils ne sont pas encore arrivés.
     /// Un SaaS web seul n'a pas de carte Téléchargements (il n'a que des clients payants).
     var expectsDownloads: Bool { projects.contains { $0.isApp } }
-    /// Nouveaux clients des apps seulement : à comparer aux téléchargements (un client Stripe d'un SaaS n'a rien téléchargé).
-    var appNewCustomers: Int { projects.filter(\.isApp).reduce(0) { $0 + $1.newCustomers } }
+    /// Nouveaux payants des apps seulement : à comparer aux téléchargements (un client Stripe d'un SaaS n'a rien
+    /// téléchargé, et un utilisateur vu pour la première fois n'a pas forcément payé).
+    var appNewPaying: Int { projects.filter(\.isApp).reduce(0) { $0 + ($1.newPayingCustomers ?? 0) } }
     /// Revenu net des apps seulement (pour le revenu par téléchargement).
     var appRevenueMicros: Int { projects.filter(\.isApp).reduce(0) { $0 + $1.shownRevenueMicros } }
 }
@@ -349,6 +350,7 @@ struct HomeMetricDetail: View {
         let shownValue: String = {
             guard let point else { return headline(o, pts: pts) }
             if metric == .mrr { return Int(dayValue(point, pts) * 1e6).money(cur) }
+            if metric == .downloads { return Int(point.value.rounded()).formatted() }
             return Int(point.value * 1e6).money(cur)
         }()
         let values = pts.map(\.value)
@@ -462,8 +464,8 @@ struct HomeMetricDetail: View {
         case .downloads:
             let d = o.downloads ?? 0
             return [(String(localized: "Téléchargements"), o.downloads.map { $0.formatted() } ?? "—", "arrow.down.app.fill"),
-                    (String(localized: "Nouveaux clients des apps"), o.appNewCustomers.formatted(), "sparkles"),
-                    (String(localized: "Téléchargement → payant"), d > 0 ? pct(Double(o.appNewCustomers) / Double(d)) : "—", "arrow.right.circle"),
+                    (String(localized: "Nouveaux payants"), o.appNewPaying.formatted(), "sparkles"),
+                    (String(localized: "Téléchargement → payant"), d > 0 ? pct(Double(o.appNewPaying) / Double(d)) : "—", "arrow.right.circle"),
                     (String(localized: "Revenu par téléchargement"), d > 0 ? (o.appRevenueMicros / d).money(cur) : "—", "eurosign")]
         }
     }
@@ -518,7 +520,7 @@ struct HomeMetricDetail: View {
         case .revenue: "MRR \(p.mrrMicros.money(p.currency, compact: true))"
         case .paying, .newCustomers: String(localized: "\(p.newCustomers) nouveaux · \(p.billingIssues) problèmes de paiement")
         case .trials: p.trialConversionRate.map { String(localized: "Conversion \(Int(($0 * 100).rounded()))%") } ?? String(localized: "Pas encore de conversion")
-        case .downloads: String(localized: "\(p.newCustomers) nouveaux clients")
+        case .downloads: String(localized: "\(p.newPayingCustomers ?? 0) nouveaux payants")
         case .today: ""
         }
     }
@@ -585,7 +587,9 @@ struct HomeMetricDetail: View {
                                 Text(Calendar.current.isDateInToday(p.date) ? String(localized: "Aujourd'hui") : p.date.formatted(.dateTime.day().month(.abbreviated)))
                                     .font(MMFont.system(12, .medium)).foregroundStyle(on ? MMColor.inkInverse.opacity(0.65) : MMColor.ink3)
                                     .lineLimit(1)
-                                Text(Int((metric == .mrr ? dayValue(p, pts) : p.value) * 1e6).money(cur, compact: true)).mmNumeric()
+                                // Téléchargements : un nombre par jour, pas un montant.
+                                Text(metric == .downloads ? Int(p.value.rounded()).formatted()
+                                     : Int((metric == .mrr ? dayValue(p, pts) : p.value) * 1e6).money(cur, compact: true)).mmNumeric()
                                     .font(MMFont.number(17, .regular)).foregroundStyle(on ? MMColor.inkInverse : MMColor.ink)
                                     .lineLimit(1).minimumScaleFactor(0.8)
                             }
@@ -933,7 +937,7 @@ extension HomeMetric {
         let r: Double = switch self {
         case .paying: Double(o.activeSubscriptions) / paying
         case .trials: o.projects.compactMap(\.trialConversionRate).max() ?? Double(o.activeTrials) / (Double(o.activeTrials) + paying)
-        case .downloads: o.downloads.map { $0 > 0 ? Double(o.appNewCustomers) / Double($0) : 0 } ?? 0
+        case .downloads: o.downloads.map { $0 > 0 ? Double(o.appNewPaying) / Double($0) : 0 } ?? 0
         case .newCustomers: Double(o.newCustomers) / paying
         default: 0.5
         }
@@ -965,7 +969,7 @@ extension HomeMetric {
             return String(localized: "+\(pct) % conv.")
         case .downloads:
             guard let d = o.downloads, d > 0 else { return nil }
-            let pct = Int((Double(o.appNewCustomers) / Double(d) * 100).rounded())
+            let pct = Int((Double(o.appNewPaying) / Double(d) * 100).rounded())
             return String(localized: "+\(pct) % clients")
         default:
             guard let d = halfOverHalf(dailySeries(o.mergedRevenueByDay, days: 30)), [.paying, .newCustomers].contains(self) else { return nil }

@@ -15429,18 +15429,34 @@
         }
       }
     },
-    "Nouveaux clients des apps" : {
+    "Nouveaux payants" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "New app customers"
+            "value" : "New paying customers"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nouveaux clients des apps"
+            "value" : "Nouveaux payants"
+          }
+        }
+      }
+    },
+    "%lld nouveaux payants" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld new paying customers"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld nouveaux payants"
           }
         }
       }

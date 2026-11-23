@@ -633,6 +633,7 @@ route("GET", "/v1/overview", async req => {
     activeTrials: projects.reduce((a, p) => a + p.activeTrials, 0),
     newCustomers: projects.reduce((a, p) => a + p.newCustomers, 0),
     payingCustomers: projects.reduce((a, p) => a + p.payingCustomers, 0),
+    newPayingCustomers: projects.reduce((a, p) => a + (p.newPayingCustomers ?? 0), 0),
     downloads: projects.some(p => p.downloads !== null) ? projects.reduce((a, p) => a + (p.downloads ?? 0), 0) : null,
     // Téléchargements : Apple quand publié, sinon installations en direct vues par le SDK (voir mergeDownloads).
     downloadsSource: ((s: Set<string>) => s.size === 0 ? null : s.size === 1 ? [...s][0] : "mixed")(new Set(projects.map(p => p.downloadsSource).filter(Boolean) as string[])),
@@ -650,7 +651,7 @@ route("GET", "/v1/overview", async req => {
       revenueMicros: cv(p.revenueMicros), refundsMicros: cv(p.refundsMicros),
       activeSubscriptions: p.activeSubscriptions, activeTrials: p.activeTrials, newCustomers: p.newCustomers, trialConversionRate: p.trialConversionRate,
       adRevenueMicros: p.adRevenueMicros == null ? p.adRevenueMicros : cv(p.adRevenueMicros), revenueInclAdsMicros: p.revenueInclAdsMicros == null ? p.revenueInclAdsMicros : cv(p.revenueInclAdsMicros),
-      churnRate: p.churnRate, billingIssues: p.billingIssues, payingCustomers: p.payingCustomers, downloads: p.downloads,
+      churnRate: p.churnRate, billingIssues: p.billingIssues, payingCustomers: p.payingCustomers, newPayingCustomers: p.newPayingCustomers, downloads: p.downloads,
       kind: p.kind, downloadsSource: p.downloadsSource, installs: p.installs, installsByPlatform: p.installsByPlatform,
       hasTrials: p.hasTrials, revenueByCountry: cvMap(p.revenueByCountry), iconUrl: p.iconUrl, stores: p.stores, downloadsByDay, revenueByDay: cvMap(revenueByDay), refundsByDay: cvMap(refundsByDay),
     }; }),

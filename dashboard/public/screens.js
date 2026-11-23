@@ -174,7 +174,7 @@ function metricRatio(k, o) {
   const paying = Math.max(payingOf(o), 1);
   const r = k === "paying" ? o.activeSubscriptions / paying
     : k === "trials" ? (o.projects.map(p => p.trialConversionRate).filter(v => v != null).sort((a, b) => b - a)[0] ?? o.activeTrials / (o.activeTrials + paying))
-    : k === "downloads" ? (o.downloads > 0 ? sum(appsOf(o), p => p.newCustomers) / o.downloads : 0) : k === "subscriptions" ? o.activeSubscriptions / paying : .5;
+    : k === "downloads" ? (o.downloads > 0 ? sum(appsOf(o), p => p.newPayingCustomers ?? 0) / o.downloads : 0) : k === "subscriptions" ? o.activeSubscriptions / paying : .5;
   return Math.min(Math.max(r, .04), 1);
 }
 function metricTotal(k, o, t) { return { today: gross(t), mrr: o.mrrMicros, revenue: netOf(o), subscriptions: o.activeSubscriptions, paying: payingOf(o), trials: o.activeTrials, downloads: o.downloads }[k]; }
@@ -448,9 +448,9 @@ function detailStats(k, o, t, pts, range) {
     case "trials": { const out = [["Essais en cours", int(o.activeTrials), "hourglass"], ["Essais démarrés", int(count("TRIAL_STARTED")), "playc"], ["Essais convertis", int(count("TRIAL_CONVERTED")), "checkc"]]; if (rates.length) out.push(["Conversion", pct(avg(rates)), "seal"]); return out; }
     case "downloads": {
       // Uniquement les apps : un client Stripe d'un SaaS web n'a rien téléchargé.
-      const d = o.downloads ?? 0, apps = appsOf(o), nc = sum(apps, p => p.newCustomers), rev = sum(apps, p => p.netRevenueMicros ?? 0);
-      if (o.downloads == null) return [["Téléchargements", "—", "download"], ["Nouveaux clients des apps", int(nc), "sparkles"]];
-      return [["Téléchargements", int(d), "download"], ["Nouveaux clients des apps", int(nc), "sparkles"], ["Téléchargement → payant", d > 0 ? pct(nc / d) : "—", "ext"], ["Revenu par téléchargement", d > 0 ? money(rev / d, cur) : "—", "euro"]];
+      const d = o.downloads ?? 0, apps = appsOf(o), nc = sum(apps, p => p.newPayingCustomers ?? 0), rev = sum(apps, p => p.netRevenueMicros ?? 0);
+      if (o.downloads == null) return [["Téléchargements", "—", "download"], ["Nouveaux payants", int(nc), "sparkles"]];
+      return [["Téléchargements", int(d), "download"], ["Nouveaux payants", int(nc), "sparkles"], ["Téléchargement → payant", d > 0 ? pct(nc / d) : "—", "ext"], ["Revenu par téléchargement", d > 0 ? money(rev / d, cur) : "—", "euro"]];
     }
     default: return [];
   }

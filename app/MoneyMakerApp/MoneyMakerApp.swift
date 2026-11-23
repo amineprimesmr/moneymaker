@@ -143,13 +143,14 @@ final class Store: ObservableObject {
 
     /// Toucher ailleurs sur l'Accueil : retour à toute la sélection.
     /// (Ignore le geste qui accompagne le toucher d'un logo.)
-    func clearFocus() {
+    /// `opened` : vrai si le toucher a ouvert une page (carte, business) : on garde alors le business choisi.
+    func clearFocus(opened: @escaping @MainActor () -> Bool = { false }) {
         guard focusId != nil else { return }
         let asked = Date()
         Task {
             // Laisse passer l'action d'un logo touché en même temps : elle a la priorité.
             try? await Task.sleep(for: .milliseconds(60))
-            guard focusId != nil, lastFocusTap < asked.addingTimeInterval(-0.3) else { return }
+            guard focusId != nil, lastFocusTap < asked.addingTimeInterval(-0.3), !opened() else { return }
             withAnimation(.smooth(duration: 0.55)) { focusId = nil }
             await refreshLive()
         }

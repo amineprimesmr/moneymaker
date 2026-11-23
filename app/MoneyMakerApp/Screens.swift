@@ -384,7 +384,8 @@ struct OverviewView: View {
             }
             .environment(\.homeZoom, zoomNS)
             .igShrinksTabBar()
-            .simultaneousGesture(TapGesture().onEnded { store.clearFocus() })
+            // Toucher une carte ouvre sa page avec le même business choisi : seul un toucher « dans le vide » revient à tout.
+            .simultaneousGesture(TapGesture().onEnded { store.clearFocus(opened: { [path = $path] in !path.wrappedValue.isEmpty }) })
             .islandRefreshable(.home) { await store.refresh(); return store.error == nil }
             .navigationDestination(for: ProjectSummary.self) { ProjectView(p: $0) }
             .navigationDestination(for: HomeMetric.self) { HomeMetricDetail(metric: $0).modifier(ZoomDestination(id: $0, ns: zoomNS)) }

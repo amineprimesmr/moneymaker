@@ -56,6 +56,8 @@ struct ProjectSummary: Codable, Identifiable, Hashable {
     var stores: [String]? = nil
     /// "app" (app mobile), "web" (SaaS, sans téléchargements), "hybrid" (app + paiements web), nil (inconnu / ancien serveur).
     var kind: String? = nil
+    /// Clients qui ont payé pour la première fois sur la période (abonnement, essai converti, achat unique).
+    var newPayingCustomers: Int? = nil
     /// Ventes brutes de la période (jamais négatives) ; absent d'un ancien serveur → revenu net.
     var revenueMicros: Int? = nil
     /// Remboursements de la période (positif).

@@ -69,6 +69,8 @@ export function summarizeWindow(txs: Tx[], events: Ev[], currency: string, campa
   const counts: Record<string, number> = {};
   const trialsByProduct: Record<string, { started: number; converted: number }> = {};
   let newMrr = 0, churnedMrr = 0, paidExpirations = 0;
+  // Nouveaux payants : clients qui ont payé pour la première fois (abonnement, essai converti, achat unique).
+  const newPayers = new Set<string>();
   const monthly = (e: Ev) => e.periodMonths ? convertMicros(e.priceMicros ?? 0, e.currency ?? currency, currency) / e.periodMonths : 0;
   for (const e of events) {
     if (e.isSandbox) continue;
@@ -78,6 +80,7 @@ export function summarizeWindow(txs: Tx[], events: Ev[], currency: string, campa
       trialsByProduct[e.productId][e.type === "TRIAL_STARTED" ? "started" : "converted"]++;
     }
     if (e.type === "EXPIRATION" && !e.isTrial) paidExpirations++;
+    if (((e.type === "INITIAL_PURCHASE" || e.type === "NON_RENEWING_PURCHASE") && !e.isTrial && (e.priceMicros ?? 0) > 0) || e.type === "TRIAL_CONVERTED") newPayers.add(e.appUserId);
   }
   const moves = mrrMovements(events.filter(e => !e.isSandbox));
   for (const { e } of moves.starts) newMrr += monthly(e);
@@ -88,7 +91,7 @@ export function summarizeWindow(txs: Tx[], events: Ev[], currency: string, campa
     payingCustomers: payers.size, arppuMicros: payers.size ? Math.round(revenue / payers.size) : 0,
     refundRate: ratio(refunds, revenue),
     revenueByDay, refundsByDay, revenueByCountry, revenueByStore, revenueByProduct, revenueByCampaign,
-    eventCounts: counts, trialsByProduct, paidExpirations,
+    eventCounts: counts, trialsByProduct, paidExpirations, newPayingCustomers: newPayers.size,
     mrrMovement: { newMicros: Math.round(newMrr), churnedMicros: Math.round(churnedMrr), netMicros: Math.round(newMrr - churnedMrr) },
   };
 }
