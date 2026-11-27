@@ -8,7 +8,7 @@ import { toAlpha2 } from "./countries";
 import { dropImportedDuplicates } from "./revenuecat";
 import { PRO_PRODUCT_ID, revokeAppStorePro } from "./billing";
 import { Purchase, PurchaseStatus, PurchaseType, HttpError } from "./engine";
-import { Project, getCredentials, lookupIndex, upsertPurchase, mergeCustomers, recordEvent } from "./store";
+import { Project, getCredentials, lookupIndex, upsertPurchase, mergeCustomers, recordEvent, transferPurchase } from "./store";
 
 const ROOTS = APPLE_ROOT_CERTIFICATES;
 
@@ -110,7 +110,7 @@ export async function ingestAppleTransaction(project: Project, appUserId: string
   if (purchase.type === "subscription") {
     purchase = (await refreshFromServer(project, purchase.id, env).catch(() => null)) ?? purchase;
   }
-  // A transaction already bound to another user (shared Apple ID) stays with its first owner unless restoring.
+  // A transaction already bound to another user: see the transfer below.
   let owner = await lookupIndex(project.id, `apple:${purchase.id}`);
   // A placeholder owner ($apple:…, $anon:…) — e.g. a renewal notified before the user ever opened
   // the migrated app — always hands the purchase over to the real account.
@@ -118,10 +118,19 @@ export async function ingestAppleTransaction(project: Project, appUserId: string
     await mergeCustomers(project, owner, appUserId);
     owner = appUserId;
   }
+  // Même identifiant Apple, autre compte réel dans l'app (nouveau compte, compte recréé) : l'achat
+  // suit le compte qui l'envoie, comme RevenueCat par défaut. Sinon l'app débloque (StoreKit) alors que
+  // le serveur du client refuse (abonnement resté sur l'ancien compte).
+  let transferredFrom: string | null = null;
+  if (owner && owner !== appUserId && !owner.startsWith("$") && !appUserId.startsWith("$")) {
+    await transferPurchase(project, owner, appUserId, purchase.id);
+    transferredFrom = owner;
+    owner = appUserId;
+  }
   const target = owner ?? appUserId;
   await dropImportedDuplicates(project.id, target, purchase.productId, "app_store");
   const result = await upsertPurchase(project, target, purchase, [`apple:${purchase.id}`]);
-  return { appUserId: target, transferredFrom: owner && owner !== appUserId ? owner : null, purchase, ...result };
+  return { appUserId: target, transferredFrom, purchase, ...result };
 }
 
 /** Server path: App Store Server Notifications V2. */
